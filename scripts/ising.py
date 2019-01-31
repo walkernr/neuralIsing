@@ -59,11 +59,11 @@ def parse_args():
     parser.add_argument('-mm', '--magnetic_moment', help='magnetic moment',
                         type=float, default=1.0)
     parser.add_argument('-hn', '--field_number', help='number of external fields',
-                        type=int, default=64)
+                        type=int, default=32)
     parser.add_argument('-hr', '--field_range', help='field range (low and high)',
                         type=float, nargs=2, default=[-2.0, 2.0])
     parser.add_argument('-tn', '--temperature_number', help='number of temperatures',
-                        type=int, default=64)
+                        type=int, default=32)
     parser.add_argument('-tr', '--temperature_range', help='temperature range (low and high)',
                         type=float, nargs=2, default=[1.0, 5.0])
     parser.add_argument('-sc', '--sample_cutoff', help='sample recording cutoff',

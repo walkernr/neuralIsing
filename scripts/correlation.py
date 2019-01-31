@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument('-n', '--name', help='simulation name',
                         type=str, default='ising_init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size',
-                        type=int, default=16)
+                        type=int, default=4)
     args = parser.parse_args()
     return args.verbose, args.parallel, args.workers, args.threads, args.name, args.lattice_size
 

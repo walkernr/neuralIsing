@@ -9,7 +9,7 @@ import argparse
 import os
 import pickle
 import numpy as np
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelBinarizer
 from TanhScaler import TanhScaler
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.manifold import Isomap, LocallyLinearEmbedding
@@ -27,7 +27,15 @@ PARSER.add_argument('-nt', '--threads', help='number of threads',
 PARSER.add_argument('-n', '--name', help='simulation name',
                         type=str, default='ising_init')
 PARSER.add_argument('-ls', '--lattice_size', help='lattice size',
-                    type=int, default=16)
+                    type=int, default=4)
+PARSER.add_argument('-ui', '--unsuper_interval', help='interval for selecting phase points (unsupervised)',
+                    type=int, default=2)
+PARSER.add_argument('-un', '--unsuper_samples', help='number of samples per phase point (unsupervised)',
+                    type=int, default=32)
+PARSER.add_argument('-si', '--super_interval', help='interval for selecting phase points (supervised)',
+                    type=int, default=1)
+PARSER.add_argument('-sn', '--super_samples', help='number of samples per phase point (supervised)',
+                    type=int, default=128)
 PARSER.add_argument('-sc', '--scaler', help='feature scaler',
                     type=str, default='tanh')
 PARSER.add_argument('-rd', '--reduction', help='supervised dimension reduction method',
@@ -35,15 +43,15 @@ PARSER.add_argument('-rd', '--reduction', help='supervised dimension reduction m
 PARSER.add_argument('-np', '--projections', help='number of embedding projections',
                     type=int, default=2)
 PARSER.add_argument('-cl', '--clustering', help='clustering method',
-                    type=str, default='spectral')
+                    type=str, default='agglomerative')
 PARSER.add_argument('-nc', '--clusters', help='number of clusters',
-                    type=int, default=3)
+                    type=int, default=4)
 PARSER.add_argument('-bk', '--backend', help='keras backend',
                     type=str, default='tensorflow')
 PARSER.add_argument('-ep', '--epochs', help='number of epochs',
-                    type=int, default=16)
+                    type=int, default=8)
 PARSER.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
-                    type=float, default=1e-3)
+                    type=float, default=1e-2)
 
 # parse arguments
 ARGS = PARSER.parse_args()
@@ -54,6 +62,10 @@ PARALLEL = ARGS.parallel
 THREADS = ARGS.threads
 NAME = ARGS.name
 N = ARGS.lattice_size
+UNI = ARGS.unsuper_interval
+UNS = ARGS.unsuper_samples
+SNI = ARGS.super_interval
+SNS = ARGS.super_samples
 SCLR = ARGS.scaler
 RDCN = ARGS.reduction
 NP = ARGS.projections
@@ -80,7 +92,7 @@ if PARALLEL:
     os.environ['OMP_NUM_THREADS'] = str(THREADS)
     os.environ['openmp'] = 'True'
 from keras.models import Sequential
-from keras.layers import Conv2D, AveragePooling2D, Dropout, Dense
+from keras.layers import Conv2D, AveragePooling2D, Dropout, Dense, Flatten
 from keras.optimizers import Nadam
 from keras.wrappers.scikit_learn import KerasClassifier
 from keras.callbacks import History
@@ -119,6 +131,10 @@ if VERBOSE:
     print('threads:                   %d' % THREADS)
     print('name:                      %s' % NAME)
     print('lattice size:              %s' % N)
+    print('unsuper interval:          %d' % UNI)
+    print('unsuper samples:           %d' % UNS)
+    print('super interval:            %d' % SNI)
+    print('super samples:             %d' % SNS)
     print('scaler:                    %s' % SCLR)
     print('reduction:                 %s' % RDCN)
     print('projections:               %d' % NP)
@@ -132,8 +148,8 @@ if VERBOSE:
     print(66*'-')
 
 CWD = os.getcwd()
-OUTPREF = CWD+'/%s.%d.%s.%s.%d.%s.%d.cnn2d.%d.%.0e.logistic' \
-          % (NAME, N, SCLR, RDCN, NP, CLST, NC, EP, LR)
+OUTPREF = CWD+'/%s.%d.%d.%d.%d.%d.%s.%s.%d.%s.%d.cnn2d.%d.%.0e.logistic' \
+          % (NAME, N, UNI, UNS, SNI, SNS, SCLR, RDCN, NP, CLST, NC, EP, LR)
 with open(OUTPREF+'.out', 'w') as out:
     out.write('# ' + 66*'-' + '\n')
     out.write('# input summary\n')
@@ -143,6 +159,10 @@ with open(OUTPREF+'.out', 'w') as out:
     out.write('# threads:                   %d\n' % THREADS)
     out.write('# name:                      %s\n' % NAME)
     out.write('# lattice size:              %s\n' % N)
+    out.write('unsuper interval:            %d\n' % UNI)
+    out.write('unsuper samples:             %d\n' % UNS)
+    out.write('super interval:              %d\n' % SNI)
+    out.write('super samples:               %d\n' % SNS)
     out.write('# scaler:                    %s\n' % SCLR)
     out.write('# reduction:                 %s\n' % RDCN)
     out.write('# projections:               %d\n' % NP)
@@ -154,23 +174,31 @@ with open(OUTPREF+'.out', 'w') as out:
     out.write('# learning rate:             %.2e\n' % LR)
     out.write('# fitting function:          %s\n' % 'logistic')
 
-EPS = 0.025 # np.finfo(np.float32).eps
+EPS = 0.0125
+# load phase point data
+UH = pickle.load(open(CWD+'/%s.%d.h.pickle' % (NAME, N), 'rb'))[::UNI]
+UT = pickle.load(open(CWD+'/%s.%d.t.pickle' % (NAME, N), 'rb'))[::UNI]
+SH = pickle.load(open(CWD+'/%s.%d.h.pickle' % (NAME, N), 'rb'))[::SNI]
+ST = pickle.load(open(CWD+'/%s.%d.t.pickle' % (NAME, N), 'rb'))[::SNI]
+UNH, UNT = UH.size, UT.size
+SNH, SNT = SH.size, ST.size
 # load data
-SMAX = 32
-H = pickle.load(open(CWD+'/%s.%d.h.pickle' % (NAME, N), 'rb'))
-T = pickle.load(open(CWD+'/%s.%d.t.pickle' % (NAME, N), 'rb'))
-NH, NT = H.size, T.size
 DAT = pickle.load(open(CWD+'/%s.%d.dat.pickle' % (NAME, N), 'rb'))
-ES = DAT[:, :, -SMAX:, 0].reshape(NH, NT, -1)
-MS = DAT[:, :, -SMAX:, 1].reshape(NH, NT, -1)
-UDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[:, :, -SMAX:, :, :].reshape(NH, NT, SMAX, N*N)
-SDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[:, :, -SMAX:, :, :]
-# data shape
-_, _, UNS, UNF = UDAT.shape
-_, _, SNS, SNF0, SNF1 = SDAT.shape
-HS = np.array([H[i]*np.ones((NT, UNS)) for i in range(NH)])
-TS = np.ones((NH, NT, UNS))*np.array([T[i]*np.ones(UNS) for i in range(NT)])[np.newaxis, :, :]
+UES = DAT[::UNI, ::UNI, -UNS:, 0].reshape(UNH, UNT, UNS)
+UMS = DAT[::UNI, ::UNI, -UNS:, 1].reshape(UNH, UNT, UNS)
+SES = DAT[::SNI, ::SNI, -SNS:, 0].reshape(SNH, SNT, SNS)
+SMS = DAT[::SNI, ::SNI, -SNS:, 1].reshape(SNH, SNT, SNS)
 del DAT
+UDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[::UNI, ::UNI, -UNS:, :, :].reshape(UNH, UNT, UNS, N*N)
+SDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[::SNI, ::SNI, -SNS:, :, :]
+# data shape
+_, _, _, UNF = UDAT.shape
+_, _, _, SNF0, SNF1 = SDAT.shape
+# phase point multidimensional arrays
+UHS = np.array([UH[i]*np.ones((UNT, UNS)) for i in range(UNH)])
+UTS = np.ones((UNH, UNT, UNS))*np.array([UT[i]*np.ones(UNS) for i in range(UNT)])[np.newaxis, :, :]
+SHS = np.array([SH[i]*np.ones((SNT, SNS)) for i in range(SNH)])
+STS = np.ones((SNH, SNT, SNS))*np.array([ST[i]*np.ones(SNS) for i in range(SNT)])[np.newaxis, :, :]
 
 if PLOT:
     CM = plt.get_cmap('plasma')
@@ -189,22 +217,25 @@ def logistic(beta, t):
     return a+np.divide(k, 1+np.exp(-b*(t-m)))
 
 
+def absolute(beta, t):
+    a, b, c = beta
+    return a*np.abs(t-b)+c
+
+
 # odr fitting
-def odr_fit(mpred, spred):
+def odr_fit(func, dom, mrng, srng, pg):
     ''' performs orthogonal distance regression '''
-    dat = RealData(R, mpred, EPS*np.ones(len(R)), spred+EPS)
-    mod = Model(logistic)
-    odr = ODR(dat, mod, FITG)
+    dat = RealData(dom, mrng, EPS*np.ones(len(dom)), srng+EPS)
+    mod = Model(func)
+    odr = ODR(dat, mod, pg)
     odr.set_job(fit_type=0)
     fit = odr.run()
     popt = fit.beta
     perr = fit.sd_beta
-    trans = popt[1]
-    cerr = perr[1]
-    ndom = 256
-    fdom = np.linspace(np.min(R), np.max(R), ndom)
-    fval = logistic(popt, fdom)
-    return trans, cerr, fdom, fval
+    ndom = 128
+    fdom = np.linspace(np.min(dom), np.max(dom), ndom)
+    fval = func(popt, fdom)
+    return popt, perr, fdom, fval
 
 if VERBOSE:
     print('fitting function initialized')
@@ -231,25 +262,26 @@ if VERBOSE:
 # neural network construction
 def build_keras_cnn2d():
     ''' builds 2-d convolutional neural network '''
-    model = Sequential([Conv2D(filters=int(SNF0)/2, kernel_size=(3, 3), activation='relu',
+    model = Sequential([Conv2D(filters=32, kernel_size=(2, 2), activation='relu',
                                kernel_initializer='he_normal',
                                padding='valid', strides=1, input_shape=(SNF0, SNF1, 1)),
-                        Conv2D(filters=int(SNF0)/2, kernel_size=(3, 3), activation='relu',
-                               kernel_initializer='he_normal',
-                               padding='valid', strides=1),
-                        AveragePooling2D(pool_size=(2, 2)),
                         Dropout(rate=0.25),
-                        Conv2D(filters=int(SNF0), kernel_size=(3, 3), activation='relu',
+                        Conv2D(filters=32, kernel_size=(2, 2), activation='relu',
                                kernel_initializer='he_normal',
                                padding='valid', strides=1),
-                        Conv2D(filters=int(SNF0), kernel_size=(3, 3), activation='relu',
-                               kernel_initializer='he_normal',
-                               padding='valid', strides=1),
-                        AveragePooling2D(pool_size=(2, 2)),
-                        Dropout(rate=0.25),
+                        # AveragePooling2D(pool_size=(2, 2)),
+                        # Dropout(rate=0.25),
+                        # Conv2D(filters=64, kernel_size=(2, 2), activation='relu',
+                        #        kernel_initializer='he_normal',
+                        #        padding='valid', strides=1),
+                        # Conv2D(filters=64, kernel_size=(2, 2), activation='relu',
+                        #        kernel_initializer='he_normal',
+                        #        padding='valid', strides=1),
+                        # AveragePooling2D(pool_size=(2, 2)),
+                        # Dropout(rate=0.25),
                         Flatten(),
-                        Dense(units=SNF0, activation='relu'),
-                        Dropout(rate=0.5),
+                        Dense(units=64, activation='relu'),
+                        # Dropout(rate=0.5),
                         Dense(units=3, activation='sigmoid')])
     nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
     model.compile(loss='categorical_crossentropy', optimizer=nadam, metrics=['mae', 'acc'])
@@ -269,22 +301,22 @@ if VERBOSE:
 
 # scale unsupervised data
 try:
-    FUDOM = pickle.load(open(CWD+'/%s.%d.%s.fudat.k.pickle' % (NAME, N, SCLR), 'rb'))
+    FUDOM = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.fudat.k.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb'))
     FUNF = FUDOM.size
-    FUDAT = pickle.load(open(CWD+'/%s.%d.%s.fudat.pickle' % (NAME, N, SCLR), 'rb')).reshape(NH*NT*UNS, FUNF)
+    FUDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.fudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb')).reshape(UNH*UNT*UNS, FUNF)
     FUDAT = np.concatenate((np.real(FUDAT), np.imag(FUDAT)), axis=1)
-    SUDAT = pickle.load(open(CWD+'/%s.%d.%s.sudat.pickle' % (NAME, N, SCLR), 'rb')).reshape(NH*NT*UNS, 2*FUNF)
+    SUDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.sudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb')).reshape(UNH*UNT*UNS, 2*FUNF)
     if VERBOSE:
         print('scaled unsupervised data loaded from file')
 except:
     FUDOM = np.fft.rfftfreq(UNF, 1)
     FUNF = FUDOM.size
-    FUDAT = np.fft.rfft(UDAT.reshape(NH*NT*UNS, UNF))
-    pickle.dump(FUDOM, open(CWD+'/%s.%d.%s.fudat.k.pickle' % (NAME, N, SCLR), 'wb'))
-    pickle.dump(FUDAT.reshape(NH, NT, UNS, FUNF), open(CWD+'/%s.%d.%s.fudat.pickle' % (NAME, N, SCLR), 'wb'))
+    FUDAT = np.fft.rfft(UDAT.reshape(UNH*UNT*UNS, UNF))
+    pickle.dump(FUDOM, open(CWD+'/%s.%d.%d.%d.%s.fudat.k.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
+    pickle.dump(FUDAT.reshape(UNH, UNT, UNS, FUNF), open(CWD+'/%s.%d.%d.%d.%s.fudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
     FUDAT = np.concatenate((np.real(FUDAT), np.imag(FUDAT)), axis=1)
     SUDAT = SCLRS[SCLR].fit_transform(FUDAT)
-    pickle.dump(SUDAT.reshape(NH, NT, UNS, 2*FUNF), open(CWD+'/%s.%d.%s.sudat.pickle' % (NAME, N, SCLR), 'wb'))
+    pickle.dump(SUDAT.reshape(UNH, UNT, UNS, 2*FUNF), open(CWD+'/%s.%d.%d.%d.%s.sudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
     if VERBOSE:
         print('unsupervised data scaled')
 if VERBOSE:
@@ -292,19 +324,19 @@ if VERBOSE:
 
 # pca reduce unsupervised data
 try:
-    EVAR = pickle.load(open(CWD+'/%s.%d.%s.evar.pickle' % (NAME, N, SCLR), 'rb'))
-    PUDAT = pickle.load(open(CWD+'/%s.%d.%s.pudat.pickle' % (NAME, N, SCLR), 'rb')).reshape(NT*NH*UNS, len(EVAR))
-    PCOMP = pickle.load(open(CWD+'/%s.%d.%s.pcomp.pickle' % (NAME, N, SCLR), 'rb'))
+    EVAR = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.evar.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb'))
+    PUDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.pudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb')).reshape(UNT*UNH*UNS, len(EVAR))
+    PCOMP = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.pcomp.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb'))
     if VERBOSE:
         print('pca reduced unsupervised data loaded from file')
 except:
     PUDAT = RDCNS['pca'].fit_transform(SUDAT)
     EVAR = RDCNS['pca'].explained_variance_ratio_
     PCOMP = RDCNS['pca'].components_
-    pickle.dump(PUDAT.reshape(NT, NH, UNS, len(EVAR)),
-                open(CWD+'/%s.%d.%s.pudat.pickle' % (NAME, N, SCLR), 'wb'))
-    pickle.dump(EVAR, open(CWD+'/%s.%d.%s.evar.pickle' % (NAME, N, SCLR), 'wb'))
-    pickle.dump(PCOMP, open(CWD+'/%s.%d.%s.pcomp.pickle' % (NAME, N, SCLR), 'wb'))
+    pickle.dump(PUDAT.reshape(UNT, UNH, UNS, len(EVAR)),
+                open(CWD+'/%s.%d.%d.%d.%s.pudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
+    pickle.dump(EVAR, open(CWD+'/%s.%d.%d.%d.%s.evar.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
+    pickle.dump(PCOMP, open(CWD+'/%s.%d.%d.%d.%s.pcomp.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
     if VERBOSE:
         print('unsupervised data pca reduced')
 if VERBOSE:
@@ -324,15 +356,15 @@ with open(OUTPREF+'.out', 'a') as out:
 
 # reduction of unsupervised data
 try:
-    RUDAT = pickle.load(open(CWD+'/%s.%d.%s.%s.%d.rudat.pickle' \
-                             % (NAME, N, SCLR, RDCN, NP), 'rb')).reshape(NH*NT*UNS, NP)
+    RUDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.%s.%d.rudat.pickle' \
+                             % (NAME, N, UNI, UNS, SCLR, RDCN, NP), 'rb')).reshape(UNH*UNT*UNS, NP)
     if VERBOSE:
         print('nonlinearly reduced unsupervised data loaded from file')
 except:
     if RDCN not in ('none', 'pca'):
         RUDAT = RDCNS[RDCN].fit_transform(PUDAT)
-        pickle.dump(RUDAT.reshape(NH, NT, UNS, NP), open(CWD+'/%s.%d.%s.%s.%d.rudat.pickle' \
-                                                         % (NAME, N, SCLR, RDCN, NP), 'wb'))
+        pickle.dump(RUDAT.reshape(UNH, UNT, UNS, NP), open(CWD+'/%s.%d.%d.%d.%s.%s.%d.rudat.pickle' \
+                                                           % (NAME, N, UNI, UNS, SCLR, RDCN, NP), 'wb'))
         if RDCN == 'tsne' and VERBOSE:
             print(66*'-')
         if VERBOSE:
@@ -345,157 +377,154 @@ except:
 if VERBOSE:
     print(np.max([66, 10+8*NC])*'-')
 try:
-    UPRED = pickle.load(open(CWD+'/%s.%d.%s.%s.%d.%s.%d.upred.pickle' \
-                             % (NAME, N, SCLR, RDCN, NP, CLST, NC), 'rb')).reshape(NH*NT*UNS)
+    UPRED = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.upred.pickle' \
+                             % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC), 'rb')).reshape(UNH*UNT*UNS)
     if VERBOSE:
         print('clustered unsupervised data loaded from file')
 except:
     UPRED = CLSTS[CLST].fit_predict(RUDAT)
-    UCTM = np.array([np.mean(TS.reshape(NH*NT*UNS)[UPRED == i]) for i in range(NC)])
+    UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
     IUCTM = np.argsort(UCTM)
     for i in range(NC):
         UPRED[UPRED == IUCTM[i]] = i+NC
     UPRED -= NC
-    pickle.dump(UPRED.reshape(NH, NT, UNS), open(CWD+'/%s.%d.%s.%s.%d.%s.%d.upred.pickle' \
-                                              % (NAME, N, SCLR, RDCN, NP, CLST, NC), 'wb'))
+    pickle.dump(UPRED.reshape(UNH, UNT, UNS), open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.upred.pickle' \
+                                                   % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC), 'wb'))
     if VERBOSE:
         print('unsupervised data clustered')
-UCMM = np.array([np.mean(MS.reshape(NH*NT*UNS)[UPRED == i]) for i in range(NC)])
-UCTM = np.array([np.mean(TS.reshape(NH*NT*UNS)[UPRED == i]) for i in range(NC)])
+UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
+UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
+# make this better
 if NC == 4:
     IUCTM = np.argsort(UCTM)
     UPRED[UPRED == np.max(IUCTM[-2:])] = np.min(IUCTM[-2:])
-    UCMM = np.array([np.mean(MS.reshape(NH*NT*UNS)[UPRED == i]) for i in range(NPH)])
-    UCTM = np.array([np.mean(TS.reshape(NH*NT*UNS)[UPRED == i]) for i in range(NPH)])
-UPREDB = np.array([[np.bincount(UPRED.reshape(NH, NT, UNS)[i, j], minlength=NPH) for j in range(NT)] for i in range(NH)])/UNS
-UPREDC = np.array([[np.argmax(np.bincount(UPRED.reshape(NH, NT, UNS)[i, j])) for j in range(NT)] for i in range(NH)])
-UPREDBCS = np.cumsum(UPREDB, -1)[:, :, 1:]
-UPREDBCS[:, :, 1] -= UPREDBCS[:, :, 0]
-PTRANS = np.argmin(np.std(UPREDBCS, -1), -1)
-TRANS = T[PTRANS]
+    UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
+    UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
+UPREDB = np.array([[np.bincount(UPRED.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
+UPREDC = np.array([[np.argmax(np.bincount(UPRED.reshape(UNH, UNT, UNS)[i, j])) for j in range(UNT)] for i in range(UNH)])
+UTRANS = np.array([odr_fit(logistic, UT, UPREDB[i, :, 2], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
+UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
+UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1, 0, 2.5))
+UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
+UICVAL = (UCVAL-UT[0])/(UT[-1]-UT[0])*(UNT-1)
 
 if VERBOSE:
-    print(np.max([66, 12+8*NT])*'-')
-    print('\t'+NT*'\t%0.2f' % tuple(T))
-    print(np.max([66, 12+8*NT])*'-')
-    for i in range(-1, -NH-1, -1):
-        print('%0.2f\t' % H[i] + NT*'\t%d' % tuple(UPREDC[i]))
-    print(np.max([66, 12+8*NT])*'-')
+    # print(np.max([66, 12+8*UNT])*'-')
+    # print('\t'+UNT*'\t%0.2f' % tuple(UT))
+    # print(np.max([66, 12+8*UNT])*'-')
+    # for i in range(-1, -UNH-1, -1):
+    #     print('%0.2f\t' % UH[i] + UNT*'\t%d' % tuple(UPREDC[i]))
+    # print(np.max([66, 12+8*UNT])*'-')
+    print(66*'-')
     print('h\tt')
     print(66*'-')
-    for i in range(NH):
-        print('%.2f\t%.2f' % (H[i], TRANS[i]))
+    for i in range(UNH):
+        print('%.2f\t%.2f' % (UH[i], UTRANS[i]))
+
+with open(OUTPREF+'.out', 'a') as out:
+    # out.write('# ' + np.max([66, 12+8*NC])*'-' + '\n')
+    # out.write('# unsupervised learning results\n')
+    # out.write('# ' + np.max([66, 12+8*UNT])*'-' + '\n')
+    # out.write('# \t'+UNT*'\t%0.2f' % tuple(UT)+'\n')
+    # out.write('# ' + np.max([66, 12+8*UNT])*'-' + '\n')
+    # for i in range(-1, -UNH-1, -1):
+    #     out.write('# %0.2f\t' % UH[i] + UNT*'\t%d' % tuple(UPREDC[i])+'\n')
+    # out.write('# ' + np.max([66, 12+8*UNT])*'-' + '\n')
+    out.write('# '+66*'-'+'\n')
+    out.write('# unsupervised learning results\n')
+    out.write('# h\tt\n')
+    out.write('# '+66*'-'+'\n')
+    for i in range(UNH):
+        out.write('%.2f\t%.2f\n' % (UH[i], UTRANS[i]))
+
+# scale supervised data
+try:
+    SSTDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.sstdat.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb')).reshape(UNH*UNT*UNS, N, N)
+    SSCDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%d.%d.%s.sscdat.pickle' % (NAME, N, UNI, UNS, SNI, SNS, SCLR), 'rb')).reshape(SNH*SNT*SNS, SNF0, SNF1)
+    if VERBOSE:
+        print(66*'-')
+        print('scaled supervised data loaded from file')
+except:
+    SCLRS[SCLR].fit(UDAT.reshape(UNH*UNT*UNS, UNF))
+    SSTDAT = SCLRS[SCLR].transform(UDAT.reshape(UNH*UNT*UNS, UNF)).reshape(UNH*UNT*UNS, N, N)
+    SSCDAT = SCLRS[SCLR].transform(SDAT.reshape(SNH*SNT*SNS, SNF0*SNF1)).reshape(SNH*SNT*SNS, SNF0, SNF1)
+    pickle.dump(SSTDAT.reshape(UNH, UNT, UNS, N, N), open(CWD+'/%s.%d.%d.%d.%s.sstdat.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
+    pickle.dump(SSCDAT.reshape(SNH, SNT, SNS, SNF0, SNF1), open(CWD+'/%s.%d.%d.%d.%d.%d.%s.sscdat.pickle' % (NAME, N, UNI, UNS, SNI, SNS, SCLR), 'wb'))
+    if VERBOSE:
+        print(125*'-')
+        print('supervised data scaled')
+
+# fit neural network to training data and predict classification data
+try:
+    LOSS = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.loss.pickle' \
+                            % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
+    MAE = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.mae.pickle' \
+                           % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
+    ACC = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.acc.pickle' \
+                           % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
+    SPROB = pickle.load(open(CWD+'/%s.%d.%d.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.sprob.pickle' \
+                             % (NAME, N, UNI, UNS, SNI, SNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
+    if VERBOSE:
+        print(66*'-')
+        print('neural network fit loaded from file')
+except:
+    if VERBOSE:
+        print(125*'-')
+    # fit training data
+    ENC = LabelBinarizer().fit(np.arange(NPH))
+    LBLS = ENC.transform(UPRED)
+    NN.fit(SSTDAT[:, :, :, np.newaxis], LBLS)
+    LOSS = NN.model.history.history['loss']
+    MAE = NN.model.history.history['mean_absolute_error']
+    ACC = NN.model.history.history['acc']
+    pickle.dump(LOSS, open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.loss.pickle' \
+                           % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
+    pickle.dump(MAE, open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.mae.pickle' \
+                          % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
+    pickle.dump(ACC, open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.acc.pickle' \
+                          % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
+    if VERBOSE:
+        print(125*'-')
+        print('neural network fitted to training data')
+        print(66*'-')
+    # predict classification data
+    SPROB = NN.predict_proba(SSCDAT[:, :, :, np.newaxis])
+    pickle.dump(SPROB, open(CWD+'/%s.%d.%d.%d.%d.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.sprob.pickle' \
+                            % (NAME, N, UNI, UNS, SNI, SNS, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
+
+SPRED = np.argmax(SPROB, -1)
+SPROBM = np.mean(SPROB.reshape(SNH, SNT, SNS, 3), 2)
+SPROBS = np.std(SPROB.reshape(SNH, SNT, SNS, 3), 2)
+STRANS = np.array([odr_fit(logistic, ST, SPROBM[i, :, 2], SPROBS[i, :, 2], (1, 2.5))[0][1] for i in range(SNH)])
+SITRANS = (STRANS-ST[0])/(ST[-1]-ST[0])*(SNT-1)
+SCPOPT, SCPERR, SCDOM, SCVAL = odr_fit(absolute, SH, STRANS, EPS*np.ones(SNT), (1, 0, 2.5))
+SICDOM = (SCDOM-SH[0])/(SH[-1]-SH[0])*(SNH-1)
+SICVAL = (SCVAL-ST[0])/(ST[-1]-ST[0])*(SNT-1)
+
+if VERBOSE:
+    print(66*'-')
+    print('neural network predicted classification data')
+    print(66*'-')
+    print('h\tt')
+    print(66*'-')
+    for i in range(SNH):
+        print('%.2f\t%.2f' % (SH[i], STRANS[i]))
     print(66*'-')
 
 with open(OUTPREF+'.out', 'a') as out:
-    out.write('# ' + np.max([66, 10+8*NC])*'-' + '\n')
-    out.write('# unsupervised learning results\n')
-    out.write('# ' + np.max([66, 12+8*NT])*'-' + '\n')
-    out.write('# \t'+NT*'\t%0.2f' % tuple(T)+'\n')
-    out.write('# ' + np.max([66, 12+8*NT])*'-' + '\n')
-    for i in range(-1, -NH-1, -1):
-        out.write('# %0.2f\t' % H[i] + NT*'\t%d' % tuple(UPREDC[i])+'\n')
-    out.write('# ' + np.max([66, 12+8*NT])*'-' + '\n')
+    out.write('# ' + 66*'-' + '\n')
+    out.write('# supervised learning results\n')
+    out.write('# ' + 66*'-' + '\n')
+    out.write('# epoch\tloss\tmae\tacc\n')
+    out.write('# ' + 66*'-' + '\n')
+    for i in range(EP):
+        out.write('# %02d\t' % i + 3*'%0.4f\t' % (LOSS[i], MAE[i], ACC[i]) + '\n')
+    out.write('# ' + 66*'-' + '\n')
     out.write('# h\tt\n')
-    out.write('# '+66*'-'+'\n')
-    for i in range(NH):
-        out.write('  %.2f\t%.2f\n' % (H[i], TRANS[i]))
-
-# # scale supervised data
-# try:
-#     SSDAT = pickle.load(open(CWD+'/sga.%d.%s.ssdat.pickle' % (MI, SCLR), 'rb')).reshape(SND*SNS, SNF)
-#     if VERBOSE:
-#         print(66*'-')
-#         print('scaled supervised data loaded from file')
-# except:
-#     SCLRS[SCLR].fit(np.real(SDAT.reshape(SND*SNS, SNF)[(UPRED == 0) | (UPRED == NC-1)]))
-#     SSDAT = SCLRS[SCLR].transform(SDAT.reshape(SND*SNS, SNF))
-#     pickle.dump(SSDAT.reshape(SND, SNS, SNF), open(CWD+'/sga.%d.%s.ssdat.pickle' \
-#                                                    % (MI, SCLR), 'wb'))
-#     if VERBOSE:
-#         print(125*'-')
-#         print('supervised data scaled')
-
-# # fit neural network to training data and predict classification data
-# try:
-#     LOSS = pickle.load(open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.loss.pickle' \
-#                             % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
-#     MAE = pickle.load(open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.mae.pickle' \
-#                            % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
-#     ACC = pickle.load(open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.acc.pickle' \
-#                            % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
-#     SPROB = pickle.load(open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.sprob.pickle' \
-#                              % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'rb'))
-#     if VERBOSE:
-#         print(66*'-')
-#         print('neural network fit loaded from file')
-# except:
-#     if VERBOSE:
-#         print(125*'-')
-#     # fit training data
-#     LBLS = np.concatenate((np.zeros(np.sum(CUPRED[:, 0]), dtype=np.uint16),
-#                         np.ones(np.sum(CUPRED[:, NC-1]), dtype=np.uint16)), 0)
-#     NN.fit(SSDAT[(UPRED == 0) | (UPRED == NC-1), :, np.newaxis], LBLS)
-#     LOSS = NN.model.history.history['loss']
-#     MAE = NN.model.history.history['mean_absolute_error']
-#     ACC = NN.model.history.history['acc']
-#     pickle.dump(LOSS, open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.loss.pickle' \
-#                            % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
-#     pickle.dump(MAE, open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.mae.pickle' \
-#                           % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
-#     pickle.dump(ACC, open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.acc.pickle' \
-#                           % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
-#     if VERBOSE:
-#         print(125*'-')
-#         print('neural network fitted to training data')
-#         print(66*'-')
-#     # predict classification data
-#     SPROB = NN.predict_proba(SSDAT[:, :, np.newaxis])[:, 1].reshape(SND, SNS)
-#     pickle.dump(SPROB, open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.sprob.pickle' \
-#                             % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
-
-# MSPROB = np.mean(SPROB, 1)
-# SSPROB = np.std(SPROB, 1)
-# SPRED = SPROB.round()
-# SCM = [np.mean(RS[SPRED.reshape(-1) == i]) for i in range(2)]
-
-# # transition prediction
-# FITG = (1.0, UTRANS)
-# STRANS, SERR, SDOM, SVAL = odr_fit(MSPROB, SSPROB)
-# pickle.dump(np.array([STRANS, SERR], dtype=np.float32),
-#             open(CWD+'/sga.%d.%s.%s.%d.%s.%d.cnn1d.%d.%.0e.strans.pickle' \
-#                  % (MI, SCLR, RDCN, NP, CLST, NC, EP, LR), 'wb'))
-
-# if VERBOSE:
-#     print(66*'-')
-#     print('r\tave\tstd')
-#     print(66*'-')
-#     for i in range(SND):
-#         print('%0.2f\t' % R[i] + 2*'%0.2f\t' % (MSPROB[i], SSPROB[i]))
-#     print(66*'-')
-#     print('neural network predicted classification data')
-#     print(66*'-')
-#     print('trans\t'+2*'%0.2f\t' % (STRANS, SERR))
-#     print(66*'-')
-
-# with open(OUTPREF+'.out', 'a') as out:
-#     out.write('# ' + 66*'-' + '\n')
-#     out.write('# supervised learning results\n')
-#     out.write('# ' + 66*'-' + '\n')
-#     out.write('# epoch\tloss\tmae\tacc\n')
-#     out.write('# ' + 66*'-' + '\n')
-#     for i in range(EP):
-#         out.write('  %02d\t' % i + 3*'%0.4f\t' % (LOSS[i], MAE[i], ACC[i]) + '\n')
-#     out.write('# ' + 66*'-' + '\n')
-#     out.write('# r\tave\tstd\n')
-#     out.write('# ' + 66*'-' + '\n')
-#     for i in range(SND):
-#         out.write('  %0.4f\t' % R[i] + 2*'%0.4f\t' % (MSPROB[i], SSPROB[i]) + '\n')
-#     out.write('# ' + 66*'-' + '\n')
-#     out.write('# transition\n')
-#     out.write('# ' + 66*'-' + '\n')
-#     out.write('  '+2*'%0.4f\t' % (STRANS, SERR) + '\n')
-#     out.write('# ' + 66*'-'+'\n')
+    out.write('# ' + 66*'-' + '\n')
+    for i in range(SNH):
+        out.write('%.2f\t%.2f' % (SH[i], STRANS[i]) +'\n')
+    out.write('# ' + 66*'-' + '\n')
 
 if PLOT:
 
@@ -518,32 +547,30 @@ if PLOT:
             grid[j].yaxis.set_ticks_position('left')
         # cbd = grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=MS, cmap=CM, s=120, alpha=0.025,
         #                       edgecolors='none')
-        grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=ES.reshape(NH*NT*UNS), cmap=CM, s=120, alpha=0.025, edgecolors='none')
+        grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=UES.reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.0125, edgecolors='none')
         grid[0].set_aspect('equal', 'datalim')
         grid[0].set_xlabel(r'$x_0$')
         grid[0].set_ylabel(r'$x_1$')
         grid[0].set_title(r'$\mathrm{(a)\enspace Sample\enspace Embedding (E)}$', y=1.02)
-        grid[2].scatter(RUDAT[:, 0], RUDAT[:, 1], c=MS.reshape(NH*NT*UNS), cmap=CM, s=120, alpha=0.025, edgecolors='none')
+        grid[2].scatter(RUDAT[:, 0], RUDAT[:, 1], c=UMS.reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.0125, edgecolors='none')
         grid[2].set_aspect('equal', 'datalim')
         grid[2].set_xlabel(r'$x_0$')
         grid[2].set_ylabel(r'$x_1$')
         grid[2].set_title(r'$\mathrm{(c)\enspace Sample\enspace Embedding (M)}$', y=1.02)
-        grid[4].scatter(RUDAT[:, 0], RUDAT[:, 1], c=TS.reshape(NH*NT*UNS), cmap=CM, s=120, alpha=0.025, edgecolors='none')
+        grid[4].scatter(RUDAT[:, 0], RUDAT[:, 1], c=UTS.reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.0125, edgecolors='none')
         grid[4].set_aspect('equal', 'datalim')
         grid[4].set_xlabel(r'$x_0$')
         grid[4].set_ylabel(r'$x_1$')
         grid[4].set_title(r'$\mathrm{(e)\enspace Sample\enspace Embedding (T)}$', y=1.02)
         for j in range(NPH):
-            # SCALE(np.mean(ES.reshape(-1)[UPRED == j]), ES)
-            # SCALE(np.mean(MS.reshape(-1)[UPRED == j]), MS)
             grid[1].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
-                            c=np.array(CM(SCALE(np.mean(ES.reshape(-1)[UPRED == j]), ES.reshape(-1))))[np.newaxis, :], s=120, alpha=0.025,
+                            c=np.array(CM(SCALE(np.mean(UES.reshape(-1)[UPRED == j]), UES.reshape(-1))))[np.newaxis, :], s=120, alpha=0.0125,
                             edgecolors='none')
             grid[3].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
-                            c=np.array(CM(SCALE(np.mean(MS.reshape(-1)[UPRED == j]), MS.reshape(-1))))[np.newaxis, :], s=120, alpha=0.025,
+                            c=np.array(CM(SCALE(np.mean(UMS.reshape(-1)[UPRED == j]), UMS.reshape(-1))))[np.newaxis, :], s=120, alpha=0.0125,
                             edgecolors='none')
             grid[5].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
-                            c=np.array(CM(SCALE(np.mean(TS.reshape(-1)[UPRED == j]), TS.reshape(-1))))[np.newaxis, :], s=120, alpha=0.025,
+                            c=np.array(CM(SCALE(np.mean(UTS.reshape(-1)[UPRED == j]), UTS.reshape(-1))))[np.newaxis, :], s=120, alpha=0.0125,
                             edgecolors='none')
         grid[1].set_aspect('equal', 'datalim')
         grid[1].set_xlabel(r'$x_0$')
@@ -571,84 +598,40 @@ if PLOT:
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ax.plot(PTRANS, np.arange(NH), color='yellow')
+        ax.plot(UITRANS, np.arange(UNH), color='yellow')
+        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
         ax.imshow(UPREDB, aspect='equal', interpolation='none', origin='lower', cmap=CM)
         ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
-        plt.xticks(np.arange(32), np.round(T, 2), rotation=-60)
-        plt.yticks(np.arange(32), np.round(H, 2))
+        plt.xticks(np.arange(UNT), np.round(UT, 2), rotation=-60)
+        plt.yticks(np.arange(UNH), np.round(UH, 2))
         plt.xlabel('T')
         plt.ylabel('H')
         plt.title('Ising Model Phase Diagram')
         fig.savefig(OUTPREF+'.uph.png')
 
 
-    def plot_spred():
-        ''' plot of prediction curves '''
+    def plot_sph():
+        ''' plot of supervised phase diagram '''
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ax.plot(SDOM, SVAL, color=CM(SCALE(STRANS)),
-                label=r'$\mathrm{Phase\enspace Probability\enspace Curve}$')
-        ax.axvline(STRANS, color=CM(SCALE(STRANS)), alpha=0.50)
-        for j in range(2):
-            serrb = STRANS+(-1)**(j+1)*SERR
-            ax.axvline(serrb, color=CM(SCALE(serrb)), alpha=0.50, linestyle='--')
-        ax.scatter(R, MSPROB, color=CM(SCALE(R)), s=240, edgecolors='none', marker='*')
-        ax.text(STRANS+np.diff(R)[0], .1,
-                r'$r_{\mathrm{supervised}} = %.4f \pm %.4f$' % (STRANS, SERR))
-        ax.set_ylim(0.0, 1.0)
-        for tick in ax.get_xticklabels():
-            tick.set_rotation(16)
-        scitxt = ax.yaxis.get_offset_text()
-        scitxt.set_x(.025)
-        ax.ticklabel_format(axis='y', style='sci', scilimits=(-2, 2))
-        ax.set_xlabel(r'$\mathrm{r}$')
-        ax.set_ylabel(r'$\mathrm{Probability}$')
-        fig.savefig(OUTPREF+'.spred.png')
-
-
-    def plot_semb():
-        ''' plot of reduced sample space '''
-        fig = plt.figure()
-        grid = ImageGrid(fig, 111,
-                         nrows_ncols=(1, 2),
-                         axes_pad=2.0,
-                         share_all=True,
-                         cbar_location="right",
-                         cbar_mode="single",
-                         cbar_size="4%",
-                         cbar_pad=0.4)
-        for j in range(len(grid)):
-            grid[j].spines['right'].set_visible(False)
-            grid[j].spines['top'].set_visible(False)
-            grid[j].xaxis.set_ticks_position('bottom')
-            grid[j].yaxis.set_ticks_position('left')
-        cbd = grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=RS, cmap=CM, s=120, alpha=0.05,
-                              edgecolors='none')
-        grid[0].set_aspect('equal', 'datalim')
-        grid[0].set_xlabel(r'$x_0$')
-        grid[0].set_ylabel(r'$x_1$')
-        grid[0].set_title(r'$\mathrm{(a)\enspace Sample\enspace Embedding}$', y=1.02)
-        for j in range(2):
-            grid[1].scatter(RUDAT[SPRED.reshape(-1) == j, 0], RUDAT[SPRED.reshape(-1) == j, 1],
-                            c=np.array(CM(SCALE(SCM[j])))[np.newaxis, :], s=120, alpha=0.05,
-                            edgecolors='none')
-        grid[1].set_aspect('equal', 'datalim')
-        grid[1].set_xlabel(r'$x_0$')
-        grid[1].set_ylabel(r'$x_1$')
-        grid[1].set_title(r'$\mathrm{(b)\enspace Classification\enspace Embedding}$', y=1.02)
-        cbar = grid[0].cax.colorbar(cbd)
-        cbar.solids.set(alpha=1)
-        grid[0].cax.toggle_label(True)
-        fig.savefig(OUTPREF+'.semb.png')
+        ax.plot(SITRANS, np.arange(SNH), color='yellow')
+        ax.plot(SICVAL, SICDOM, color='yellow', linestyle='--')
+        ax.imshow(SPROBM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+        plt.xticks(np.arange(SNT), np.round(ST, 2), rotation=-60)
+        plt.yticks(np.arange(SNH), np.round(SH, 2))
+        plt.xlabel('T')
+        plt.ylabel('H')
+        plt.title('Ising Model Phase Diagram')
+        fig.savefig(OUTPREF+'.sph.png')
 
     plot_uemb()
     plot_uph()
-    # plot_spred()
-    # plot_semb()
+    plot_sph()
 
     if VERBOSE:
         print('plots saved')
