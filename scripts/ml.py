@@ -203,6 +203,12 @@ STS = np.ones((SNH, SNT, SNS))*np.array([ST[i]*np.ones(SNS) for i in range(SNT)]
 if PLOT:
     CM = plt.get_cmap('plasma')
     SCALE = lambda a, b: (a-np.min(b))/(np.max(b)-np.min(b))
+    def rgb_intens(rgb):
+        gamma = 2.2
+        rgblin = np.power(rgb, gamma)
+        lumac = np.array([.2126, .7152, .0722])[np.newaxis, np.newaxis, :]
+        luma = np.sum(np.multiply(rgblin, yfac), -1)
+        return 116*np.power(luma, 1/3)-16
     if VERBOSE:
         print('colormap and scale initialized')
         print(66*'-')
@@ -273,10 +279,10 @@ def build_keras_cnn2d():
                         # Dropout(rate=0.25),
                         # Conv2D(filters=64, kernel_size=(2, 2), activation='relu',
                         #        kernel_initializer='he_normal',
-                        #        padding='valid', strides=1),
+                        #        padding='same', strides=1),
                         # Conv2D(filters=64, kernel_size=(2, 2), activation='relu',
                         #        kernel_initializer='he_normal',
-                        #        padding='valid', strides=1),
+                        #        padding='same', strides=1),
                         # AveragePooling2D(pool_size=(2, 2)),
                         # Dropout(rate=0.25),
                         Flatten(),
@@ -409,12 +415,6 @@ UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
 UICVAL = (UCVAL-UT[0])/(UT[-1]-UT[0])*(UNT-1)
 
 if VERBOSE:
-    # print(np.max([66, 12+8*UNT])*'-')
-    # print('\t'+UNT*'\t%0.2f' % tuple(UT))
-    # print(np.max([66, 12+8*UNT])*'-')
-    # for i in range(-1, -UNH-1, -1):
-    #     print('%0.2f\t' % UH[i] + UNT*'\t%d' % tuple(UPREDC[i]))
-    # print(np.max([66, 12+8*UNT])*'-')
     print(66*'-')
     print('h\tt')
     print(66*'-')
@@ -422,14 +422,6 @@ if VERBOSE:
         print('%.2f\t%.2f' % (UH[i], UTRANS[i]))
 
 with open(OUTPREF+'.out', 'a') as out:
-    # out.write('# ' + np.max([66, 12+8*NC])*'-' + '\n')
-    # out.write('# unsupervised learning results\n')
-    # out.write('# ' + np.max([66, 12+8*UNT])*'-' + '\n')
-    # out.write('# \t'+UNT*'\t%0.2f' % tuple(UT)+'\n')
-    # out.write('# ' + np.max([66, 12+8*UNT])*'-' + '\n')
-    # for i in range(-1, -UNH-1, -1):
-    #     out.write('# %0.2f\t' % UH[i] + UNT*'\t%d' % tuple(UPREDC[i])+'\n')
-    # out.write('# ' + np.max([66, 12+8*UNT])*'-' + '\n')
     out.write('# '+66*'-'+'\n')
     out.write('# unsupervised learning results\n')
     out.write('# h\tt\n')
@@ -600,7 +592,7 @@ if PLOT:
         ax.yaxis.set_ticks_position('left')
         ax.plot(UITRANS, np.arange(UNH), color='yellow')
         ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(UPREDB, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.imshow(rgb_intens(UPREDB), aspect='equal', interpolation='none', origin='lower', cmap=CM)
         ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
         plt.xticks(np.arange(UNT), np.round(UT, 2), rotation=-60)
         plt.yticks(np.arange(UNH), np.round(UH, 2))
@@ -620,7 +612,7 @@ if PLOT:
         ax.yaxis.set_ticks_position('left')
         ax.plot(SITRANS, np.arange(SNH), color='yellow')
         ax.plot(SICVAL, SICDOM, color='yellow', linestyle='--')
-        ax.imshow(SPROBM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.imshow(rgb_intens(SPROBM), aspect='equal', interpolation='none', origin='lower', cmap=CM)
         ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
         plt.xticks(np.arange(SNT), np.round(ST, 2), rotation=-60)
         plt.yticks(np.arange(SNH), np.round(SH, 2))
