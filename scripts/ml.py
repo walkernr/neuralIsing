@@ -9,6 +9,7 @@ import argparse
 import os
 import pickle
 import numpy as np
+from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelBinarizer
 from TanhScaler import TanhScaler
 from sklearn.decomposition import PCA, KernelPCA
@@ -91,6 +92,8 @@ if PARALLEL:
     os.environ['GOTO_NUM_THREADS'] = str(THREADS)
     os.environ['OMP_NUM_THREADS'] = str(THREADS)
     os.environ['openmp'] = 'True'
+else:
+    THREADS = 1
 from keras.models import Sequential
 from keras.layers import Conv2D, AveragePooling2D, Dropout, Dense, Flatten
 from keras.optimizers import Nadam
@@ -121,8 +124,6 @@ if PLOT:
 
 # information
 if VERBOSE:
-    print(66*'-')
-    print('data loaded')
     print(66*'-')
     print('input summary')
     print(66*'-')
@@ -159,10 +160,10 @@ with open(OUTPREF+'.out', 'w') as out:
     out.write('# threads:                   %d\n' % THREADS)
     out.write('# name:                      %s\n' % NAME)
     out.write('# lattice size:              %s\n' % N)
-    out.write('unsuper interval:            %d\n' % UNI)
-    out.write('unsuper samples:             %d\n' % UNS)
-    out.write('super interval:              %d\n' % SNI)
-    out.write('super samples:               %d\n' % SNS)
+    out.write('# unsuper interval:          %d\n' % UNI)
+    out.write('# unsuper samples:           %d\n' % UNS)
+    out.write('# super interval:            %d\n' % SNI)
+    out.write('# super samples:             %d\n' % SNS)
     out.write('# scaler:                    %s\n' % SCLR)
     out.write('# reduction:                 %s\n' % RDCN)
     out.write('# projections:               %d\n' % NP)
@@ -183,22 +184,63 @@ ST = pickle.load(open(CWD+'/%s.%d.t.pickle' % (NAME, N), 'rb'))[::SNI]
 UNH, UNT = UH.size, UT.size
 SNH, SNT = SH.size, ST.size
 # load data
-DAT = pickle.load(open(CWD+'/%s.%d.dat.pickle' % (NAME, N), 'rb'))
-UES = DAT[::UNI, ::UNI, -UNS:, 0].reshape(UNH, UNT, UNS)
-UMS = DAT[::UNI, ::UNI, -UNS:, 1].reshape(UNH, UNT, UNS)
-SES = DAT[::SNI, ::SNI, -SNS:, 0].reshape(SNH, SNT, SNS)
-SMS = DAT[::SNI, ::SNI, -SNS:, 1].reshape(SNH, SNT, SNS)
-del DAT
-UDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[::UNI, ::UNI, -UNS:, :, :].reshape(UNH, UNT, UNS, N*N)
-SDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[::SNI, ::SNI, -SNS:, :, :]
-# data shape
-_, _, _, UNF = UDAT.shape
-_, _, _, SNF0, SNF1 = SDAT.shape
+UDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[::UNI, ::UNI, :, :, :].reshape(UNH, UNT, -1, N*N)
+SDAT = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))[::SNI, ::SNI, :, :, :]
+UTDAT = pickle.load(open(CWD+'/%s.%d.dat.pickle' % (NAME, N), 'rb'))[::UNI, ::UNI, :, :]
+STDAT = pickle.load(open(CWD+'/%s.%d.dat.pickle' % (NAME, N), 'rb'))[::SNI, ::SNI, :, :]
+if VERBOSE:
+    print('data loaded')
+    print(66*'-')
+# inlier selection
+try:
+    UIDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%d.%d.uidat.pickle' % (NAME, N, UNI, UNS, SNI, SNS), 'rb'))
+    SIDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%d.%d.sidat.pickle' % (NAME, N, UNI, UNS, SNI, SNS), 'rb'))
+    if VERBOSE:
+        print('inlier selected indices loaded from file')
+        print(66*'-')
+except:
+    LOF = LocalOutlierFactor(contamination='auto', n_jobs=THREADS)
+    UIDAT = np.zeros((UNH, UNT, UNS), dtype=np.uint16)
+    SIDAT = np.zeros((SNH, SNT, SNS), dtype=np.uint16)
+    for i in range(UNH):
+        for j in range(UNT):
+                OPRED = LOF.fit_predict(UDAT[i, j])
+                try:
+                    UIDAT[i, j] = np.random.choice(np.where(OPRED==1)[0], size=UNS, replace=False)
+                except:
+                    UIDAT[i, j] = np.argsort(LOF.negative_outlier_factor_)[:UNS]
+    del OPRED
+    for i in range(SNH):
+        for j in range(SNT):
+            SIDAT[i, j] = np.random.permutation(SDAT[i, j].shape[0])[:SNS]
+    pickle.dump(UIDAT, open(CWD+'/%s.%d.%d.%d.%d.%d.uidat.pickle' % (NAME, N, UNI, UNS, SNI, SNS), 'wb'))
+    pickle.dump(SIDAT, open(CWD+'/%s.%d.%d.%d.%d.%d.sidat.pickle' % (NAME, N, UNI, UNS, SNI, SNS), 'wb'))
+    if VERBOSE:
+        print('inliner indices determined')
+        print(66*'-')
+UDAT = np.array([[UDAT[i, j, UIDAT[i,j], :] for j in range(UNT)] for i in range(UNH)])
+SDAT = np.array([[SDAT[i, j, SIDAT[i,j], :, :] for j in range(SNT)] for i in range(SNH)])
+UTDAT = np.array([[UTDAT[i, j, UIDAT[i,j], :] for j in range(UNT)] for i in range(UNH)])
+STDAT = np.array([[STDAT[i, j, SIDAT[i,j], :] for j in range(SNT)] for i in range(SNH)])
+UES, UMS = UTDAT[:, :, :, 0], UTDAT[:, :, :, 1]
+SES, SMS = STDAT[:, :, :, 0], STDAT[:, :, :, 1]
+del UTDAT, STDAT
 # phase point multidimensional arrays
 UHS = np.array([UH[i]*np.ones((UNT, UNS)) for i in range(UNH)])
 UTS = np.ones((UNH, UNT, UNS))*np.array([UT[i]*np.ones(UNS) for i in range(UNT)])[np.newaxis, :, :]
 SHS = np.array([SH[i]*np.ones((SNT, SNS)) for i in range(SNH)])
 STS = np.ones((SNH, SNT, SNS))*np.array([ST[i]*np.ones(SNS) for i in range(SNT)])[np.newaxis, :, :]
+# calculate phase point averages
+UEM = np.mean(UES, -1)
+UE2M = np.mean(np.square(UES), -1)
+USHM = np.mean(np.square(UES/UTS), -1)-np.square(np.mean(UES/UTS, -1))
+UTM = np.mean(UTS, -1)
+UMM = np.mean(UMS, -1)
+SEM = np.mean(SES, -1)
+SE2M = np.mean(np.square(SES), -1)
+SSHM = np.mean(np.square(SES/STS), -1)-np.square(np.mean(SES/STS, -1))
+STM = np.mean(STS, -1)
+SMM = np.mean(SMS, -1)
 
 if PLOT:
     CM = plt.get_cmap('plasma')
@@ -207,8 +249,8 @@ if PLOT:
         gamma = 2.2
         rgblin = np.power(rgb, gamma)
         lumac = np.array([.2126, .7152, .0722])[np.newaxis, np.newaxis, :]
-        luma = np.sum(np.multiply(rgblin, yfac), -1)
-        return 116*np.power(luma, 1/3)-16
+        luma = np.sum(np.multiply(rgblin, lumac), -1)
+        return 116*np.power(luma, 1./3.)-16
     if VERBOSE:
         print('colormap and scale initialized')
         print(66*'-')
@@ -258,7 +300,7 @@ RDCNS = {'pca':PCA(n_components=0.99),
          'isomap':Isomap(n_components=NP, n_jobs=THREADS),
          'lle':LocallyLinearEmbedding(n_components=NP, n_jobs=THREADS),
          'tsne':TSNE(n_components=NP, perplexity=UNS,
-                     early_exaggeration=12, learning_rate=200, n_iter=2000,
+                     early_exaggeration=12, learning_rate=200, n_iter=1000,
                      verbose=True, n_jobs=THREADS)}
 
 if VERBOSE:
@@ -270,7 +312,7 @@ def build_keras_cnn2d():
     ''' builds 2-d convolutional neural network '''
     model = Sequential([Conv2D(filters=32, kernel_size=(2, 2), activation='relu',
                                kernel_initializer='he_normal',
-                               padding='valid', strides=1, input_shape=(SNF0, SNF1, 1)),
+                               padding='valid', strides=1, input_shape=(N, N, 1)),
                         Dropout(rate=0.25),
                         Conv2D(filters=32, kernel_size=(2, 2), activation='relu',
                                kernel_initializer='he_normal',
@@ -297,7 +339,7 @@ NN = KerasClassifier(build_keras_cnn2d, epochs=EP, batch_size=32,
                      shuffle=True, verbose=VERBOSE, callbacks=[History()])
 
 # clustering dictionary
-CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC),
+CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
          'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
          'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, eigen_solver='amg')}
 
@@ -315,9 +357,9 @@ try:
     if VERBOSE:
         print('scaled unsupervised data loaded from file')
 except:
-    FUDOM = np.fft.rfftfreq(UNF, 1)
+    FUDOM = np.fft.rfftfreq(N*N, 1)
     FUNF = FUDOM.size
-    FUDAT = np.fft.rfft(UDAT.reshape(UNH*UNT*UNS, UNF))
+    FUDAT = np.fft.rfft(UDAT.reshape(UNH*UNT*UNS, N*N))
     pickle.dump(FUDOM, open(CWD+'/%s.%d.%d.%d.%s.fudat.k.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
     pickle.dump(FUDAT.reshape(UNH, UNT, UNS, FUNF), open(CWD+'/%s.%d.%d.%d.%s.fudat.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
     FUDAT = np.concatenate((np.real(FUDAT), np.imag(FUDAT)), axis=1)
@@ -389,10 +431,10 @@ try:
         print('clustered unsupervised data loaded from file')
 except:
     UPRED = CLSTS[CLST].fit_predict(RUDAT)
-    UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
-    IUCTM = np.argsort(UCTM)
+    UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
+    IUCMM = np.argsort(UCMM)
     for i in range(NC):
-        UPRED[UPRED == IUCTM[i]] = i+NC
+        UPRED[UPRED == IUCMM[i]] = i+NC
     UPRED -= NC
     pickle.dump(UPRED.reshape(UNH, UNT, UNS), open(CWD+'/%s.%d.%d.%d.%s.%s.%d.%s.%d.upred.pickle' \
                                                    % (NAME, N, UNI, UNS, SCLR, RDCN, NP, CLST, NC), 'wb'))
@@ -401,14 +443,15 @@ except:
 UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
 UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
 # make this better
-if NC == 4:
-    IUCTM = np.argsort(UCTM)
-    UPRED[UPRED == np.max(IUCTM[-2:])] = np.min(IUCTM[-2:])
+if NC > NPH:
+    IUCMM = np.argsort(UCMM)
+    UPRED[UPRED == np.max(IUCMM[1:-1])] = np.min(IUCMM[1:-1])
+    UPRED[UPRED == NC-1] = NPH-1
     UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
     UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
 UPREDB = np.array([[np.bincount(UPRED.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
 UPREDC = np.array([[np.argmax(np.bincount(UPRED.reshape(UNH, UNT, UNS)[i, j])) for j in range(UNT)] for i in range(UNH)])
-UTRANS = np.array([odr_fit(logistic, UT, UPREDB[i, :, 2], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
+UTRANS = np.array([odr_fit(logistic, UT, UPREDB[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
 UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
 UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1, 0, 2.5))
 UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
@@ -432,16 +475,16 @@ with open(OUTPREF+'.out', 'a') as out:
 # scale supervised data
 try:
     SSTDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.sstdat.pickle' % (NAME, N, UNI, UNS, SCLR), 'rb')).reshape(UNH*UNT*UNS, N, N)
-    SSCDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%d.%d.%s.sscdat.pickle' % (NAME, N, UNI, UNS, SNI, SNS, SCLR), 'rb')).reshape(SNH*SNT*SNS, SNF0, SNF1)
+    SSCDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%d.%d.%s.sscdat.pickle' % (NAME, N, UNI, UNS, SNI, SNS, SCLR), 'rb')).reshape(SNH*SNT*SNS, N, N)
     if VERBOSE:
         print(66*'-')
         print('scaled supervised data loaded from file')
 except:
-    SCLRS[SCLR].fit(UDAT.reshape(UNH*UNT*UNS, UNF))
-    SSTDAT = SCLRS[SCLR].transform(UDAT.reshape(UNH*UNT*UNS, UNF)).reshape(UNH*UNT*UNS, N, N)
-    SSCDAT = SCLRS[SCLR].transform(SDAT.reshape(SNH*SNT*SNS, SNF0*SNF1)).reshape(SNH*SNT*SNS, SNF0, SNF1)
+    SCLRS[SCLR].fit(UDAT.reshape(UNH*UNT*UNS, N*N))
+    SSTDAT = SCLRS[SCLR].transform(UDAT.reshape(UNH*UNT*UNS, N*N)).reshape(UNH*UNT*UNS, N, N)
+    SSCDAT = SCLRS[SCLR].transform(SDAT.reshape(SNH*SNT*SNS, N*N)).reshape(SNH*SNT*SNS, N, N)
     pickle.dump(SSTDAT.reshape(UNH, UNT, UNS, N, N), open(CWD+'/%s.%d.%d.%d.%s.sstdat.pickle' % (NAME, N, UNI, UNS, SCLR), 'wb'))
-    pickle.dump(SSCDAT.reshape(SNH, SNT, SNS, SNF0, SNF1), open(CWD+'/%s.%d.%d.%d.%d.%d.%s.sscdat.pickle' % (NAME, N, UNI, UNS, SNI, SNS, SCLR), 'wb'))
+    pickle.dump(SSCDAT.reshape(SNH, SNT, SNS, N, N), open(CWD+'/%s.%d.%d.%d.%d.%d.%s.sscdat.pickle' % (NAME, N, UNI, UNS, SNI, SNS, SCLR), 'wb'))
     if VERBOSE:
         print(125*'-')
         print('supervised data scaled')
@@ -487,7 +530,7 @@ except:
 SPRED = np.argmax(SPROB, -1)
 SPROBM = np.mean(SPROB.reshape(SNH, SNT, SNS, 3), 2)
 SPROBS = np.std(SPROB.reshape(SNH, SNT, SNS, 3), 2)
-STRANS = np.array([odr_fit(logistic, ST, SPROBM[i, :, 2], SPROBS[i, :, 2], (1, 2.5))[0][1] for i in range(SNH)])
+STRANS = np.array([odr_fit(logistic, ST, SPROBM[i, :, 1], SPROBS[i, :, 1], (1, 2.5))[0][1] for i in range(SNH)])
 SITRANS = (STRANS-ST[0])/(ST[-1]-ST[0])*(SNT-1)
 SCPOPT, SCPERR, SCDOM, SCVAL = odr_fit(absolute, SH, STRANS, EPS*np.ones(SNT), (1, 0, 2.5))
 SICDOM = (SCDOM-SH[0])/(SH[-1]-SH[0])*(SNH-1)
@@ -521,65 +564,103 @@ with open(OUTPREF+'.out', 'a') as out:
 if PLOT:
 
 
-    def plot_uemb():
+    def plot_uemb(p):
         ''' plot of unsupervised reduced sample space '''
+        v = {'ener': UES, 'temp': UTS, 'mag': UMS}
         fig = plt.figure()
         grid = ImageGrid(fig, 111,
-                         nrows_ncols=(3, 2),
+                         nrows_ncols=(1, 2),
                          axes_pad=2.0,
-                         share_all=True) # ,
-                         # cbar_location="right",
-                         # cbar_mode="single",
-                         # cbar_size="4%",
-                         # cbar_pad=0.4)
+                         share_all=True,
+                         cbar_location="right",
+                         cbar_mode="single",
+                         cbar_size="4%",
+                         cbar_pad=0.4)
         for j in range(len(grid)):
             grid[j].spines['right'].set_visible(False)
             grid[j].spines['top'].set_visible(False)
             grid[j].xaxis.set_ticks_position('bottom')
             grid[j].yaxis.set_ticks_position('left')
-        # cbd = grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=MS, cmap=CM, s=120, alpha=0.025,
-        #                       edgecolors='none')
-        grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=UES.reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.0125, edgecolors='none')
+        cbd = grid[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=v[p].reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.025,
+                              edgecolors='none')
         grid[0].set_aspect('equal', 'datalim')
         grid[0].set_xlabel(r'$x_0$')
         grid[0].set_ylabel(r'$x_1$')
-        grid[0].set_title(r'$\mathrm{(a)\enspace Sample\enspace Embedding (E)}$', y=1.02)
-        grid[2].scatter(RUDAT[:, 0], RUDAT[:, 1], c=UMS.reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.0125, edgecolors='none')
-        grid[2].set_aspect('equal', 'datalim')
-        grid[2].set_xlabel(r'$x_0$')
-        grid[2].set_ylabel(r'$x_1$')
-        grid[2].set_title(r'$\mathrm{(c)\enspace Sample\enspace Embedding (M)}$', y=1.02)
-        grid[4].scatter(RUDAT[:, 0], RUDAT[:, 1], c=UTS.reshape(UNH*UNT*UNS), cmap=CM, s=120, alpha=0.0125, edgecolors='none')
-        grid[4].set_aspect('equal', 'datalim')
-        grid[4].set_xlabel(r'$x_0$')
-        grid[4].set_ylabel(r'$x_1$')
-        grid[4].set_title(r'$\mathrm{(e)\enspace Sample\enspace Embedding (T)}$', y=1.02)
+        grid[0].set_title(r'$\mathrm{(a)\enspace Sample\enspace Embedding\enspace (%s)}$' % p[0].capitalize(), y=1.02)
         for j in range(NPH):
             grid[1].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
-                            c=np.array(CM(SCALE(np.mean(UES.reshape(-1)[UPRED == j]), UES.reshape(-1))))[np.newaxis, :], s=120, alpha=0.0125,
-                            edgecolors='none')
-            grid[3].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
-                            c=np.array(CM(SCALE(np.mean(UMS.reshape(-1)[UPRED == j]), UMS.reshape(-1))))[np.newaxis, :], s=120, alpha=0.0125,
-                            edgecolors='none')
-            grid[5].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
-                            c=np.array(CM(SCALE(np.mean(UTS.reshape(-1)[UPRED == j]), UTS.reshape(-1))))[np.newaxis, :], s=120, alpha=0.0125,
-                            edgecolors='none')
+                            c=np.array(CM(SCALE(np.mean(v[p].reshape(-1)[UPRED == j]), v[p].reshape(-1))))[np.newaxis, :],
+                            s=120, alpha=0.03125, edgecolors='none')
         grid[1].set_aspect('equal', 'datalim')
         grid[1].set_xlabel(r'$x_0$')
         grid[1].set_ylabel(r'$x_1$')
-        grid[1].set_title(r'$\mathrm{(b)\enspace Cluster\enspace Embedding (E)}$', y=1.02)
-        grid[3].set_aspect('equal', 'datalim')
-        grid[3].set_xlabel(r'$x_0$')
-        grid[3].set_ylabel(r'$x_1$')
-        grid[3].set_title(r'$\mathrm{(d)\enspace Cluster\enspace Embedding (M)}$', y=1.02)
-        grid[5].set_aspect('equal', 'datalim')
-        grid[5].set_xlabel(r'$x_0$')
-        grid[5].set_ylabel(r'$x_1$')
-        grid[5].set_title(r'$\mathrm{(f)\enspace Cluster\enspace Embedding (T)}$', y=1.02)
-        # cbar = grid[0].cax.colorbar(cbd)
-        # cbar.solids.set(alpha=1)
-        # grid[0].cax.toggle_label(True)
-        fig.savefig(OUTPREF+'.uemb.png')
+        grid[1].set_title(r'$\mathrm{(b)\enspace Cluster\enspace Embedding\enspace (%s)}$' % p[0].capitalize(), y=1.02)
+        cbar = grid[0].cax.colorbar(cbd)
+        cbar.solids.set(alpha=1)
+        grid[0].cax.toggle_label(True)
+        fig.savefig(OUTPREF+'.emb.%s.png' % p)
+
+
+    def plot_diag(m, p):
+        ''' plot of (H, T) diagram '''
+        d = {'u': (UT, UH), 's': (ST, SH)}
+        v = {'u': {'ener': UEM, 'temp': UTM, 'mag': UMM, 'sheat': USHM, 'phase': UPREDB},
+             's': {'ener': SEM, 'temp': STM, 'mag': SMM, 'sheat': SSHM, 'phase': SPROBM}}
+        t = {'ener': 'Energy', 'temp': 'Temperature', 'mag': 'Magnetization',
+             'sheat': 'Specfic Heat', 'phase': 'Phase'}
+        c = {'u': (UITRANS, UNH, UICVAL, UICDOM), 's': (SITRANS, SNH, SICVAL, SICDOM)}
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.plot(c[m][0], np.arange(c[m][1]), color='yellow')
+        ax.plot(c[m][2], c[m][3], color='yellow', linestyle='--')
+        ax.imshow(v[m][p], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+        plt.xticks(np.arange(d[m][0].size), np.round(d[m][0], 2), rotation=-60)
+        plt.yticks(np.arange(d[m][1].size), np.round(d[m][1], 2))
+        plt.xlabel('T')
+        plt.ylabel('H')
+        plt.title('Ising Model %s Diagram' % t[p])
+        fig.savefig(OUTPREF+'.diag.%s.%s.png' % (m, p))
+
+
+    def plot_cph():
+        ''' plot of specific heat phase diagram '''
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.imshow(SSHM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+        plt.xticks(np.arange(SNT), np.round(UT, 2), rotation=-60)
+        plt.yticks(np.arange(SNH), np.round(UH, 2))
+        plt.xlabel('T')
+        plt.ylabel('H')
+        plt.title('Ising Model Specific Heat Diagram')
+        fig.savefig(OUTPREF+'.cph.png')
+
+
+    def plot_mph():
+        ''' plot of magnetization phase diagram '''
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.imshow(SMM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+        plt.xticks(np.arange(SNT), np.round(UT, 2), rotation=-60)
+        plt.yticks(np.arange(SNH), np.round(UH, 2))
+        plt.xlabel('T')
+        plt.ylabel('H')
+        plt.title('Ising Model Magnetization Diagram')
+        fig.savefig(OUTPREF+'.mph.png')
 
 
     def plot_uph():
@@ -623,9 +704,13 @@ if PLOT:
         plt.title('Ising Model Phase Diagram')
         fig.savefig(OUTPREF+'.sph.png')
 
-    plot_uemb()
-    plot_uph()
-    plot_sph()
+
+    for p in ['ener', 'temp', 'mag']:
+        plot_uemb(p)
+    for m in ['u', 's']:
+        for p in ['ener', 'temp', 'mag', 'sheat', 'phase']:
+            plot_diag(m, p)
+
 
     if VERBOSE:
         print('plots saved')
