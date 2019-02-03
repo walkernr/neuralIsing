@@ -445,7 +445,8 @@ UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC
 # make this better
 if NC > NPH:
     IUCMM = np.argsort(UCMM)
-    UPRED[UPRED == np.max(IUCMM[1:-1])] = np.min(IUCMM[1:-1])
+    # UPRED[UPRED == np.max(IUCMM[1:-1])] = np.min(IUCMM[1:-1])
+    UPRED[(UPRED != IUCMM[0]) | (UPRED != IUCMM[-1])] = np.min(IUCMM[1:-1])
     UPRED[UPRED == NC-1] = NPH-1
     UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
     UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])

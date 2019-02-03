@@ -70,6 +70,8 @@ def parse_args():
                         type=int, default=0)
     parser.add_argument('-sn', '--sample_number', help='number of samples to generate',
                         type=int, default=1024)
+    parser.add_argument('-rec', '--remcmc_cutoff', help='replica exchange markov chain monte carlo cutoff',
+                        type=int, default=0)
     # parse arguments
     args = parser.parse_args()
     # return arguments
@@ -81,7 +83,7 @@ def parse_args():
             args.name, args.lattice_size, args.interaction, args.magnetic_moment,
             args.field_number, *args.field_range,
             args.temperature_number, *args.temperature_range,
-            args.sample_cutoff, args.sample_number)
+            args.sample_cutoff, args.sample_number, args.remcmc_cutoff)
 
 
 def client_info():
@@ -448,7 +450,7 @@ if __name__ == '__main__':
      NAME, N, J, M,
      NH, LH, HH,
      NT, LT, HT,
-     CUTOFF, NSMPL) = parse_args()
+     CUTOFF, NSMPL, RECUTOFF) = parse_args()
 
     # set random seed
     SEED = 256
@@ -554,7 +556,7 @@ if __name__ == '__main__':
             # save state for restart
             dump_samples_restart()
         # replica exchange markov chain mc
-        if (STEP+1) != NSMPL:
+        if (STEP+1) != NSMPL and (STEP+1) > RECUTOFF:
             replica_exchange()
     if DASK:
         # terminate client after completion
