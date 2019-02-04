@@ -472,6 +472,9 @@ if VERBOSE:
     print(66*'-')
     for i in range(UNH):
         print('%.2f\t%.2f' % (UH[i], UTRANS[i]))
+    print(66*'-')
+    print('param opt:' +len(UCPOPT)*' %.2f' % tuple(UCPOPT))
+    print('param err:' +len(UCPERR)*' %.2f' % tuple(UCPERR))
 
 with open(OUTPREF+'.out', 'a') as out:
     out.write('# '+66*'-'+'\n')
@@ -480,6 +483,9 @@ with open(OUTPREF+'.out', 'a') as out:
     out.write('# '+66*'-'+'\n')
     for i in range(UNH):
         out.write('%.2f\t%.2f\n' % (UH[i], UTRANS[i]))
+    out.write('# '+66*'-'+'\n')
+    out.write('# param opt:'+len(UCPOPT)*' %.2f' % tuple(UCPOPT) +'\n')
+    out.write('# param err:'+len(UCPERR)*' %.2f' % tuple(UCPERR) +'\n')
 
 # scale supervised data
 try:
@@ -554,6 +560,9 @@ if VERBOSE:
     for i in range(SNH):
         print('%.2f\t%.2f' % (SH[i], STRANS[i]))
     print(66*'-')
+    print('param opt:' + len(SCPOPT)*' %.2f' % tuple(SCPOPT))
+    print('param err:' + len(SCPERR)*' %.2f' % tuple(SCPERR))
+    print(66*'-')
 
 with open(OUTPREF+'.out', 'a') as out:
     out.write('# ' + 66*'-' + '\n')
@@ -568,6 +577,9 @@ with open(OUTPREF+'.out', 'a') as out:
     out.write('# ' + 66*'-' + '\n')
     for i in range(SNH):
         out.write('%.2f\t%.2f' % (SH[i], STRANS[i]) +'\n')
+    out.write('# ' + 66*'-' + '\n')
+    out.write('# param opt:' + len(SCPOPT)*' %.2f' % tuple(SCPOPT) + '\n')
+    out.write('# param err:' + len(SCPERR)*' %.2f' % tuple(SCPERR) + '\n')
     out.write('# ' + 66*'-' + '\n')
 
 if PLOT:
@@ -591,20 +603,20 @@ if PLOT:
         if NP == 2:
             axs[1].set_xlabel(r'$x_0$')
             cbd = axs[0].scatter(RUDAT[:, 0], RUDAT[:, 1], c=v[p].reshape(-1),
-                                 cmap=CM, s=128, alpha=0.015625, edgecolors='face')
+                                 cmap=CM, s=128, alpha=0.015625, edgecolors='k')
             for j in range(NPH):
                 axs[1].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1],
                                c=np.array(CM(SCALE(np.mean(v[p].reshape(-1)[UPRED == j]),
                                v[p].reshape(-1))))[np.newaxis, :],
-                               s=128, alpha=0.015625, edgecolors='face')
+                               s=128, alpha=0.015625, edgecolors='k')
         if NP == 3:
             cbd = axs[0].scatter(RUDAT[:, 0], RUDAT[:, 1], RUDAT[:, 2],
-                                 c=v[p].reshape(-1), cmap=CM, s=128, alpha=0.015625, edgecolors='face')
+                                 c=v[p].reshape(-1), cmap=CM, s=128, alpha=0.015625, edgecolors='k')
             for j in range(NPH):
                 axs[1].scatter(RUDAT[UPRED == j, 0], RUDAT[UPRED == j, 1], RUDAT[UPRED==j, 2],
                                c=np.array(CM(SCALE(np.mean(v[p].reshape(-1)[UPRED == j]),
                                v[p].reshape(-1))))[np.newaxis, :],
-                               s=128, alpha=0.015625, edgecolors='face')
+                               s=128, alpha=0.015625, edgecolors='k')
         cax, kw = mpl.colorbar.make_axes([ax for ax in axs], aspect=64, fraction=0.05)
         cbar = plt.colorbar(cbd, cax=cax, **kw)
         cbar.solids.set(alpha=1)
