@@ -46,7 +46,7 @@ PARSER.add_argument('-np', '--projections', help='number of embedding projection
 PARSER.add_argument('-cl', '--clustering', help='clustering method',
                     type=str, default='agglomerative')
 PARSER.add_argument('-nc', '--clusters', help='number of clusters',
-                    type=int, default=4)
+                    type=int, default=3)
 PARSER.add_argument('-bk', '--backend', help='keras backend',
                     type=str, default='tensorflow')
 PARSER.add_argument('-ep', '--epochs', help='number of epochs',
