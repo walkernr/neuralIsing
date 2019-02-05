@@ -452,9 +452,7 @@ UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC
 UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NC)])
 # make this better
 if NC > NPH:
-    IUCMM = np.argsort(UCMM)
-    # UPRED[UPRED == np.max(IUCMM[1:-1])] = np.min(IUCMM[1:-1])
-    UPRED[(UPRED != IUCMM[0]) | (UPRED != IUCMM[-1])] = np.min(IUCMM[1:-1])
+    UPRED[(UPRED != 0) & (UPRED != NC-1)] = 1
     UPRED[UPRED == NC-1] = NPH-1
     UCMM = np.array([np.mean(UMS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
     UCTM = np.array([np.mean(UTS.reshape(UNH*UNT*UNS)[UPRED == i]) for i in range(NPH)])
@@ -642,9 +640,11 @@ if PLOT:
         ax.plot(c[m][0], np.arange(c[m][1]), color='yellow')
         ax.plot(c[m][2], c[m][3], color='yellow', linestyle='--')
         ax.imshow(v[m][p], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
-        plt.xticks(np.arange(d[m][0].size), np.round(d[m][0], 2), rotation=-60)
-        plt.yticks(np.arange(d[m][1].size), np.round(d[m][1], 2))
+        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+        ax.set_xticks(np.arange(d[m][0].size), minor=True)
+        ax.set_yticks(np.arange(d[m][1].size), minor=True)
+        plt.xticks(np.arange(d[m][0].size)[::4], np.round(d[m][0], 2)[::4], rotation=-60)
+        plt.yticks(np.arange(d[m][1].size)[::4], np.round(d[m][1], 2)[::4])
         plt.xlabel('T')
         plt.ylabel('H')
         plt.title('Ising Model %s Diagram' % t[p])
