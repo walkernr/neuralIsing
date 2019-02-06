@@ -54,6 +54,8 @@ PARSER.add_argument('-ep', '--epochs', help='number of epochs',
                     type=int, default=8)
 PARSER.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
                     type=float, default=5e-3)
+PARSER.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
+                    type=int, default=256)
 
 # parse arguments
 ARGS = PARSER.parse_args()
@@ -76,9 +78,8 @@ NC = ARGS.clusters
 BACKEND = ARGS.backend
 EP = ARGS.epochs
 LR = ARGS.learning_rate
+SEED = ARGS.random_seed
 
-# random seed
-SEED = 256
 np.random.seed(SEED)
 # number of phases
 NPH = 3
