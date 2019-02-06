@@ -9,6 +9,7 @@ import argparse
 import os
 import pickle
 import numpy as np
+from tqdm import tqdm
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelBinarizer
 from TanhScaler import TanhScaler
@@ -203,13 +204,22 @@ try:
 except:
     LOF = LocalOutlierFactor(contamination='auto', n_jobs=THREADS)
     UIDAT = np.zeros((UNH, UNT, UNS), dtype=np.uint16)
-    for i in range(UNH):
-        for j in range(UNT):
-                OPRED = LOF.fit_predict(UDAT[i, j])
-                try:
-                    UIDAT[i, j] = np.random.choice(np.where(OPRED==1)[0], size=UNS, replace=False)
-                except:
-                    UIDAT[i, j] = np.argsort(LOF.negative_outlier_factor_)[:UNS]
+    if VERBOSE:
+        for i in tqdm(range(UNH)):
+            for j in tqdm(range(UNT)):
+                    OPRED = LOF.fit_predict(UDAT[i, j])
+                    try:
+                        UIDAT[i, j] = np.random.choice(np.where(OPRED==1)[0], size=UNS, replace=False)
+                    except:
+                        UIDAT[i, j] = np.argsort(LOF.negative_outlier_factor_)[:UNS]
+    else:
+        for i in range(UNH):
+            for j in range(UNT):
+                    OPRED = LOF.fit_predict(UDAT[i, j])
+                    try:
+                        UIDAT[i, j] = np.random.choice(np.where(OPRED==1)[0], size=UNS, replace=False)
+                    except:
+                        UIDAT[i, j] = np.argsort(LOF.negative_outlier_factor_)[:UNS]
     del OPRED
     pickle.dump(UIDAT, open(CWD+'/%s.%d.%d.%d.uidat.pickle' % (NAME, N, UNI, UNS), 'wb'))
     if VERBOSE:
