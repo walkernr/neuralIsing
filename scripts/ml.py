@@ -1,6 +1,5 @@
 import argparse
 import os
-import pickle
 import numpy as np
 from tqdm import tqdm
 from sklearn.neighbors import LocalOutlierFactor
@@ -114,10 +113,10 @@ def write_specs():
 
 
 def load_data():
-    h = pickle.load(open(CWD+'/%s.%d.h.pickle' % (NAME, N), 'rb'))
-    t = pickle.load(open(CWD+'/%s.%d.t.pickle' % (NAME, N), 'rb'))
-    dat = pickle.load(open(CWD+'/%s.%d.dat.pickle' % (NAME, N), 'rb'))
-    dmp = pickle.load(open(CWD+'/%s.%d.dmp.pickle' % (NAME, N), 'rb'))
+    h = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))
+    t = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))
+    dat = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
+    dmp = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
     if VERBOSE:
         print('full data loaded from file')
     return h, t, dat, dmp
@@ -274,14 +273,14 @@ if __name__ == '__main__':
     NH, NT, NS, _, _ = DMP.shape
 
     try:
-        CDMP = pickle.load(open(CWD+'/%s.%d.%d.%d.cdmp.pickle' % (NAME, N, SNI, SEED), 'rb'))
-        CDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.cdat.pickle' % (NAME, N, SNI, SEED), 'rb'))
+        CDMP = np.load(CWD+'/%s.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SEED))
+        CDAT = np.load(CWD+'/%s.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SEED))
         if VERBOSE:
             print('selected classification data loaded from file')
     except:
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
-        pickle.dump(CDMP, open(CWD+'/%s.%d.%d.%d.cdmp.pickle' % (NAME, N, SNI, SEED), 'wb'))
-        pickle.dump(CDAT, open(CWD+'/%s.%d.%d.%d.cdat.pickle' % (NAME, N, SNI, SEED), 'wb'))
+        np.save(CWD+'/%s.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SEED), CDMP)
+        np.save(CWD+'/%s.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SEED), CDAT)
         if VERBOSE:
             print('selected classification data computed')
     CH = H[::SNI]
@@ -295,14 +294,13 @@ if __name__ == '__main__':
              'tanh':TanhScaler()}
 
     try:
-        SCDMP = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.pickle' \
-                                 % (NAME, N, SNI, SNS, SCLR, SEED), 'rb')).reshape(SNH*SNT*SNS, N, N)
+        SCDMP = np.load(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.npy' \
+                        % (NAME, N, SNI, SNS, SCLR, SEED)).reshape(SNH*SNT*SNS, N, N)
         if VERBOSE:
             print('scaled selected classification data loaded from file')
     except:
         SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N)).reshape(SNH*SNT*SNS, N, N)
-        pickle.dump(SCDMP.reshape(SNH, SNT, SNS, N, N),
-                    open(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.pickle' % (NAME, N, SNI, SNS, SCLR, SEED), 'wb'))
+        np.save(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N))
         if VERBOSE:
             print('scaled selected classification data computed')
 
@@ -322,31 +320,31 @@ if __name__ == '__main__':
             print('variational autoencoder weights trained')
 
     try:
-        ZENC = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.zenc.pickle'
-                                % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED), 'rb')).reshape(SNH*SNT*SNS, 3*LD)
+        ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.zenc.npy'
+                       % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED)).reshape(SNH*SNT*SNS, 3*LD)
         if VERBOSE:
             print('z encodings loaded from file')
     except:
         ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis])), 0, 1).reshape(SNH*SNT*SNS, 3*LD)
-        pickle.dump(ZENC.reshape(SNH, SNT, SNS, 3*LD),
-                    open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.zenc.pickle' % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED), 'wb'))
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED),
+                ZENC.reshape(SNH, SNT, SNS, 3*LD))
         if VERBOSE:
             print('z encodings computed')
 
     try:
-        SLZENC = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.pickle' \
-                                  % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), 'rb'))
-        SLDAT = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.pickle' \
-                                 % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), 'rb'))
+        SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.npy' \
+                         % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED))
+        SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.npy' \
+                        % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED))
         if VERBOSE:
             print('inlier selected z encoding loaded from file')
     except:
         pass
         SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 3*LD), DAT, UNI, UNS)
-        pickle.dump(SLZENC, open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.pickle' \
-                                 % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), 'wb'))
-        pickle.dump(SLDAT, open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.pickle' \
-                                 % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), 'wb'))
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.npy' \
+                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), SLZENC)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.npy' \
+                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), SLDAT)
         if VERBOSE:
             print('inlier selected z encoding computed')
 
@@ -365,14 +363,14 @@ if __name__ == '__main__':
                           verbose=VERBOSE, n_jobs=THREADS)}
 
     try:
-        MSLZENC = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.pickle' \
-                                   % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, SEED), 'rb'))
+        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.npy' \
+                          % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 3*LD))
-        pickle.dump(MSLZENC, open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.pickle' \
-                                  % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, SEED), 'wb'))
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.npy' \
+                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold computed')
 
@@ -381,8 +379,8 @@ if __name__ == '__main__':
              'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
              'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, eigen_solver='amg')}
     try:
-        CLMSLZENC = pickle.load(open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.pickle' \
-                                     % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), 'rb'))
+        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
+                            % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
     except:
@@ -392,8 +390,8 @@ if __name__ == '__main__':
         for i in range(NC):
             CLMSLZENC[CLMSLZENC == ICLMM[i]] = i+NC
         CLMSLZENC -= NC
-        pickle.dump(CLMSLZENC, open(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.pickle' \
-                                    % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), 'wb'))
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
+                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
 

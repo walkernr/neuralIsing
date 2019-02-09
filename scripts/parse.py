@@ -7,7 +7,6 @@ Created on Mon Jan 28 17:38:15 2019
 
 import argparse
 import os
-import pickle
 import numpy as np
 from tqdm import tqdm
 
