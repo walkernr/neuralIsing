@@ -133,13 +133,13 @@ def sampling(beta):
 def build_variational_autoencoder():
     # encoder layers
     input = Input(shape=(N, N, 1), name='encoder_input')
-    conv0 = Conv2D(filters=N*N, kernel_size=3, activation='relu',
+    conv0 = Conv2D(filters=32, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(input)
-    conv1 = Conv2D(filters=2*N*N, kernel_size=3, activation='relu',
+    conv1 = Conv2D(filters=64, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=2)(conv0)
     shape = K.int_shape(conv1)
     fconv1 = Flatten()(conv1)
-    d0 = Dense(N*N, activation='relu')(fconv1)
+    d0 = Dense(512, activation='relu')(fconv1)
     z_mean = Dense(LD, name='z_mean')(d0)
     z_log_var = Dense(LD, name='z_log_var')(d0)
     z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
@@ -151,9 +151,9 @@ def build_variational_autoencoder():
     latent_input = Input(shape=(LD,), name='z_sampling')
     d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
     rd1 = Reshape(shape[1:])(d1)
-    convt0 = Conv2DTranspose(filters=2*N*N, kernel_size=3, activation='relu',
+    convt0 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=2)(rd1)
-    convt1 = Conv2DTranspose(filters=N*N, kernel_size=3, activation='relu',
+    convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt0)
     output = Conv2DTranspose(filters=1, kernel_size=3, activation='sigmoid',
                              kernel_initializer='he_normal', padding='same', name='decoder_output')(convt1)
@@ -165,8 +165,7 @@ def build_variational_autoencoder():
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
     # vae loss
-    reconstruction_loss = binary_crossentropy(K.flatten(input), K.flatten(output))
-    reconstruction_loss *= N*N
+    reconstruction_loss = N*N*binary_crossentropy(K.flatten(input), K.flatten(output))
     kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
