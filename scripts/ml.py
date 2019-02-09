@@ -112,16 +112,6 @@ def write_specs():
         out.write('# fitting function:          %s\n' % 'logistic')
 
 
-def load_data():
-    h = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))
-    t = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))
-    dat = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
-    dmp = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
-    if VERBOSE:
-        print('full data loaded from file')
-    return h, t, dat, dmp
-
-
 def sampling(beta):
     z_mean, z_log_var = beta
     batch = K.shape(z_mean)[0]
@@ -277,13 +267,17 @@ if __name__ == '__main__':
         if VERBOSE:
             print('selected classification data loaded from file')
     except:
+        DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
+        DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
+        if VERBOSE:
+            print('data loaded from file')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
         np.save(CWD+'/%s.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SEED), CDMP)
         np.save(CWD+'/%s.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SEED), CDAT)
         if VERBOSE:
             print('selected classification data computed')
-    CH = H[::SNI]
-    CT = T[::SNI]
+    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
+    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNT, SNH = CH.size, CT.size
 
     # scaler dictionary
@@ -427,8 +421,8 @@ if __name__ == '__main__':
     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
     ax.set_xticks(np.arange(UT.size), minor=True)
     ax.set_yticks(np.arange(UH.size), minor=True)
-    plt.xticks(np.arange(T.size)[::(2*SNI)], np.round(T, 2)[::(2*SNI)], rotation=-60)
-    plt.yticks(np.arange(H.size)[::(2*SNI)], np.round(H, 2)[::(2*SNI)])
+    plt.xticks(np.arange(CT.size)[::(2*UNI)], np.round(CT, 2)[::(2*UNI)], rotation=-60)
+    plt.yticks(np.arange(CH.size)[::(2*UNI)], np.round(CH, 2)[::(2*UNI)])
     plt.xlabel('T')
     plt.ylabel('H')
     plt.title('Ising Model Phase Diagram')
