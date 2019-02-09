@@ -259,8 +259,8 @@ if __name__ == '__main__':
         CM = plt.get_cmap('plasma')
 
     try:
-        CDMP = np.load(CWD+'/%s.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SEED))
-        CDAT = np.load(CWD+'/%s.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SEED))
+        CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SNS, SEED))
+        CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
             print('selected classification data loaded from file')
     except:
@@ -269,8 +269,8 @@ if __name__ == '__main__':
         if VERBOSE:
             print('data loaded from file')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
-        np.save(CWD+'/%s.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SEED), CDMP)
-        np.save(CWD+'/%s.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SEED), CDAT)
+        np.save(CWD+'/%s.%d.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
+        np.save(CWD+'/%s.%d.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
         if VERBOSE:
             print('selected classification data computed')
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
