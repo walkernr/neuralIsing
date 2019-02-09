@@ -339,7 +339,7 @@ if __name__ == '__main__':
             print('inlier selected z encoding loaded from file')
     except:
         pass
-        SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 3*LD), DAT, UNI, UNS)
+        SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 3*LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), SLZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.npy' \
@@ -427,8 +427,8 @@ if __name__ == '__main__':
     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
     ax.set_xticks(np.arange(UT.size), minor=True)
     ax.set_yticks(np.arange(UH.size), minor=True)
-    plt.xticks(np.arange(T.size)[::(2*UNI)], np.round(T, 2)[::(2*UNI)], rotation=-60)
-    plt.yticks(np.arange(H.size)[::(2*UNI)], np.round(H, 2)[::(2*UNI)])
+    plt.xticks(np.arange(T.size)[::(2*SNI)], np.round(T, 2)[::(2*SNI)], rotation=-60)
+    plt.yticks(np.arange(H.size)[::(2*SNI)], np.round(H, 2)[::(2*SNI)])
     plt.xlabel('T')
     plt.ylabel('H')
     plt.title('Ising Model Phase Diagram')
