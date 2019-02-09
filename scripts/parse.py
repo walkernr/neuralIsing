@@ -27,8 +27,8 @@ VERBOSE, NAME, N = parse_args()
 CWD = os.getcwd()
 PREF = CWD+'/%s.%d' % (NAME, N)
 # external fields and temperatures
-H = pickle.load(open(PREF+'.h.pickle', 'rb'))
-T = pickle.load(open(PREF+'.t.pickle', 'rb'))
+H = np.load(PREF+'.h.npy')
+T = np.load(PREF+'.t.npy')
 NH, NT = H.size, T.size
 
 # file listing
@@ -41,7 +41,7 @@ if VERBOSE:
 else:
     DAT = np.array([np.loadtxt(DATFLS[i], dtype=np.float32).reshape(NT, -1, 3) for i in range(NH)])
     DMP = np.array([np.loadtxt(DMPFLS[i], dtype=np.float32).reshape(NT, -1, N, N) for i in range(NH)])
-pickle.dump(DAT, open(PREF+'.dat.pickle', 'wb'))
-pickle.dump(DMP, open(PREF+'.dmp.pickle', 'wb'))
+np.save(PREF+'.dat.npy', DAT)
+np.save(PREF+'.dmp.npy', DMP)
 if VERBOSE:
     print('all data dumped')

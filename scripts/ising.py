@@ -7,7 +7,6 @@ Created on Sat Jan 26 00:03:16 2019
 
 import argparse
 import os
-import pickle
 import time
 import numpy as np
 import numba as nb
@@ -423,8 +422,7 @@ def load_samples_restart():
             print('\n----------------------------------')
         print('loading samples from previous dump')
         print('----------------------------------')
-    rf = os.getcwd()+'/%s.%d.rstrt.%d.pickle' % (RENAME, N, RESTEP)
-    return pickle.load(open(rf, 'rb'))
+    return np.load(os.getcwd()+'/%s.%d.rstrt.%d.npy' % (RENAME, N, RESTEP))
 
 
 def dump_samples_restart():
@@ -433,8 +431,7 @@ def dump_samples_restart():
         if PARALLEL:
             print('\n---------------')
         print('dumping samples')
-    rf = os.getcwd()+'/%s.%d.rstrt.%d.pickle' % (NAME, N, STEP+1)
-    pickle.dump(STATE, open(rf, 'wb'))
+    np.save(os.getcwd()+'/%s.%d.rstrt.%d.npy' % (NAME, N, STEP+1), STATE)
 
 # ----
 # main
@@ -476,8 +473,8 @@ if __name__ == '__main__':
     T = np.linspace(LT, HT, NT, dtype=np.float32)
 
     # dump external fields and temperatures
-    pickle.dump(H, open('%s.%d.h.pickle' % (NAME, N), 'wb'))
-    pickle.dump(T, open('%s.%d.t.pickle' % (NAME, N), 'wb'))
+    np.save('%s.%d.h.npy' % (NAME, N), H)
+    np.save('%s.%d.t.npy' % (NAME, N), T)
 
     # -----------------
     # initialize client
