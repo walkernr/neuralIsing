@@ -214,7 +214,7 @@ if __name__ == '__main__':
      SCLR, LD, MNFLD, ED, CLST, NC,
      BACKEND, EP, LR, SEED) = parse_args()
     CWD = os.getcwd()
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.out' % \
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d' % \
               (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED)
     write_specs()
 
@@ -407,8 +407,7 @@ if __name__ == '__main__':
     ax = fig.add_subplot(111)
     ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
                s=128, alpha=0.15, edgecolors='k')
-    fig.savefig(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.vae.smpl.emb.png' % \
-                (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
+    fig.savefig(OUTPREF+'.vae.emb.smpl.png')
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -416,8 +415,7 @@ if __name__ == '__main__':
         ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1],
                    c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
                    s=128, alpha=0.15, edgecolors='k')
-    fig.savefig(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.vae.clst.emb.png' % \
-                (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
+    fig.savefig(OUTPREF+'.vae.emb.clst.png')
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -434,5 +432,4 @@ if __name__ == '__main__':
     plt.xlabel('T')
     plt.ylabel('H')
     plt.title('Ising Model Phase Diagram')
-    fig.savefig(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.vae.diag.png' % \
-                (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
+    fig.savefig(OUTPREF+'.vae.diag.phase.png')
