@@ -258,9 +258,6 @@ if __name__ == '__main__':
         SCALE = lambda a, b: (a-np.min(b))/(np.max(b)-np.min(b))
         CM = plt.get_cmap('plasma')
 
-    H, T, DAT, DMP = load_data()
-    NH, NT, NS, _, _ = DMP.shape
-
     try:
         CDMP = np.load(CWD+'/%s.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SEED))
         CDAT = np.load(CWD+'/%s.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SEED))
