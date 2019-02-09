@@ -311,7 +311,7 @@ if __name__ == '__main__':
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
     except:
-        VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=NS,
+        VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS,
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
         VAE = VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.vae.wt.h5' \
                                % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED))
@@ -347,7 +347,7 @@ if __name__ == '__main__':
         if VERBOSE:
             print('inlier selected z encoding computed')
 
-    UH, UT = H[::UNI], T[::UNI]
+    UH, UT = CH[::UNI], CT[::UNI]
     UNH, UNT = UH.size, UT.size
     SLES = SLDAT[:, :, :, 0]
     SLMS = SLDAT[:, :, :, 1]
