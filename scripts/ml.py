@@ -30,11 +30,11 @@ def parse_args():
     parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (supervised)',
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (supervised)',
-                        type=int, default=128)
+                        type=int, default=256)
     parser.add_argument('-sc', '--scaler', help='feature scaler',
                         type=str, default='tanh')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
-                        type=int, default=16)
+                        type=int, default=4)
     parser.add_argument('-rd', '--manifold', help='manifold learning method',
                         type=str, default='tsne')
     parser.add_argument('-ed', '--embed_dimension', help='number of embedded dimensions',
@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument('-bk', '--backend', help='keras backend',
                         type=str, default='tensorflow')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=8)
+                        type=int, default=4)
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
                         type=float, default=1e-3)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
@@ -204,8 +204,8 @@ if __name__ == '__main__':
      SCLR, LD, MNFLD, ED, CLST, NC,
      BACKEND, EP, LR, SEED) = parse_args()
     CWD = os.getcwd()
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d' % \
-              (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED)
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d' % \
+              (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED)
     write_specs()
 
     np.random.seed(SEED)
@@ -297,44 +297,44 @@ if __name__ == '__main__':
     ENC, DEC, VAE = build_variational_autoencoder()
 
     try:
-        VAE.load_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.vae.wt.h5' \
-                         % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED), by_name=True)
+        VAE.load_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
+                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), by_name=True)
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
     except:
         VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS,
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
-        VAE = VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.vae.wt.h5' \
-                               % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED))
+        VAE = VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
+                               % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         if VERBOSE:
             print('variational autoencoder weights trained')
 
     try:
-        ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.zenc.npy'
-                       % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED)).reshape(SNH*SNT*SNS, 3*LD)
+        ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy'
+                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 3*LD)
         if VERBOSE:
             print('z encodings loaded from file')
     except:
         ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis])), 0, 1).reshape(SNH*SNT*SNS, 3*LD)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, EP, LR, SEED),
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED),
                 ZENC.reshape(SNH, SNT, SNS, 3*LD))
         if VERBOSE:
             print('z encodings computed')
 
     try:
-        SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.npy' \
-                         % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED))
-        SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.npy' \
-                        % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED))
+        SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
+                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED))
+        SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
+                        % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED))
         if VERBOSE:
             print('inlier selected z encoding loaded from file')
     except:
         pass
         SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 3*LD), CDAT, UNI, UNS)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.slzenc.npy' \
-                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), SLZENC)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%d.sldat.npy' \
-                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, SEED), SLDAT)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLZENC)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLDAT)
         if VERBOSE:
             print('inlier selected z encoding computed')
 
@@ -353,14 +353,14 @@ if __name__ == '__main__':
                           verbose=VERBOSE, n_jobs=THREADS)}
 
     try:
-        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.npy' \
-                          % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, SEED))
+        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.npy' \
+                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 3*LD))
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.npy' \
-                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.$d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.mnfld.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold computed')
 
@@ -369,8 +369,8 @@ if __name__ == '__main__':
              'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
              'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, eigen_solver='amg')}
     try:
-        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
-                            % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
+        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
+                            % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
     except:
@@ -380,8 +380,8 @@ if __name__ == '__main__':
         for i in range(NC):
             CLMSLZENC[CLMSLZENC == ICLMM[i]] = i+NC
         CLMSLZENC -= NC
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
-                % (NAME, N, SNI, SNS, SCLR, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), CLMSLZENC)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
 
