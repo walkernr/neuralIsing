@@ -350,7 +350,8 @@ if __name__ == '__main__':
               'lle':LocallyLinearEmbedding(n_components=ED, n_jobs=THREADS),
               'tsne':TSNE(n_components=ED, perplexity=UNS,
                           early_exaggeration=24, learning_rate=200, n_iter=1000,
-                          verbose=VERBOSE, n_jobs=THREADS)}
+                          verbose=VERBOSE, n_jobs=THREADS,
+                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD))}
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
@@ -358,10 +359,6 @@ if __name__ == '__main__':
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
     except:
-        if MNFLD == 'tsne':
-            MNFLDS['tsne'].init = MNFLDS['pca'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)))
-            if VERBOSE:
-                print('pca initialization computed for t-sne manifold learning')
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
