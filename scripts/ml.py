@@ -351,7 +351,7 @@ if __name__ == '__main__':
               'tsne':TSNE(n_components=ED, perplexity=UNS,
                           early_exaggeration=24, learning_rate=200, n_iter=1000,
                           verbose=VERBOSE, n_jobs=THREADS,
-                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD))}
+                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)))}
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
