@@ -423,7 +423,7 @@ def load_samples_restart():
             print('\n----------------------------------')
         print('loading samples from previous dump')
         print('----------------------------------')
-    return np.load(os.getcwd()+'/%s.%d.rstrt.%d.npy' % (RENAME, N, RESTEP))
+    return list(np.load(os.getcwd()+'/%s.%d.rstrt.%d.npy' % (RENAME, N, RESTEP)))
 
 
 def dump_samples_restart():
