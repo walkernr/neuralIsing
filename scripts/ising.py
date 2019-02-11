@@ -10,6 +10,7 @@ import os
 import time
 import numpy as np
 import numba as nb
+import itertools as it
 from tqdm import tqdm
 
 # --------------
@@ -339,7 +340,7 @@ def gen_sample(k, state):
     config = state[0]
     nts, nas = 0, 0
     # loop through monte carlo moves
-    for _ in range(MOD):
+    for _ in it.repeat(None, MOD):
         cconfig, nts, nas = spin_flip_mc(config, h, t, nts, nas)
     # extract system properties
     ener, mag = extract(config, h)
