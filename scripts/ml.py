@@ -359,7 +359,7 @@ if __name__ == '__main__':
             print('inlier selected z encoding manifold loaded from file')
     except:
         if MNFLD == 'tsne':
-            MNFLDS['tsne'].set_params(init=MNFLDS['pca'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)))
+            MNFLDS['tsne'].init = MNFLDS['pca'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)))
             if VERBOSE:
                 print('pca initialization computed for t-sne manifold learning')
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD))
