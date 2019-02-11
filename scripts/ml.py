@@ -311,13 +311,13 @@ if __name__ == '__main__':
 
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy'
-                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 3*LD)
+                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 2*LD)
         if VERBOSE:
             print('z encodings loaded from file')
     except:
-        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis])), 0, 1).reshape(SNH*SNT*SNS, 3*LD)
+        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis]))[:2], 0, 1).reshape(SNH*SNT*SNS, 2*LD)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED),
-                ZENC.reshape(SNH, SNT, SNS, 3*LD))
+                ZENC.reshape(SNH, SNT, SNS, 2*LD))
         if VERBOSE:
             print('z encodings computed')
 
@@ -330,7 +330,7 @@ if __name__ == '__main__':
             print('inlier selected z encoding loaded from file')
     except:
         pass
-        SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 3*LD), CDAT, UNI, UNS)
+        SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 2*LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
@@ -359,10 +359,10 @@ if __name__ == '__main__':
             print('inlier selected z encoding manifold loaded from file')
     except:
         if MNFLD == 'tsne':
-            MNFLDS['tsne'].set_params(init=MNFLDS['pca'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 3*LD)))
+            MNFLDS['tsne'].set_params(init=MNFLDS['pca'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)))
             if VERBOSE:
                 print('pca initialization computed for t-sne manifold learning')
-        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 3*LD))
+        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
