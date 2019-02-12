@@ -311,13 +311,13 @@ if __name__ == '__main__':
 
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy'
-                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 2*LD)
+                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 3*LD)
         if VERBOSE:
             print('z encodings loaded from file')
     except:
-        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis]))[:2], 0, 1).reshape(SNH*SNT*SNS, 2*LD)
+        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis]))[:], 0, 1).reshape(SNH*SNT*SNS, 3*LD)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED),
-                ZENC.reshape(SNH, SNT, SNS, 2*LD))
+                ZENC.reshape(SNH, SNT, SNS, 3*LD))
         if VERBOSE:
             print('z encodings computed')
 
@@ -330,7 +330,7 @@ if __name__ == '__main__':
             print('inlier selected z encoding loaded from file')
     except:
         pass
-        SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 2*LD), CDAT, UNI, UNS)
+        SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, 3*LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
@@ -351,7 +351,7 @@ if __name__ == '__main__':
               'tsne':TSNE(n_components=ED, perplexity=UNS,
                           early_exaggeration=24, learning_rate=200, n_iter=1000,
                           verbose=VERBOSE, n_jobs=THREADS,
-                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)))}
+                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, 3*LD)))}
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
@@ -359,7 +359,7 @@ if __name__ == '__main__':
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
     except:
-        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD))
+        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 3*LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
