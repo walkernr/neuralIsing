@@ -306,7 +306,7 @@ if __name__ == '__main__':
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
     except:
-        VAE.fit(SCDMP[:, :, :, np.newaxis], SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS,
+        VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS,
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
         LOSS = VAE.model.history.history['loss']
         ACC = VAE.model.history.history['acc']
