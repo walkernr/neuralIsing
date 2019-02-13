@@ -110,6 +110,7 @@ def write_specs():
         out.write('# epochs:                    %d\n' % EP)
         out.write('# learning rate:             %.2e\n' % LR)
         out.write('# fitting function:          %s\n' % 'logistic')
+        out.write('# ' + 66*'-' + '\n')
 
 
 def sampling(beta):
@@ -161,7 +162,7 @@ def build_variational_autoencoder():
     vae.add_loss(vae_loss)
     # compile vae
     nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=nadam, metrics=['mean_squared_error'])
+    vae.compile(optimizer=nadam, metrics=['mse'])
     # return vae networks
     return encoder, decoder, vae
 
@@ -171,9 +172,14 @@ def random_selection(dmp, dat, intrvl, ns):
     rdat = dat[::intrvl, ::intrvl]
     nh, nt, _, _, _ = rdmp.shape
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
+    if VERBOSE:
+        print('selecting random classification samples from full data')
+        print(66*'-'+'\n')
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nh), disable=not VERBOSE):
                 idat[i, j] = np.random.permutation(dat[i, j].shape[0])[:ns]
+    if VERBOSE:
+        print(66*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
@@ -185,6 +191,9 @@ def inlier_selection(dmp, dat, intrvl, ns):
     nh, nt, _, _ = rdmp.shape
     lof = LocalOutlierFactor(contamination='auto', n_jobs=THREADS)
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
+    if VERBOSE:
+        print('selecting inlier samples from classification data')
+        print(66*'-'+'\n')
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nh), disable=not VERBOSE):
                 fpred = lof.fit_predict(rdmp[i, j])
@@ -192,6 +201,8 @@ def inlier_selection(dmp, dat, intrvl, ns):
                     idat[i, j] = np.random.choice(np.where(fpred==1)[0], size=ns, replace=False)
                 except:
                     idat[i, j] = np.argsort(lof.negative_outlier_factor_)[:ns]
+    if VERBOSE:
+        print(66*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
@@ -262,17 +273,20 @@ if __name__ == '__main__':
         CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SNS, SEED))
         CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
-            print('selected classification data loaded from file')
+            print('selected classification samples loaded from file')
+            print(66*'-')
     except:
         DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
         DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
         if VERBOSE:
-            print('data loaded from file')
+            print('full dataset loaded from file')
+            print(66*'-')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
         np.save(CWD+'/%s.%d.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
         np.save(CWD+'/%s.%d.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
         if VERBOSE:
-            print('selected classification data computed')
+            print('selected classification samples generated')
+            print(66*'-')
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNT, SNH = CH.size, CT.size
@@ -287,12 +301,14 @@ if __name__ == '__main__':
         SCDMP = np.load(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.npy' \
                         % (NAME, N, SNI, SNS, SCLR, SEED)).reshape(SNH*SNT*SNS, N, N)
         if VERBOSE:
-            print('scaled selected classification data loaded from file')
+            print('scaled selected classification samples loaded from file')
+            print(66*'-')
     except:
         SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N)).reshape(SNH*SNT*SNS, N, N)
         np.save(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N))
         if VERBOSE:
-            print('scaled selected classification data computed')
+            print('scaled selected classification samples computed')
+            print(66*'-')
 
     ENC, DEC, VAE = build_variational_autoencoder()
 
@@ -305,11 +321,15 @@ if __name__ == '__main__':
                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
+            print(66*'-')
     except:
+        if VERBOSE:
+            print('variational autoencoder training on scaled selected classification samples')
+            print(66*'-')
         VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS, validation_split=0.1,
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
         LOSS = VAE.history.history['loss']
-        MSE = VAE.history.history['mean_squared_error']
+        MSE = VAE.history.history['mse']
         VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.npy' \
@@ -319,19 +339,22 @@ if __name__ == '__main__':
 
         if VERBOSE:
             print('variational autoencoder weights trained')
+            print(66*'-')
 
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy'
                        % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, LD)
         if VERBOSE:
-            print('z encodings loaded from file')
+            print('z encodings of scaled selected classification samples loaded from file')
+            print(66*'-')
     except:
         # ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis]))[2], 0, 1).reshape(SNH*SNT*SNS, LD)
         ZENC = ENC.predict(SCDMP[:, :, :, np.newaxis])[2].reshape(SNH*SNT*SNS, LD)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED),
                 ZENC.reshape(SNH, SNT, SNS, LD))
         if VERBOSE:
-            print('z encodings computed')
+            print('z encodings of scaled selected classification samples predicted')
+            print(66*'-')
 
     try:
         SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
@@ -339,7 +362,8 @@ if __name__ == '__main__':
         SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED))
         if VERBOSE:
-            print('inlier selected z encoding loaded from file')
+            print('inlier selected z encodings loaded from file')
+            print(66*'-')
     except:
         pass
         SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, LD), CDAT, UNI, UNS)
@@ -348,7 +372,8 @@ if __name__ == '__main__':
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLDAT)
         if VERBOSE:
-            print('inlier selected z encoding computed')
+            print('inlier selected z encodings computed')
+            print(66*'-')
 
     UH, UT = CH[::UNI], CT[::UNI]
     UNH, UNT = UH.size, UT.size
@@ -370,12 +395,14 @@ if __name__ == '__main__':
                           % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
+            print(66*'-')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold computed')
+            print(66*'-')
 
     # clustering dictionary
     CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
@@ -386,6 +413,7 @@ if __name__ == '__main__':
                             % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
+            print(66*'-')
     except:
         CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
         CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
@@ -397,6 +425,7 @@ if __name__ == '__main__':
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
+            print(66*'-')
 
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     # make this better
