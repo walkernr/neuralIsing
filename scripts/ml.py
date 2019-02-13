@@ -161,7 +161,7 @@ def build_variational_autoencoder():
     vae.add_loss(vae_loss)
     # compile vae
     nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=nadam, metric=['mean_squared_error'])
+    vae.compile(optimizer=nadam, metrics=['mean_squared_error'])
     # return vae networks
     return encoder, decoder, vae
 
