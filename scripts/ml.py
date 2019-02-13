@@ -283,13 +283,14 @@ if __name__ == '__main__':
             print('full dataset loaded from file')
             print(66*'-')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
+        del DAT, DMP
         np.save(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
         np.save(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
         if VERBOSE:
             print('selected classification samples generated')
             print(66*'-')
-    CH = np.load(CWD+'/%s.%d.h.c.npy' % (NAME, N))[::SNI]
-    CT = np.load(CWD+'/%s.%d.t.c.npy' % (NAME, N))[::SNI]
+    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
+    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNT, SNH = CH.size, CT.size
 
     # scaler dictionary
