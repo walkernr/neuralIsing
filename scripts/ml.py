@@ -161,7 +161,7 @@ def build_variational_autoencoder():
     vae.add_loss(vae_loss)
     # compile vae
     nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=nadam) # , metric=['accuracy'])
+    vae.compile(optimizer=nadam, metric=['mean_squared_error'])
     # return vae networks
     return encoder, decoder, vae
 
@@ -301,21 +301,21 @@ if __name__ == '__main__':
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), by_name=True)
         LOSS = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.npy' \
                        % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
-        # ACC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.acc.npy' \
-        #               % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
+        MSE = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
+                      % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
     except:
         VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS,
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
         LOSS = VAE.history.history['loss']
-        # ACC = VAE.history.history['acc']
+        MSE = VAE.history.history['mean_squared_error']
         VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), LOSS)
-        # np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.acc.npy' \
-        #         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), ACC)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), MSE)
 
         if VERBOSE:
             print('variational autoencoder weights trained')
