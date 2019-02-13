@@ -315,10 +315,12 @@ if __name__ == '__main__':
     try:
         VAE.load_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), by_name=True)
-        LOSS = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.npy' \
-                       % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
-        MSE = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
-                      % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
+        LOSST = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.losst.npy' \
+                        % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
+        LOSSV = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.lossv.npy' \
+                        % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
+        # MSE = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
+        #               % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
             print(66*'-')
@@ -326,17 +328,21 @@ if __name__ == '__main__':
         if VERBOSE:
             print('variational autoencoder training on scaled selected classification samples')
             print(66*'-')
-        VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS, validation_split=0.1,
+        TRN, VAL = train_test_split(SCDMP, test_size=0.125)
+        VAE.fit(TRN[:, :, :, np.newaxis], epochs=EP, batch_size=SNS, validation_data=VAL[:, :, :, np.newaxis],
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
-        LOSS = VAE.history.history['loss']
-        MSE = VAE.history.history['mse']
+        del TRN, VAL
+        LOSST = VAE.history.history['loss']
+        LOSSV = VAE.history.history['val_loss']
+        # MSE = VAE.history.history['mse']
         VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.npy' \
-                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), LOSS)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
-                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), MSE)
-
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.losst.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), LOSST)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.lossv.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), LOSSV)
+        # np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
+        #         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), MSE)
         if VERBOSE:
             print('variational autoencoder weights trained')
             print(66*'-')
