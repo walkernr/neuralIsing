@@ -327,7 +327,7 @@ if __name__ == '__main__':
             print('z encodings loaded from file')
     except:
         # ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis]))[2], 0, 1).reshape(SNH*SNT*SNS, LD)
-        ZENC = ENC.predict(SCDMP[:, :, :, np.newaxis]))[2].reshape(SNH*SNT*SNS, LD)
+        ZENC = ENC.predict(SCDMP[:, :, :, np.newaxis])[2].reshape(SNH*SNT*SNS, LD)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy' % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED),
                 ZENC.reshape(SNH, SNT, SNS, LD))
         if VERBOSE:
