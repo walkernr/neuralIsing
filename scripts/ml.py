@@ -444,11 +444,12 @@ if __name__ == '__main__':
     CLBMSLZENC = np.array([[np.bincount(CLMSLZENC.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
 
     fig = plt.figure()
-    ax = fig.add_subplot(111)
     if ED == 3:
+        ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], MSLZENC[:, 2], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
                    s=128, alpha=0.15, edgecolors='k')
     if ED == 2:
+        ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
                    s=128, alpha=0.15, edgecolors='k')
     fig.savefig(OUTPREF+'.vae.emb.smpl.png')
