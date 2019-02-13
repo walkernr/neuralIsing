@@ -271,8 +271,8 @@ if __name__ == '__main__':
         CM = plt.get_cmap('plasma')
 
     try:
-        CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SNS, SEED))
-        CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SNS, SEED))
+        CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
+        CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
             print('selected classification samples loaded from file')
             print(66*'-')
@@ -283,13 +283,13 @@ if __name__ == '__main__':
             print('full dataset loaded from file')
             print(66*'-')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
-        np.save(CWD+'/%s.%d.%d.%d.%d.cdmp.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
-        np.save(CWD+'/%s.%d.%d.%d.%d.cdat.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
+        np.save(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
+        np.save(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
         if VERBOSE:
             print('selected classification samples generated')
             print(66*'-')
-    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
-    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
+    CH = np.load(CWD+'/%s.%d.h.c.npy' % (NAME, N))[::SNI]
+    CT = np.load(CWD+'/%s.%d.t.c.npy' % (NAME, N))[::SNI]
     SNT, SNH = CH.size, CT.size
 
     # scaler dictionary
@@ -299,14 +299,14 @@ if __name__ == '__main__':
              'tanh':TanhScaler()}
 
     try:
-        SCDMP = np.load(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.npy' \
+        SCDMP = np.load(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' \
                         % (NAME, N, SNI, SNS, SCLR, SEED)).reshape(SNH*SNT*SNS, N, N)
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
             print(66*'-')
     except:
         SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N)).reshape(SNH*SNT*SNS, N, N)
-        np.save(CWD+'/%s.%d.%d.%d.%s.%d.scdmp.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N))
+        np.save(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N))
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(66*'-')
@@ -316,9 +316,9 @@ if __name__ == '__main__':
     try:
         VAE.load_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), by_name=True)
-        LOSST = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.losst.npy' \
+        TLOSS = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.trn.npy' \
                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
-        LOSSV = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.lossv.npy' \
+        VLOSS = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.val.npy' \
                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         # MSE = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
         #               % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
@@ -333,15 +333,15 @@ if __name__ == '__main__':
         VAE.fit(x=TRN[:, :, :, np.newaxis], y=None, validation_data=(VAL[:, :, :, np.newaxis], None),
                 epochs=EP, batch_size=SNS, shuffle=True, verbose=VERBOSE, callbacks=[History()])
         del TRN, VAL
-        LOSST = VAE.history.history['loss']
-        LOSSV = VAE.history.history['val_loss']
+        TLOSS = VAE.history.history['loss']
+        VLOSS = VAE.history.history['val_loss']
         # MSE = VAE.history.history['mse']
         VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.losst.npy' \
-                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), LOSST)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.lossv.npy' \
-                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), LOSSV)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.trn.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), TLOSS)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.val.npy' \
+                % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), VLOSS)
         # np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.mse.npy' \
         #         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), MSE)
         if VERBOSE:
@@ -364,9 +364,9 @@ if __name__ == '__main__':
             print(66*'-')
 
     try:
-        SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
+        SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.zenc.inl.npy' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED))
-        SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
+        SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.dat.inl.npy' \
                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED))
         if VERBOSE:
             print('inlier selected z encodings loaded from file')
@@ -374,9 +374,9 @@ if __name__ == '__main__':
     except:
         pass
         SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, LD), CDAT, UNI, UNS)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.slzenc.npy' \
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.zenc.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLZENC)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.sldat.npy' \
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.dat.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLDAT)
         if VERBOSE:
             print('inlier selected z encodings computed')
@@ -398,14 +398,14 @@ if __name__ == '__main__':
                           init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD)))}
 
     try:
-        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
+        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.inl.mnfld.npy' \
                           % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
             print(66*'-')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD))
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.mslzenc.npy' \
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.inl.mfld.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold computed')
@@ -416,7 +416,7 @@ if __name__ == '__main__':
              'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
              'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, eigen_solver='amg')}
     try:
-        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
+        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.zenc.inl.clst.npy' \
                             % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
@@ -428,7 +428,7 @@ if __name__ == '__main__':
         for i in range(NC):
             CLMSLZENC[CLMSLZENC == ICLMM[i]] = i+NC
         CLMSLZENC -= NC
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.clmslzenc.npy' \
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%s.%d.%d.zenc.inl.clst.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
