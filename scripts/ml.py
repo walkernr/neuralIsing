@@ -330,8 +330,8 @@ if __name__ == '__main__':
             print('variational autoencoder training on scaled selected classification samples')
             print(66*'-')
         TRN, VAL = train_test_split(SCDMP, test_size=0.125)
-        VAE.fit(TRN[:, :, :, np.newaxis], epochs=EP, batch_size=SNS, validation_data=VAL[:, :, :, np.newaxis],
-                shuffle=True, verbose=VERBOSE, callbacks=[History()])
+        VAE.fit(x=TRN[:, :, :, np.newaxis], y=None, validation_data=(VAL[:, :, :, np.newaxis], None),
+                epochs=EP, batch_size=SNS, shuffle=True, verbose=VERBOSE, callbacks=[History()])
         del TRN, VAL
         LOSST = VAE.history.history['loss']
         LOSSV = VAE.history.history['val_loss']
