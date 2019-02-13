@@ -308,8 +308,8 @@ if __name__ == '__main__':
     except:
         VAE.fit(SCDMP[:, :, :, np.newaxis], epochs=EP, batch_size=SNS,
                 shuffle=True, verbose=VERBOSE, callbacks=[History()])
-        LOSS = VAE.model.history.history['loss']
-        # ACC = VAE.model.history.history['acc']
+        LOSS = VAE.history.history['loss']
+        # ACC = VAE.history.history['acc']
         VAE.save_weights(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.wt.h5' \
                          % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.vae.loss.npy' \
