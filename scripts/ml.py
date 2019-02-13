@@ -9,6 +9,7 @@ from sklearn.decomposition import PCA, KernelPCA
 from sklearn.manifold import Isomap, LocallyLinearEmbedding
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
+from sklearn.model_selection import train_test_split
 from scipy.odr import ODR, Model, RealData
 
 
