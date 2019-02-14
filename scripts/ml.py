@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument('-ep', '--epochs', help='number of epochs',
                         type=int, default=16)
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
-                        type=float, default=1e-3)
+                        type=float, default=5e-4)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=256)
     args = parser.parse_args()
