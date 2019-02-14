@@ -157,8 +157,8 @@ def build_variational_autoencoder():
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
     # vae loss
-    # reconstruction_loss = N*N*mse(K.flatten(input), K.flatten(output))
-    reconstruction_loss = N*N*binary_crossentropy(K.flatten(input), K.flatten(output))
+    reconstruction_loss = N*N*mse(K.flatten(input), K.flatten(output))
+    # reconstruction_loss = N*N*binary_crossentropy(K.flatten(input), K.flatten(output))
     kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
