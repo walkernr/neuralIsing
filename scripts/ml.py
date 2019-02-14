@@ -261,8 +261,7 @@ if __name__ == '__main__':
     else:
         THREADS = 1
     from keras.models import Model
-    from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
-                              MaxPooling2D, Dropout, Flatten, Reshape)
+    from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
     from keras.losses import binary_crossentropy, mse
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.callbacks import History
