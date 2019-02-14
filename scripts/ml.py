@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument('-bk', '--backend', help='keras backend',
                         type=str, default='tensorflow')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=4)
+                        type=int, default=16)
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
                         type=float, default=1e-3)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
@@ -164,8 +164,8 @@ def build_variational_autoencoder():
     vae.add_loss(vae_loss)
     # compile vae
     rmsprop = RMSProp(lr=LR, rho=0.9, epsilon=None, decay=0.0)
-    # nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=rmsprop, metrics=['mse'])
+    nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
+    vae.compile(optimizer=nadam, metrics=['mse'])
     # return vae networks
     return encoder, decoder, vae
 
