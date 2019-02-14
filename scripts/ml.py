@@ -397,7 +397,7 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis])), 0, 1)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%d.%d.%.0e.%d.zenc.npy'
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.zenc.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), ZENC.reshape(SNH, SNT, SNS, 3, LD))
         if VERBOSE:
             print('z encodings of scaled selected classification samples predicted')
