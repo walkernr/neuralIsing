@@ -403,6 +403,7 @@ if __name__ == '__main__':
             print('z encodings of scaled selected classification samples predicted')
             print(100*'-')
 
+    EIND = [i for i in range(len(EV)) if EV[i] == '1']
     try:
         SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.zenc.inl.npy' \
                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, SEED))
@@ -412,7 +413,6 @@ if __name__ == '__main__':
             print('inlier selected z encodings loaded from file')
             print(100*'-')
     except:
-        EIND = [i for i in range(len(EV)) if EV[i] == '1']
         SLZENC, SLDAT = inlier_selection(ZENC[:, EIND, :].reshape(SNH, SNT, SNS, len(EIND)*LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.zenc.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, SEED), SLZENC)
