@@ -445,7 +445,7 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mfld.npy' \
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mfld.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold computed')
