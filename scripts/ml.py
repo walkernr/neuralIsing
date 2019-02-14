@@ -157,13 +157,15 @@ def build_variational_autoencoder():
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
     # vae loss
+    # reconstruction_loss = N*N*mse(K.flatten(input), K.flatten(output))
     reconstruction_loss = N*N*binary_crossentropy(K.flatten(input), K.flatten(output))
     kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
     # compile vae
-    nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=nadam, metrics=['mse'])
+    rmsprop = RMSProp(lr=LR, rho=0.9, epsilon=None, decay=0.0)
+    # nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
+    vae.compile(optimizer=rmsprop, metrics=['mse'])
     # return vae networks
     return encoder, decoder, vae
 
@@ -239,8 +241,8 @@ if __name__ == '__main__':
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               MaxPooling2D, Dropout, Flatten, Reshape)
-    from keras.losses import binary_crossentropy, categorical_crossentropy
-    from keras.optimizers import Nadam
+    from keras.losses import binary_crossentropy, mse
+    from keras.optimizers import Nadam, RMSProp
     from keras.callbacks import History
     from keras import backend as K
     if PLOT:
