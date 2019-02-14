@@ -48,7 +48,7 @@ def parse_args():
                         type=str, default='tensorflow')
     parser.add_argument('-opt', '--optimizer', help='optimization function',
                         type=str, default='nadam')
-    parser.add_argument('-lss', '-loss', help='loss function',
+    parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='bc')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
                         type=int, default=16)
