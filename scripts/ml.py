@@ -163,9 +163,9 @@ def build_variational_autoencoder():
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
     # compile vae
-    rmsprop = RMSprop(lr=LR, rho=0.9, epsilon=None, decay=0.0)
+    adam = Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
     nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=nadam, metrics=['mse'])
+    vae.compile(optimizer=adam, metrics=['mse'])
     # return vae networks
     return encoder, decoder, vae
 
@@ -242,7 +242,7 @@ if __name__ == '__main__':
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               MaxPooling2D, Dropout, Flatten, Reshape)
     from keras.losses import binary_crossentropy, mse
-    from keras.optimizers import Nadam, RMSprop
+    from keras.optimizers import Adam, Nadam
     from keras.callbacks import History
     from keras import backend as K
     if PLOT:
