@@ -413,7 +413,7 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         EIND = [i for i in range(len(EV)) if EV[i] == '1']
-        SLZENC, SLDAT = inlier_selection(ZENC[:, EIND, :].reshape(SNH, SNT, SNS, LD), CDAT, UNI, UNS)
+        SLZENC, SLDAT = inlier_selection(ZENC[:, EIND, :].reshape(SNH, SNT, SNS, len(EIND)*LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.zenc.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, SEED), SLZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.dat.inl.npy' \
@@ -435,7 +435,7 @@ if __name__ == '__main__':
               'tsne':TSNE(n_components=ED, perplexity=UNS,
                           early_exaggeration=24, learning_rate=200, n_iter=1000,
                           verbose=VERBOSE, n_jobs=THREADS,
-                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD)))}
+                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)))}
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mnfld.npy' \
@@ -444,7 +444,7 @@ if __name__ == '__main__':
             print('inlier selected z encoding manifold loaded from file')
             print(100*'-')
     except:
-        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD))
+        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mfld.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
