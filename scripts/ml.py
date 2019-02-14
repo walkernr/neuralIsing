@@ -165,7 +165,7 @@ def build_variational_autoencoder():
     # compile vae
     rmsprop = RMSprop(lr=LR, rho=0.9, epsilon=None, decay=0.0)
     nadam = Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-    vae.compile(optimizer=rmsprop, metrics=['mse'])
+    vae.compile(optimizer=nadam, metrics=['mse'])
     # return vae networks
     return encoder, decoder, vae
 
