@@ -374,14 +374,16 @@ if __name__ == '__main__':
             print(100*'-')
 
     if VERBOSE:
-        print('variational autoencoder training information')
+        print('variational autoencoder training history information')
+        print(100*'-')
+        print('epoch | training loss | validation loss')
         print(100*'-')
         for i in range(EP):
             print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
         print(100*'-')
 
     with open(OUTPREF+'.out', 'w') as out:
-        out.write('# variational autoencoder training information')
+        out.write('# variational autoencoder training history information')
         out.write('# ' + 100*'-' + '\n')
         out.write('# epoch | training loss | validation loss\n')
         out.write('# ' + 100*'-' + '\n')
@@ -438,7 +440,7 @@ if __name__ == '__main__':
                           init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)))}
 
     try:
-        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mnfld.npy' \
+        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mfld.npy' \
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
@@ -448,6 +450,7 @@ if __name__ == '__main__':
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.zenc.inl.mfld.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
+            print(100*'-')
             print('inlier selected z encoding manifold computed')
             print(100*'-')
 
