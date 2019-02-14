@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (supervised)',
                         type=int, default=256)
     parser.add_argument('-sc', '--scaler', help='feature scaler',
-                        type=str, default='tanh')
+                        type=str, default='minmax')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
                         type=int, default=4)
     parser.add_argument('-rd', '--manifold', help='manifold learning method',
@@ -61,9 +61,9 @@ def parse_args():
 
 def write_specs():
     if VERBOSE:
-        print(66*'-')
+        print(100*'-')
         print('input summary')
-        print(66*'-')
+        print(100*'-')
         print('plot:                      %d' % PLOT)
         print('parallel:                  %d' % PARALLEL)
         print('threads:                   %d' % THREADS)
@@ -85,11 +85,11 @@ def write_specs():
         print('epochs:                    %d' % EP)
         print('learning rate:             %.2e' % LR)
         print('fitting function:          %s' % 'logistic')
-        print(66*'-')
+        print(100*'-')
     with open(OUTPREF+'.out', 'w') as out:
-        out.write('# ' + 66*'-' + '\n')
+        out.write('# ' + 100*'-' + '\n')
         out.write('# input summary\n')
-        out.write('# ' + 66*'-' + '\n')
+        out.write('# ' + 100*'-' + '\n')
         out.write('# plot:                      %d\n' % PLOT)
         out.write('# parallel:                  %d\n' % PARALLEL)
         out.write('# threads:                   %d\n' % THREADS)
@@ -111,7 +111,7 @@ def write_specs():
         out.write('# epochs:                    %d\n' % EP)
         out.write('# learning rate:             %.2e\n' % LR)
         out.write('# fitting function:          %s\n' % 'logistic')
-        out.write('# ' + 66*'-' + '\n')
+        out.write('# ' + 100*'-' + '\n')
 
 
 def sampling(beta):
@@ -123,6 +123,9 @@ def sampling(beta):
 
 
 def build_variational_autoencoder():
+    if VERBOSE:
+        print('building variational autoencoder network')
+        print(100*'-')
     # encoder layers
     input = Input(shape=(N, N, 1), name='encoder_input')
     conv0 = Conv2D(filters=32, kernel_size=3, activation='relu',
@@ -138,7 +141,10 @@ def build_variational_autoencoder():
     # construct encoder
     encoder = Model(input, [z_mean, z_log_var, z], name='encoder')
     if VERBOSE:
+        print('encoder network summary')
+        print(100*'-')
         encoder.summary()
+        print(100*'-')
     # decoder layers
     latent_input = Input(shape=(LD,), name='z_sampling')
     d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
@@ -152,13 +158,16 @@ def build_variational_autoencoder():
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
+        print('decoder network summary')
+        print(100*'-')
         decoder.summary()
+        print(100*'-')
     # construct vae
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
     # vae loss
-    reconstruction_loss = N*N*mse(K.flatten(input), K.flatten(output))
-    # reconstruction_loss = N*N*binary_crossentropy(K.flatten(input), K.flatten(output))
+    # reconstruction_loss = N*N*mse(K.flatten(input), K.flatten(output))
+    reconstruction_loss = N*N*binary_crossentropy(K.flatten(input), K.flatten(output))
     kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
@@ -177,12 +186,12 @@ def random_selection(dmp, dat, intrvl, ns):
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
     if VERBOSE:
         print('selecting random classification samples from full data')
-        print(66*'-'+'\n')
+        print(100*'-'+'\n')
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nh), disable=not VERBOSE):
                 idat[i, j] = np.random.permutation(dat[i, j].shape[0])[:ns]
     if VERBOSE:
-        print(66*'-')
+        print(100*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
@@ -196,7 +205,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
     if VERBOSE:
         print('selecting inlier samples from classification data')
-        print(66*'-'+'\n')
+        print(100*'-'+'\n')
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nh), disable=not VERBOSE):
                 fpred = lof.fit_predict(rdmp[i, j])
@@ -205,7 +214,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
                 except:
                     idat[i, j] = np.argsort(lof.negative_outlier_factor_)[:ns]
     if VERBOSE:
-        print(66*'-')
+        print(100*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
@@ -277,20 +286,20 @@ if __name__ == '__main__':
         CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
             print('selected classification samples loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
         DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
         if VERBOSE:
             print('full dataset loaded from file')
-            print(66*'-')
+            print(100*'-')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
         del DAT, DMP
         np.save(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
         np.save(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
         if VERBOSE:
             print('selected classification samples generated')
-            print(66*'-')
+            print(100*'-')
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNT, SNH = CH.size, CT.size
@@ -306,13 +315,13 @@ if __name__ == '__main__':
                         % (NAME, N, SNI, SNS, SCLR, SEED)).reshape(SNH*SNT*SNS, N, N)
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N)).reshape(SNH*SNT*SNS, N, N)
         np.save(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N))
         if VERBOSE:
             print('scaled selected classification samples computed')
-            print(66*'-')
+            print(100*'-')
 
     ENC, DEC, VAE = build_variational_autoencoder()
 
@@ -327,11 +336,11 @@ if __name__ == '__main__':
         #               % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED))
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         if VERBOSE:
             print('variational autoencoder training on scaled selected classification samples')
-            print(66*'-')
+            print(100*'-')
         TRN, VAL = train_test_split(SCDMP, test_size=0.125)
         VAE.fit(x=TRN[:, :, :, np.newaxis], y=None, validation_data=(VAL[:, :, :, np.newaxis], None),
                 epochs=EP, batch_size=SNS, shuffle=True, verbose=VERBOSE, callbacks=[History()])
@@ -349,14 +358,30 @@ if __name__ == '__main__':
         #         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED), MSE)
         if VERBOSE:
             print('variational autoencoder weights trained')
-            print(66*'-')
+            print(100*'-')
+
+    if VERBOSE:
+        print('variational autoencoder training information')
+        print(100*'-')
+        for i in range(EP):
+            print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
+        print(100*'-')
+
+    with open(OUTPREF+'.out', 'w') as out:
+        out.write('# variational autoencoder training information')
+        out.write('# ' + 100*'-' + '\n')
+        out.write('# epoch | training loss | validation loss\n')
+        out.write('# ' + 100*'-' + '\n')
+        for i in range(EP):
+            out.write('%02d %.2f %.2f\n' % (i, TLOSS[i], VLOSS[i]))
+        out.write('# ' + 100*'-' + '\n')
 
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.zenc.npy'
                        % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, LD)
         if VERBOSE:
             print('z encodings of scaled selected classification samples loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         # ZENC = np.swapaxes(np.array(ENC.predict(SCDMP[:, :, :, np.newaxis]))[2], 0, 1).reshape(SNH*SNT*SNS, LD)
         ZENC = ENC.predict(SCDMP[:, :, :, np.newaxis])[2].reshape(SNH*SNT*SNS, LD)
@@ -364,7 +389,7 @@ if __name__ == '__main__':
                 ZENC.reshape(SNH, SNT, SNS, LD))
         if VERBOSE:
             print('z encodings of scaled selected classification samples predicted')
-            print(66*'-')
+            print(100*'-')
 
     try:
         SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%d.zenc.inl.npy' \
@@ -373,7 +398,7 @@ if __name__ == '__main__':
                         % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED))
         if VERBOSE:
             print('inlier selected z encodings loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         pass
         SLZENC, SLDAT = inlier_selection(ZENC.reshape(SNH, SNT, SNS, LD), CDAT, UNI, UNS)
@@ -383,7 +408,7 @@ if __name__ == '__main__':
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, SEED), SLDAT)
         if VERBOSE:
             print('inlier selected z encodings computed')
-            print(66*'-')
+            print(100*'-')
 
     UH, UT = CH[::UNI], CT[::UNI]
     UNH, UNT = UH.size, UT.size
@@ -405,14 +430,14 @@ if __name__ == '__main__':
                           % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.inl.mfld.npy' \
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, SEED), MSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold computed')
-            print(66*'-')
+            print(100*'-')
 
     # clustering dictionary
     CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
@@ -423,7 +448,7 @@ if __name__ == '__main__':
                             % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
-            print(66*'-')
+            print(100*'-')
     except:
         CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
         CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
@@ -435,7 +460,7 @@ if __name__ == '__main__':
                 % (NAME, N, SNI, SNS, SCLR, LD, EP, LR, UNI, UNS, MNFLD, ED, CLST, NC, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
-            print(66*'-')
+            print(100*'-')
 
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     # make this better
