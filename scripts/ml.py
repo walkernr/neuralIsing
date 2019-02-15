@@ -560,7 +560,7 @@ if __name__ == '__main__':
     ax.spines['top'].set_visible(False)
     ax.xaxis.set_ticks_position('bottom')
     ax.yaxis.set_ticks_position('left')
-    ax.plot(UITRANS, UNH, color='yellow')
+    ax.plot(UITRANS, np.arange(UNH), color='yellow')
     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
     ax.imshow(CLBMSLZENC, aspect='equal', interpolation='none', origin='lower', cmap=CM)
     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
