@@ -127,6 +127,34 @@ def write_specs():
         out.write('# ' + 100*'-' + '\n')
 
 
+def logistic(beta, t):
+    ''' returns logistic sigmoid '''
+    a = 0.0
+    k = 1.0
+    b, m = beta
+    return a+np.divide(k, 1+np.exp(-b*(t-m)))
+
+
+def absolute(beta, t):
+    a, b, c, d = beta
+    return a*np.power(np.abs(t-b), c)+d
+
+
+def odr_fit(func, dom, mrng, srng, pg):
+    ''' performs orthogonal distance regression '''
+    dat = RealData(dom, mrng, EPS*np.ones(len(dom)), srng+EPS)
+    mod = Model(func)
+    odr = ODR(dat, mod, pg)
+    odr.set_job(fit_type=0)
+    fit = odr.run()
+    popt = fit.beta
+    perr = fit.sd_beta
+    ndom = 128
+    fdom = np.linspace(np.min(dom), np.max(dom), ndom)
+    fval = func(popt, fdom)
+    return popt, perr, fdom, fval
+
+
 def sampling(beta):
     z_mean, z_log_var = beta
     batch = K.shape(z_mean)[0]
@@ -243,10 +271,11 @@ if __name__ == '__main__':
     OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d' % \
               (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, SEED)
     write_specs()
-
-    np.random.seed(SEED)
+    EPS = 0.025
     # number of phases
     NPH = 3
+
+    np.random.seed(SEED)
     # environment variables
     os.environ['KERAS_BACKEND'] = BACKEND
     if BACKEND == 'tensorflow':
@@ -375,7 +404,7 @@ if __name__ == '__main__':
     if VERBOSE:
         print('variational autoencoder training history information')
         print(100*'-')
-        print('epoch | training loss | validation loss')
+        print('| epoch | training loss | validation loss |')
         print(100*'-')
         for i in range(EP):
             print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
@@ -384,7 +413,7 @@ if __name__ == '__main__':
     with open(OUTPREF+'.out', 'w') as out:
         out.write('# variational autoencoder training history information')
         out.write('# ' + 100*'-' + '\n')
-        out.write('# epoch | training loss | validation loss\n')
+        out.write('# | epoch | training loss | validation loss |\n')
         out.write('# ' + 100*'-' + '\n')
         for i in range(EP):
             out.write('%02d %.2f %.2f\n' % (i, TLOSS[i], VLOSS[i]))
@@ -483,16 +512,30 @@ if __name__ == '__main__':
         CLMSLZENC[CLMSLZENC == NC-1] = NPH-1
         CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     CLBMSLZENC = np.array([[np.bincount(CLMSLZENC.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
+    UTRANS = np.array([odr_fit(logistic, UT, CLBMSLZENC[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
+    UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
+    UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
+    UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
+    UICVAL = (UCVAL-UT[0])/(UT[-1]-UT[0])*(UNT-1)
+
+    if VERBOSE:
+        print('fit parameters calculated (t_c = a*|h-b|**c+d)')
+        print(100*'-')
+        print('| a | b | c | d |')
+        print(100*'-')
+        print(4*'%.2f ' % UCPOPT)
+        print(4*'%.2f ' % UCPERR)
+        print(100*'-')
 
     fig = plt.figure()
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], MSLZENC[:, 2], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=128, alpha=0.15, edgecolors='k')
+                   s=128, alpha=0.00390625, edgecolors='k')
     if ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=128, alpha=0.15, edgecolors='k')
+                   s=128, alpha=0.00390625, edgecolors='k')
     fig.savefig(OUTPREF+'.vae.emb.smpl.png')
 
     fig = plt.figure()
@@ -504,11 +547,11 @@ if __name__ == '__main__':
         if ED == 3:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
                        c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
-                       s=128, alpha=0.15, edgecolors='k')
+                       s=128, alpha=0.00390625, edgecolors='k')
         if ED == 2:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1],
                        c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
-                       s=128, alpha=0.15, edgecolors='k')
+                       s=128, alpha=0.00390625, edgecolors='k')
     fig.savefig(OUTPREF+'.vae.emb.clst.png')
 
     fig = plt.figure()
@@ -517,6 +560,8 @@ if __name__ == '__main__':
     ax.spines['top'].set_visible(False)
     ax.xaxis.set_ticks_position('bottom')
     ax.yaxis.set_ticks_position('left')
+    ax.plot(UITRANS, UNH, color='yellow')
+    ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
     ax.imshow(CLBMSLZENC, aspect='equal', interpolation='none', origin='lower', cmap=CM)
     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
     ax.set_xticks(np.arange(UT.size), minor=True)
