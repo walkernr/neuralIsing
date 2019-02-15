@@ -523,8 +523,8 @@ if __name__ == '__main__':
         print(100*'-')
         print('| a | b | c | d |')
         print(100*'-')
-        print(4*'%.2f ' % UCPOPT)
-        print(4*'%.2f ' % UCPERR)
+        print(4*'%.2f ' % tuple(UCPOPT))
+        print(4*'%.2f ' % tuple(UCPERR))
         print(100*'-')
 
     fig = plt.figure()
