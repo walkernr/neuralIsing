@@ -175,7 +175,7 @@ def build_variational_autoencoder():
                    kernel_initializer='he_normal', padding='same', strides=2)(conv0)
     shape = K.int_shape(conv1)
     fconv1 = Flatten()(conv1)
-    d0 = Dense(16, activation='relu')(fconv1)
+    d0 = Dense(64, activation='relu')(fconv1)
     z_mean = Dense(LD, name='z_mean')(d0)
     z_log_var = Dense(LD, name='z_log_var')(d0)
     z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
