@@ -25,17 +25,17 @@ def parse_args():
     parser.add_argument('-ls', '--lattice_size', help='lattice size',
                         type=int, default=32)
     parser.add_argument('-ui', '--unsuper_interval', help='interval for selecting phase points (unsupervised)',
-                        type=int, default=1)
+                        type=int, default=2)
     parser.add_argument('-un', '--unsuper_samples', help='number of samples per phase point (unsupervised)',
-                        type=int, default=32)
+                        type=int, default=128)
     parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (supervised)',
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (supervised)',
-                        type=int, default=256)
+                        type=int, default=1024)
     parser.add_argument('-sc', '--scaler', help='feature scaler',
                         type=str, default='minmax')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
-                        type=int, default=4)
+                        type=int, default=64)
     parser.add_argument('-rd', '--manifold', help='manifold learning method',
                         type=str, default='tsne')
     parser.add_argument('-ed', '--embed_dimension', help='number of embedded dimensions',
@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='bc')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=16)
+                        type=int, default=32)
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
                         type=float, default=5e-4)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
@@ -175,7 +175,7 @@ def build_variational_autoencoder():
                    kernel_initializer='he_normal', padding='same', strides=2)(conv0)
     shape = K.int_shape(conv1)
     fconv1 = Flatten()(conv1)
-    d0 = Dense(64, activation='relu')(fconv1)
+    d0 = Dense(1024, activation='relu')(fconv1)
     z_mean = Dense(LD, name='z_mean')(d0)
     z_log_var = Dense(LD, name='z_log_var')(d0)
     z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
