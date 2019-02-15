@@ -531,11 +531,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], MSLZENC[:, 2], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=128, alpha=0.00390625, edgecolors='k')
+                   s=128, alpha=0.0078125, edgecolors='k')
     if ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=128, alpha=0.00390625, edgecolors='k')
+                   s=128, alpha=0.0078125, edgecolors='k')
     fig.savefig(OUTPREF+'.vae.emb.smpl.png')
 
     fig = plt.figure()
@@ -547,11 +547,11 @@ if __name__ == '__main__':
         if ED == 3:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
                        c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
-                       s=128, alpha=0.00390625, edgecolors='k')
+                       s=128, alpha=0.0078125, edgecolors='k')
         if ED == 2:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1],
                        c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
-                       s=128, alpha=0.00390625, edgecolors='k')
+                       s=128, alpha=0.0078125, edgecolors='k')
     fig.savefig(OUTPREF+'.vae.emb.clst.png')
 
     fig = plt.figure()
