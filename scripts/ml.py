@@ -10,7 +10,7 @@ from sklearn.manifold import Isomap, LocallyLinearEmbedding
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from sklearn.model_selection import train_test_split
-from scipy.odr import ODR, Model, RealData
+from scipy.odr import ODR, Model as ODRModel, RealData
 
 
 def parse_args():
@@ -143,7 +143,7 @@ def absolute(beta, t):
 def odr_fit(func, dom, mrng, srng, pg):
     ''' performs orthogonal distance regression '''
     dat = RealData(dom, mrng, EPS*np.ones(len(dom)), srng+EPS)
-    mod = Model(func)
+    mod = ODRModel(func)
     odr = ODR(dat, mod, pg)
     odr.set_job(fit_type=0)
     fit = odr.run()
