@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument('-v', '--verbose', help='verbose output', action='store_true')
     parser.add_argument('-pt', '--plot', help='plot results', action='store_true')
     parser.add_argument('-p', '--parallel', help='parallel run', action='store_true')
+    parser.add_argument('-g', '--gpu', help='gpu run', action='store_true')
     parser.add_argument('-nt', '--threads', help='number of threads',
                         type=int, default=16)
     parser.add_argument('-n', '--name', help='simulation name',
@@ -59,7 +60,7 @@ def parse_args():
     parser.add_argument('-ev', '--embedding_variables', help='variables for learning the embedding manifold',
                         type=str, default='001')
     args = parser.parse_args()
-    return (args.verbose, args.plot, args.parallel, args.threads, args.name, args.lattice_size,
+    return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name, args.lattice_size,
             args.unsuper_interval, args.unsuper_samples, args.super_interval, args.super_samples,
             args.scaler, args.latent_dimension, args.manifold, args.embed_dimension, args.clustering,
             args.clusters, args.backend, args.optimizer, args.loss,
@@ -73,6 +74,7 @@ def write_specs():
         print(100*'-')
         print('plot:                      %d' % PLOT)
         print('parallel:                  %d' % PARALLEL)
+        print('gpu:                       %d' % GPU)
         print('threads:                   %d' % THREADS)
         print('name:                      %s' % NAME)
         print('lattice size:              %s' % N)
@@ -102,6 +104,7 @@ def write_specs():
         out.write('# ' + 100*'-' + '\n')
         out.write('# plot:                      %d\n' % PLOT)
         out.write('# parallel:                  %d\n' % PARALLEL)
+        out.write('# gpu:                       %d\n' % GPU)
         out.write('# threads:                   %d\n' % THREADS)
         out.write('# name:                      %s\n' % NAME)
         out.write('# lattice size:              %s\n' % N)
@@ -263,7 +266,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
 
 if __name__ == '__main__':
     # parse command line arguments
-    (VERBOSE, PLOT, PARALLEL, THREADS, NAME, N,
+    (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME, N,
      UNI, UNS, SNI, SNS,
      SCLR, LD, MNFLD, ED, CLST, NC,
      BACKEND, OPT, LSS, EP, LR, SEED, EV) = parse_args()
@@ -283,6 +286,8 @@ if __name__ == '__main__':
         from tensorflow import set_random_seed
         set_random_seed(SEED)
     if PARALLEL:
+        if not GPU:
+            os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
         os.environ['MKL_NUM_THREADS'] = str(THREADS)
         os.environ['GOTO_NUM_THREADS'] = str(THREADS)
         os.environ['OMP_NUM_THREADS'] = str(THREADS)
@@ -293,7 +298,7 @@ if __name__ == '__main__':
     from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
     from keras.losses import binary_crossentropy, mse
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
-    from keras.callbacks import History
+    from keras.callbacks import History, CSVLogger
     from keras import backend as K
     if PLOT:
         import matplotlib as mpl
@@ -385,9 +390,11 @@ if __name__ == '__main__':
         if VERBOSE:
             print('variational autoencoder training on scaled selected classification samples')
             print(100*'-')
+        CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.vae.log.csv' \
+                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), append=True, separator=';')
         TRN, VAL = train_test_split(SCDMP, test_size=0.125)
         VAE.fit(x=TRN[:, :, :, np.newaxis], y=None, validation_data=(VAL[:, :, :, np.newaxis], None),
-                epochs=EP, batch_size=SNS, shuffle=True, verbose=VERBOSE, callbacks=[History()])
+                epochs=EP, batch_size=SNS, shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, History()])
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
         VLOSS = VAE.history.history['val_loss']
