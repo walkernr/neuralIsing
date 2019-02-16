@@ -18,28 +18,28 @@ def parse_args():
     parser.add_argument('-v', '--verbose', help='verbose output', action='store_true')
     parser.add_argument('-pt', '--plot', help='plot results', action='store_true')
     parser.add_argument('-p', '--parallel', help='parallel run', action='store_true')
-    parser.add_argument('-g', '--gpu', help='gpu run', action='store_true')
+    parser.add_argument('-g', '--gpu', help='gpu run (will default to cpu if unable)', action='store_true')
     parser.add_argument('-nt', '--threads', help='number of threads',
                         type=int, default=16)
     parser.add_argument('-n', '--name', help='simulation name',
                             type=str, default='ising_init')
-    parser.add_argument('-ls', '--lattice_size', help='lattice size',
+    parser.add_argument('-ls', '--lattice_size', help='lattice size (side length)',
                         type=int, default=32)
-    parser.add_argument('-ui', '--unsuper_interval', help='interval for selecting phase points (unsupervised)',
+    parser.add_argument('-ui', '--unsuper_interval', help='interval for selecting phase points (manifold)',
                         type=int, default=2)
-    parser.add_argument('-un', '--unsuper_samples', help='number of samples per phase point (unsupervised)',
+    parser.add_argument('-un', '--unsuper_samples', help='number of samples per phase point (manifold)',
                         type=int, default=128)
-    parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (supervised)',
+    parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (variational autoencoder)',
                         type=int, default=1)
-    parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (supervised)',
+    parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
                         type=int, default=1024)
     parser.add_argument('-sc', '--scaler', help='feature scaler',
                         type=str, default='minmax')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
                         type=int, default=64)
-    parser.add_argument('-rd', '--manifold', help='manifold learning method',
+    parser.add_argument('-mf', '--manifold', help='manifold learning method',
                         type=str, default='tsne')
-    parser.add_argument('-ed', '--embed_dimension', help='number of embedded dimensions',
+    parser.add_argument('-ed', '--embed_dimension', help='number of embedded dimensions in manifold',
                         type=int, default=2)
     parser.add_argument('-cl', '--clustering', help='clustering method',
                         type=str, default='kmeans')
@@ -57,7 +57,7 @@ def parse_args():
                         type=float, default=5e-4)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=256)
-    parser.add_argument('-ev', '--embedding_variables', help='variables for learning the embedding manifold',
+    parser.add_argument('-ev', '--embedding_variables', help='variables for learning the embedding manifold (boolean string: zm, zlv, z)',
                         type=str, default='001')
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name, args.lattice_size,
