@@ -391,7 +391,7 @@ if __name__ == '__main__':
             print('variational autoencoder training on scaled selected classification samples')
             print(100*'-')
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.vae.log.csv' \
-                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), append=True, separator=',\t')
+                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), append=True, separator=',')
         TRN, VAL = train_test_split(SCDMP, test_size=0.125)
         VAE.fit(x=TRN[:, :, :, np.newaxis], y=None, validation_data=(VAL[:, :, :, np.newaxis], None),
                 epochs=EP, batch_size=SNS, shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, History()])
