@@ -176,11 +176,11 @@ def build_variational_autoencoder():
     # encoder layers
     input = Input(shape=(N, N, NCH), name='encoder_input')
     conv0 = Conv2D(filters=16, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='valid', strides=1)(input)
+                   kernel_initializer='he_normal', padding='same', strides=1)(input)
     conv1 = Conv2D(filters=32, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='valid', strides=2)(conv0)
+                   kernel_initializer='he_normal', padding='same', strides=2)(conv0)
     conv2 = Conv2D(filters=64, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='valid', strides=2)(conv1)
+                   kernel_initializer='he_normal', padding='same', strides=2)(conv1)
     shape = K.int_shape(conv2)
     fconv2 = Flatten()(conv2)
     d0 = Dense(1024, activation='relu')(fconv2)
@@ -199,13 +199,13 @@ def build_variational_autoencoder():
     d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
     rd1 = Reshape(shape[1:])(d1)
     convt0 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='valid', strides=2)(rd1)
+                             kernel_initializer='he_normal', padding='same', strides=2)(rd1)
     convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='valid', strides=1)(convt0)
+                             kernel_initializer='he_normal', padding='same', strides=1)(convt0)
     convt2 = Conv2DTranspose(filters=16, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='valid', strides=1)(convt1)
+                             kernel_initializer='he_normal', padding='same', strides=1)(convt1)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
-                             kernel_initializer='he_normal', padding='valid', name='decoder_output')(convt2)
+                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt2)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
