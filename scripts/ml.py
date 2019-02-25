@@ -175,13 +175,15 @@ def build_variational_autoencoder():
         print(100*'-')
     # encoder layers
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    conv0 = Conv2D(filters=32, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=1)(input)
-    conv1 = Conv2D(filters=64, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=2)(conv0)
-    shape = K.int_shape(conv1)
-    fconv1 = Flatten()(conv1)
-    d0 = Dense(1024, activation='relu')(fconv1)
+    conv0 = Conv2D(filters=16, kernel_size=3, activation='relu',
+                   kernel_initializer='he_normal', padding='valid', strides=1)(input)
+    conv1 = Conv2D(filters=32, kernel_size=3, activation='relu',
+                   kernel_initializer='he_normal', padding='valid', strides=2)(conv0)
+    conv2 = Conv2D(filters=64, kernel_size=3, activation='relu',
+                   kernel_initializer='he_normal', padding='valid', strides=2)(conv1)
+    shape = K.int_shape(conv2)
+    fconv2 = Flatten()(conv2)
+    d0 = Dense(1024, activation='relu')(fconv2)
     z_mean = Dense(LD, name='z_mean')(d0)
     z_log_var = Dense(LD, name='z_log_var')(d0)
     z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
@@ -197,11 +199,13 @@ def build_variational_autoencoder():
     d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
     rd1 = Reshape(shape[1:])(d1)
     convt0 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=2)(rd1)
+                             kernel_initializer='he_normal', padding='valid', strides=2)(rd1)
     convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=1)(convt0)
+                             kernel_initializer='he_normal', padding='valid', strides=1)(convt0)
+    convt2 = Conv2DTranspose(filters=16, kernel_size=3, activation='relu',
+                             kernel_initializer='he_normal', padding='valid', strides=1)(convt1)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
-                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt1)
+                             kernel_initializer='he_normal', padding='valid', name='decoder_output')(convt2)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
@@ -334,12 +338,14 @@ if __name__ == '__main__':
         CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
         CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
+            print(100*'-')
             print('selected classification samples loaded from file')
             print(100*'-')
     except:
         DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
         DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
         if VERBOSE:
+            print(100*'-')
             print('full dataset loaded from file')
             print(100*'-')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
