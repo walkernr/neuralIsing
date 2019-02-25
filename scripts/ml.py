@@ -178,12 +178,14 @@ def build_variational_autoencoder():
     conv0 = Conv2D(filters=16, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(input)
     conv1 = Conv2D(filters=32, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=2)(conv0)
+                   kernel_initializer='he_normal', padding='same', strides=1)(conv0)
     conv2 = Conv2D(filters=64, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=3)(conv1)
-    shape = K.int_shape(conv2)
-    fconv2 = Flatten()(conv2)
-    d0 = Dense(1024, activation='relu')(fconv2)
+                   kernel_initializer='he_normal', padding='same', strides=2)(conv1)
+    conv3 = Conv2D(filters=128, kernel_size=3, activation='relu',
+                   kernel_initializer='he_normal', padding='same', strides=2)(conv2)
+    shape = K.int_shape(conv3)
+    fconv3 = Flatten()(conv3)
+    d0 = Dense(1024, activation='relu')(fconv3)
     z_mean = Dense(LD, name='z_mean')(d0)
     z_log_var = Dense(LD, name='z_log_var')(d0)
     z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
@@ -198,14 +200,16 @@ def build_variational_autoencoder():
     latent_input = Input(shape=(LD,), name='z_sampling')
     d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
     rd1 = Reshape(shape[1:])(d1)
-    convt0 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=3)(rd1)
-    convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
+    convt0 = Conv2DTranspose(filters=128, kernel_size=3, activation='relu',
+                             kernel_initializer='he_normal', padding='same', strides=2)(rd1)
+    convt1 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=2)(convt0)
-    convt2 = Conv2DTranspose(filters=16, kernel_size=3, activation='relu',
+    convt2 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt1)
+    convt3 = Conv2DTranspose(filters=16, kernel_size=3, activation='relu',
+                             kernel_initializer='he_normal', padding='same', strides=1)(convt2)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
-                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt2)
+                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt3)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
