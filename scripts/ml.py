@@ -175,13 +175,13 @@ def build_variational_autoencoder():
         print(100*'-')
     # encoder layers
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    conv0 = Conv2D(filters=16, kernel_size=3, activation='relu',
+    conv0 = Conv2D(filters=32, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(input)
-    conv1 = Conv2D(filters=32, kernel_size=3, activation='relu',
+    conv1 = Conv2D(filters=64, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=2)(conv0)
-    conv2 = Conv2D(filters=64, kernel_size=3, activation='relu',
+    conv2 = Conv2D(filters=32, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(conv1)
-    conv3 = Conv2D(filters=128, kernel_size=3, activation='relu',
+    conv3 = Conv2D(filters=64, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=2)(conv2)
     shape = K.int_shape(conv3)
     fconv3 = Flatten()(conv3)
@@ -200,13 +200,13 @@ def build_variational_autoencoder():
     latent_input = Input(shape=(LD,), name='z_sampling')
     d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
     rd1 = Reshape(shape[1:])(d1)
-    convt0 = Conv2DTranspose(filters=128, kernel_size=3, activation='relu',
+    convt0 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=2)(rd1)
-    convt1 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
+    convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt0)
-    convt2 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
+    convt2 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=2)(convt1)
-    convt3 = Conv2DTranspose(filters=16, kernel_size=3, activation='relu',
+    convt3 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt2)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
                              kernel_initializer='he_normal', padding='same', name='decoder_output')(convt3)
