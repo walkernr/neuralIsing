@@ -496,7 +496,7 @@ if __name__ == '__main__':
 
     # reduction dictionary
     TSNEINITPCA = PCA(n_components=ED)
-    TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)))
+    TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
     SLZEVAR = TSNEINITPCA.explained_variance_ratio_
     if VERBOSE:
         print('pca fit information')
@@ -510,7 +510,7 @@ if __name__ == '__main__':
               'lle':LocallyLinearEmbedding(n_components=ED, n_jobs=THREADS),
               'tsne':TSNE(n_components=ED, perplexity=UNS,
                           early_exaggeration=24, learning_rate=200, n_iter=1000,
-                          verbose=VERBOSE, n_jobs=THREADS, init=TSNEINIT}
+                          verbose=VERBOSE, n_jobs=THREADS, init=TSNEINIT)}
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.zenc.inl.mfld.npy' \
