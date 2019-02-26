@@ -386,7 +386,14 @@ if __name__ == '__main__':
             print('scaled selected classification samples loaded from file')
             print(100*'-')
     except:
-        SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N*NCH)).reshape(SNH*SNT*SNS, N, N, NCH)
+        if SCLR == 'glbl':
+            SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
+            for i in range(NCH):
+                TMIN, TMAX = SCDMP[:, :, :, i].min, SCDMP[:, :, :, i].max
+                SCDMP[:, :, :, i] = TMIN+(SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
+            del TMIN, TMAX
+        else:
+            SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N*NCH)).reshape(SNH*SNT*SNS, N, N, NCH)
         np.save(CWD+'/%s.%d.%d.%d.%s.%d.%d.dmp.sc.npy' % (NAME, N, SNI, SNS, SCLR, FFT, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N, NCH))
         if VERBOSE:
             print('scaled selected classification samples computed')
@@ -415,7 +422,7 @@ if __name__ == '__main__':
             print(100*'-')
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.vae.log.csv' \
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), append=True, separator=',')
-        TRN, VAL = train_test_split(SCDMP, test_size=0.125)
+        TRN, VAL = train_test_split(SCDMP, test_size=0.25, shuffle=True)
         VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=SNS,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, History()])
         del TRN, VAL
