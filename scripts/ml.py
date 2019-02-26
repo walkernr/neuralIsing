@@ -241,12 +241,12 @@ def random_selection(dmp, dat, intrvl, ns):
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
     if VERBOSE:
         print('selecting random classification samples from full data')
-        print(100*'-'+'\n')
+        print(100*'-')
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nh), disable=not VERBOSE):
                 idat[i, j] = np.random.permutation(dat[i, j].shape[0])[:ns]
     if VERBOSE:
-        print(100*'-')
+        print('\n'+100*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
@@ -361,7 +361,7 @@ if __name__ == '__main__':
             print(100*'-')
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
-    SNT, SNH = CH.size, CT.size
+    SNH, SNT = CH.size, CT.size
 
     if FFT:
         FCDMP = np.fft.fft2(CDMP, axes=(3, 4))
@@ -423,7 +423,7 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.vae.log.csv' \
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), append=True, separator=',')
         TRN, VAL = train_test_split(SCDMP, test_size=0.25, shuffle=True)
-        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=512,
+        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=SNH*SNH,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, History()])
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
@@ -495,14 +495,22 @@ if __name__ == '__main__':
     SLMS = SLDAT[:, :, :, 1]
 
     # reduction dictionary
+    TSNEINITPCA = PCA(n_components=ED)
+    TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)))
+    SLZEVAR = TSNEINITPCA.explained_variance_ratio_
+    if VERBOSE:
+        print('pca fit information')
+        print(100*'-')
+        print('explained variances: '+ED*'%f ' % tuple(SLZEVAR))
+        print('total: %f' % np.sum(SLZEVAR))
+        print(100*'-')
     MNFLDS = {'pca':PCA(n_components=ED),
               'kpca':KernelPCA(n_components=ED, n_jobs=THREADS),
               'isomap':Isomap(n_components=ED, n_jobs=THREADS),
               'lle':LocallyLinearEmbedding(n_components=ED, n_jobs=THREADS),
               'tsne':TSNE(n_components=ED, perplexity=UNS,
                           early_exaggeration=24, learning_rate=200, n_iter=1000,
-                          verbose=VERBOSE, n_jobs=THREADS,
-                          init=PCA(n_components=ED).fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)))}
+                          verbose=VERBOSE, n_jobs=THREADS, init=TSNEINIT}
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.zenc.inl.mfld.npy' \
