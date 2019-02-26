@@ -389,8 +389,8 @@ if __name__ == '__main__':
         if SCLR == 'glbl':
             SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
             for i in range(NCH):
-                TMIN, TMAX = SCDMP[:, :, :, i].min, SCDMP[:, :, :, i].max
-                SCDMP[:, :, :, i] = TMIN+(SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
+                TMIN, TMAX = SCDMP[:, :, :, i].min(), SCDMP[:, :, :, i].max()
+                SCDMP[:, :, :, i] = (SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
             del TMIN, TMAX
         else:
             SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N*NCH)).reshape(SNH*SNT*SNS, N, N, NCH)
