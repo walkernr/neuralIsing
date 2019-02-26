@@ -260,7 +260,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
     if VERBOSE:
         print('selecting inlier samples from classification data')
-        print(100*'-'+'\n')
+        print(100*'-')
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nh), disable=not VERBOSE):
                 fpred = lof.fit_predict(rdmp[i, j])
@@ -269,7 +269,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
                 except:
                     idat[i, j] = np.argsort(lof.negative_outlier_factor_)[:ns]
     if VERBOSE:
-        print(100*'-')
+        print('\n'+100*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
@@ -508,7 +508,8 @@ if __name__ == '__main__':
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.zenc.inl.mfld.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, FFT, SEED), MSLZENC)
         if VERBOSE:
-            print(100*'-')
+            if MNFLD == 'tsne':
+                print(100*'-')
             print('inlier selected z encoding manifold computed')
             print(100*'-')
 
