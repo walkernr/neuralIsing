@@ -178,9 +178,9 @@ def build_variational_autoencoder():
     conv0 = Conv2D(filters=16, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(input)
     conv1 = Conv2D(filters=32, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=1)(conv0)
+                   kernel_initializer='he_normal', padding='same', strides=2)(conv0)
     conv2 = Conv2D(filters=64, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=2)(conv1)
+                   kernel_initializer='he_normal', padding='same', strides=1)(conv1)
     conv3 = Conv2D(filters=128, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=2)(conv2)
     shape = K.int_shape(conv3)
@@ -203,9 +203,9 @@ def build_variational_autoencoder():
     convt0 = Conv2DTranspose(filters=128, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=2)(rd1)
     convt1 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=2)(convt0)
+                             kernel_initializer='he_normal', padding='same', strides=1)(convt0)
     convt2 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=1)(convt1)
+                             kernel_initializer='he_normal', padding='same', strides=2)(convt1)
     convt3 = Conv2DTranspose(filters=16, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt2)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
