@@ -53,7 +53,7 @@ def parse_args():
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='mse')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=32)-
+                        type=int, default=32)
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
                         type=float, default=1e-3)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
