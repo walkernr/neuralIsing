@@ -27,9 +27,9 @@ def parse_args():
     parser.add_argument('-ls', '--lattice_size', help='lattice size (side length)',
                         type=int, default=32)
     parser.add_argument('-ui', '--unsuper_interval', help='interval for selecting phase points (manifold)',
-                        type=int, default=2)
+                        type=int, default=1)
     parser.add_argument('-un', '--unsuper_samples', help='number of samples per phase point (manifold)',
-                        type=int, default=128)
+                        type=int, default=64)
     parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (variational autoencoder)',
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument('-sc', '--scaler', help='feature scaler',
                         type=str, default='minmax')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
-                        type=int, default=64)
+                        type=int, default=4)
     parser.add_argument('-mf', '--manifold', help='manifold learning method',
                         type=str, default='tsne')
     parser.add_argument('-ed', '--embed_dimension', help='number of embedded dimensions in manifold',
@@ -51,11 +51,11 @@ def parse_args():
     parser.add_argument('-opt', '--optimizer', help='optimization function',
                         type=str, default='nadam')
     parser.add_argument('-lss', '--loss', help='loss function',
-                        type=str, default='bc')
+                        type=str, default='mse')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=32)
+                        type=int, default=32)-
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
-                        type=float, default=5e-4)
+                        type=float, default=1e-3)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=256)
     parser.add_argument('-ev', '--embedding_variables', help='variables for learning the embedding manifold (boolean string: zm, zlv, z)',
@@ -221,8 +221,7 @@ def build_variational_autoencoder():
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
     reconstruction_losses = {'bc': lambda a, b: binary_crossentropy(a, b),
-                             'mse': lambda a, b: mse(a, b),
-                             'kl': lambda a, b: kullback_leibler_divergence(a, b)}
+                             'mse': lambda a, b: mse(a, b)}
     # vae loss
     reconstruction_loss = N*N*reconstruction_losses[LSS](K.flatten(input), K.flatten(output))
     kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
@@ -307,7 +306,7 @@ if __name__ == '__main__':
         THREADS = 1
     from keras.models import Model
     from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
-    from keras.losses import binary_crossentropy, mse, kullback_leibler_divergence
+    from keras.losses import binary_crossentropy, mse
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.callbacks import History, CSVLogger
     from keras import backend as K
@@ -448,7 +447,7 @@ if __name__ == '__main__':
         print(100*'-')
 
     with open(OUTPREF+'.out', 'w') as out:
-        out.write('# variational autoencoder training history information')
+        out.write('# variational autoencoder training history information\n')
         out.write('# ' + 100*'-' + '\n')
         out.write('# | epoch | training loss | validation loss |\n')
         out.write('# ' + 100*'-' + '\n')
@@ -504,6 +503,12 @@ if __name__ == '__main__':
         print('explained variances: '+ED*'%f ' % tuple(SLZEVAR))
         print('total: %f' % np.sum(SLZEVAR))
         print(100*'-')
+    with open(OUTPREF+'.out', 'w') as out:
+        out.write('# pca fit information\n')
+        out.write('# ' + 100*'-' + '\n')
+        out.write('# explained variances: '+ED*'%f ' % tuple(SLZEVAR)+'\n')
+        out.write('# total: %f\n' % np.sum(SLZEVAR))
+        out.write('# ' + 100*'-' + '\n')
     MNFLDS = {'pca':PCA(n_components=ED),
               'kpca':KernelPCA(n_components=ED, n_jobs=THREADS),
               'isomap':Isomap(n_components=ED, n_jobs=THREADS),
