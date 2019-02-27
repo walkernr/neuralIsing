@@ -307,7 +307,7 @@ if __name__ == '__main__':
         THREADS = 1
     from keras.models import Model
     from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
-    from keras.losses import binary_crossentropy, mse
+    from keras.losses import binary_crossentropy, mse, kullback_leibler_divergence
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.callbacks import History, CSVLogger
     from keras import backend as K
