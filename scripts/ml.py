@@ -544,7 +544,7 @@ if __name__ == '__main__':
     # clustering dictionary
     CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
              'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
-             'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, eigen_solver='amg')}
+             'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, eigen_solver='amg', random_state=SEED, n_init=4)}
     try:
         CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d.zenc.inl.clst.npy' \
                             % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED))
