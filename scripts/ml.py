@@ -162,11 +162,11 @@ def odr_fit(func, dom, mrng, srng, pg):
 
 
 def sampling(beta):
-    z_mean, z_log_std = beta
+    z_mean, z_std = beta
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
     epsilon = K.random_normal(shape=(batch, dim))
-    return z_mean+K.exp(z_log_std)*epsilon
+    return z_mean+z_std*epsilon
 
 
 def build_variational_autoencoder():
@@ -187,10 +187,10 @@ def build_variational_autoencoder():
     fconv3 = Flatten()(conv3)
     d0 = Dense(1024, activation='relu')(fconv3)
     z_mean = Dense(LD, name='z_mean')(d0)
-    z_log_std = Dense(LD, name='z_log_std')(d0)
-    z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_std])
+    z_std = Dense(LD, name='z_std')(d0)
+    z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_std])
     # construct encoder
-    encoder = Model(input, [z_mean, z_log_std, z], name='encoder')
+    encoder = Model(input, [z_mean, z_std, z], name='encoder')
     if VERBOSE:
         print('encoder network summary')
         print(100*'-')
@@ -224,7 +224,7 @@ def build_variational_autoencoder():
                              'mse': lambda a, b: mse(a, b)}
     # vae loss
     reconstruction_loss = N*N*reconstruction_losses[LSS](K.flatten(input), K.flatten(output))
-    kl_loss = -0.5*K.sum(1+2*z_log_std-K.square(z_mean)-K.exp(2*z_log_std), axis=-1)
+    kl_loss = -0.5*K.sum(1+K.log(K.square(z_std))-K.square(z_mean)-K.square(z_std), axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
     # compile vae
@@ -434,6 +434,7 @@ if __name__ == '__main__':
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.vae.loss.val.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), VLOSS)
         if VERBOSE:
+            print(100*'-')
             print('variational autoencoder weights trained')
             print(100*'-')
 
@@ -462,10 +463,11 @@ if __name__ == '__main__':
             print('z encodings of scaled selected classification samples loaded from file')
             print(100*'-')
     except:
-        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP)), 0, 1)
+        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.zenc.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), ZENC.reshape(SNH, SNT, SNS, 3, LD))
         if VERBOSE:
+            print(100*'-')
             print('z encodings of scaled selected classification samples predicted')
             print(100*'-')
 
