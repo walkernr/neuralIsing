@@ -569,7 +569,7 @@ if __name__ == '__main__':
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     ICLCM = np.argsort(CLMM)
     for i in range(NPH):
-        CL[CLMSLZENC == ICLCM[i]] = i
+        CL[CL == ICLCM[i]] = i
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
