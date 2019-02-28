@@ -564,10 +564,10 @@ if __name__ == '__main__':
             print('inlier selected z encoding manifold clustering computed')
             print(100*'-')
 
-    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMM[:, np.newaxis]) # np.swapaxes(np.array([CLME, CLMM]), 0, 1))
-    CLCM = [np.mean(CLMM[CLC == i]) for i in range(NPH)]
+    CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
+    CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMMFC[:, np.newaxis]) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
+    CLCM = [np.mean(CLMMFC[CLC == i]) for i in range(NPH)]
     ICLCM = np.argsort(CLCM)
     for i in range(NPH):
         CLC[CLC == ICLCM[i]] = i+NPH
