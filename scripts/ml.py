@@ -166,7 +166,7 @@ def sampling(beta):
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
     epsilon = K.random_normal(shape=(batch, dim))
-    return z_mean+K.exp(z_log_std)*epsilon
+    return z_mean+K.exp(0.5*z_log_var)*epsilon
 
 
 def build_variational_autoencoder():
@@ -187,10 +187,10 @@ def build_variational_autoencoder():
     fconv3 = Flatten()(conv3)
     d0 = Dense(1024, activation='relu')(fconv3)
     z_mean = Dense(LD, name='z_mean')(d0)
-    z_log_std = Dense(LD, name='z_log_std')(d0)
-    z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_std])
+    z_log_var = Dense(LD, name='z_log_std')(d0) # more numerically stable to use log(var_z)
+    z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
     # construct encoder
-    encoder = Model(input, [z_mean, z_log_std, z], name='encoder')
+    encoder = Model(input, [z_mean, z_log_var, z], name='encoder')
     if VERBOSE:
         print('encoder network summary')
         print(100*'-')
@@ -224,7 +224,7 @@ def build_variational_autoencoder():
                              'mse': lambda a, b: mse(a, b)}
     # vae loss
     reconstruction_loss = N*N*reconstruction_losses[LSS](K.flatten(input), K.flatten(output))
-    kl_loss = -0.5*K.sum(1+z_log_std-K.square(z_mean)-K.exp(2*z_log_std), axis=-1)
+    kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
     # compile vae
