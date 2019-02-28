@@ -566,7 +566,7 @@ if __name__ == '__main__':
 
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(np.swapaxes(np.array([CLME, CLMM]), 0, 1))
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMM[:, np.newaxis]) # np.swapaxes(np.array([CLME, CLMM]), 0, 1))
     CLCM = [np.mean(CLMM[CLC == i]) for i in range(NPH)]
     ICLCM = np.argsort(CLCM)
     for i in range(NPH):
