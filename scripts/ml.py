@@ -59,7 +59,7 @@ def parse_args():
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=256)
     parser.add_argument('-ev', '--embedding_variables', help='variables for learning the embedding manifold (boolean string: zm, zlv, z)',
-                        type=str, default='001')
+                        type=str, default='11')
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.fft, args.threads, args.name, args.lattice_size,
             args.unsuper_interval, args.unsuper_samples, args.super_interval, args.super_samples,
@@ -361,15 +361,9 @@ if __name__ == '__main__':
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNH, SNT = CH.size, CT.size
-
     if FFT:
-        FCDMP = np.fft.fft2(CDMP, axes=(3, 4))
-        CDMP = np.concatenate((np.real(FCDMP)[:, :, :, :, :, np.newaxis],
-                               np.imag(FCDMP)[:, :, :, :, :, np.newaxis]), axis=-1)
         NCH = 2
-        del FCDMP
     else:
-        CDMP = CDMP[:, :, :, :, :, np.newaxis]
         NCH = 1
 
     # scaler dictionary
@@ -385,6 +379,14 @@ if __name__ == '__main__':
             print('scaled selected classification samples loaded from file')
             print(100*'-')
     except:
+        if FFT:
+            FCDMP = np.fft.fft2(CDMP, axes=(3, 4))
+            CDMP = np.concatenate((np.real(FCDMP)[:, :, :, :, :, np.newaxis],
+                                np.imag(FCDMP)[:, :, :, :, :, np.newaxis]), axis=-1)
+            del FCDMP
+        else:
+            CDMP = CDMP[:, :, :, :, :, np.newaxis]
+            NCH = 1
         if SCLR == 'glbl':
             SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
             for i in range(NCH):
@@ -463,9 +465,13 @@ if __name__ == '__main__':
             print('z encodings of scaled selected classification samples loaded from file')
             print(100*'-')
     except:
-        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)
+        if VERBOSE:
+            print('predicting z encodings of scaled selected classification samples')
+            print(100*'-')
+        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)[:, :2, :]
+        ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.zenc.npy'
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), ZENC.reshape(SNH, SNT, SNS, 3, LD))
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), ZENC.reshape(SNH, SNT, SNS, 2, LD))
         if VERBOSE:
             print(100*'-')
             print('z encodings of scaled selected classification samples predicted')
