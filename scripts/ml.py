@@ -553,10 +553,10 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
-        CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-        ICLMM = np.argsort(CLMM)
+        CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
+        ICLMMFC = np.argsort(CLMMFC)
         for i in range(NC):
-            CLMSLZENC[CLMSLZENC == ICLMM[i]] = i+NC
+            CLMSLZENC[CLMSLZENC == ICLMMFC[i]] = i+NC
         CLMSLZENC -= NC
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d.zenc.inl.clst.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED), CLMSLZENC)
@@ -572,7 +572,7 @@ if __name__ == '__main__':
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     ICLCM = np.argsort(CLMM)
-    CL = np.zeros(CLMSLZENC.shape)
+    CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     for i in range(NPH):
         CL[CLMSLZENC == ICLCM[i]] = i
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
