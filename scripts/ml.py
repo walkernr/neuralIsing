@@ -569,10 +569,10 @@ if __name__ == '__main__':
     CLMMCCM = [np.mean(CLMM[CLMMCC == i]) for i in range(NPH)]
     ICLMMCCM = np.argsort(CLMMCCM)
     for i in range(NPH):
-        CLMMCC[CLMCC == ICLMMCCM[i]] = i+NPH
+        CLMMCC[CLMMCC == ICLMMCCM[i]] = i+NPH
     CLMMCC -= NPH
     for i in range(NC):
-        CLMZENC[CLMZENC == i] = CLMMCC[i]
+        CLMZENC[CLMMZENC == i] = CLMMCC[i]
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     # make this better
     # if NC > NPH:
