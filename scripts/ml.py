@@ -567,7 +567,7 @@ if __name__ == '__main__':
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     # make this better
     if NC > NPH:
-        LB, UB = 3, NC-4
+        LB, UB = 0, NC-1
         CLMSLZENC[CLMSLZENC <= LB] = 0
         CLMSLZENC[(CLMSLZENC > LB) & (CLMSLZENC < UB)] = 1
         CLMSLZENC[CLMSLZENC >= UB] = NPH-1
