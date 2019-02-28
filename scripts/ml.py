@@ -565,7 +565,7 @@ if __name__ == '__main__':
             print(100*'-')
 
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLMMCC = KMeans(n_jobs=Threads, n_clusters=NPH, init='k-means++').fit_predict(CLMM)
+    CLMMCC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMM)
     CLMMCCM = [np.mean(CLMM[CLMMCC == i]) for i in range(NPH)]
     ICLMMCCM = np.argsort(CLMMCCM)
     for i in range(NPH):
