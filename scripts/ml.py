@@ -460,7 +460,7 @@ if __name__ == '__main__':
 
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.zenc.npy'
-                       % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED)).reshape(SNH*SNT*SNS, 3, LD)
+                       % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED)).reshape(SNH*SNT*SNS, 2, LD)
         if VERBOSE:
             print('z encodings of scaled selected classification samples loaded from file')
             print(100*'-')
