@@ -565,13 +565,22 @@ if __name__ == '__main__':
             print(100*'-')
 
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
+    CLMMCC = KMeans(n_jobs=Threads, n_clusters=NPH, init='k-means++').fit_predict(CLMM)
+    CLMMCCM = [np.mean(CLMM[CLMMCC == i]) for i in range(NPH)]
+    ICLMMCCM = np.argsort(CLMMCCM)
+    for i in range(NPH):
+        CLMMCC[CLMCC = ICLMMCCM[i]] = i+NPH
+    CLMMCC -= NPH
+    for i in range(NC):
+        CLMZENC[CLMZENC == i] = CLMMCC[i]
+    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     # make this better
-    if NC > NPH:
-        LB, UB = 0, NC-1
-        CLMSLZENC[CLMSLZENC <= LB] = 0
-        CLMSLZENC[(CLMSLZENC > LB) & (CLMSLZENC < UB)] = 1
-        CLMSLZENC[CLMSLZENC >= UB] = NPH-1
-        CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
+    # if NC > NPH:
+    #     LB, UB = 0, NC-1
+    #     CLMSLZENC[CLMSLZENC <= LB] = 0
+    #     CLMSLZENC[(CLMSLZENC > LB) & (CLMSLZENC < UB)] = 1
+    #     CLMSLZENC[CLMSLZENC >= UB] = NPH-1
+    #     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     CLBMSLZENC = np.array([[np.bincount(CLMSLZENC.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
     UTRANS = np.array([odr_fit(logistic, UT, CLBMSLZENC[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
     UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
