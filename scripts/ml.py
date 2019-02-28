@@ -162,7 +162,7 @@ def odr_fit(func, dom, mrng, srng, pg):
 
 
 def sampling(beta):
-    z_mean, z_std = beta
+    z_mean, z_log_std = beta
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
     epsilon = K.random_normal(shape=(batch, dim))
