@@ -553,11 +553,6 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
-        CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-        ICLMMFC = np.argsort(CLMMFC)
-        for i in range(NC):
-            CLMSLZENC[CLMSLZENC == ICLMMFC[i]] = i+NC
-        CLMSLZENC -= NC
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d.zenc.inl.clst.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED), CLMSLZENC)
         if VERBOSE:
