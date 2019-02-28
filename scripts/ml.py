@@ -564,15 +564,17 @@ if __name__ == '__main__':
             print('inlier selected z encoding manifold clustering computed')
             print(100*'-')
 
+    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLMMCC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMM[:, np.newaxis])
-    CLMMCCM = [np.mean(CLMM[CLMMCC == i]) for i in range(NPH)]
-    ICLMMCCM = np.argsort(CLMMCCM)
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(np.swapaxes(np.array([CLME, CLMM]), 0, 1))
+    CLCM = [np.mean(CLMM[CLC == i]) for i in range(NPH)]
+    ICLCM = np.argsort(CLCM)
     for i in range(NPH):
-        CLMMCC[CLMMCC == ICLMMCCM[i]] = i+NPH
-    CLMMCC -= NPH
+        CLC[CLC == ICLCM[i]] = i+NPH
+    CLC -= NPH
     for i in range(NC):
-        CLMSLZENC[CLMSLZENC == i] = CLMMCC[i]
+        CLMSLZENC[CLMSLZENC == i] = CLC[i]
+    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     # make this better
     # if NC > NPH:
