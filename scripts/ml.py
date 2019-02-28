@@ -567,12 +567,12 @@ if __name__ == '__main__':
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMMFC[:, np.newaxis]) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
-    for i in range(NC):
-        CLMSLZENC[CLMSLZENC == i] = CLC[i]
-    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
-    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
-    ICLCM = np.argsort(CLMM)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
+    for i in range(NC):
+        CL[CLMSLZENC == i] = CLC[i]
+    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    ICLCM = np.argsort(CLMM)
     for i in range(NPH):
         CL[CLMSLZENC == ICLCM[i]] = i
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
@@ -629,7 +629,7 @@ if __name__ == '__main__':
     ax.yaxis.set_ticks_position('left')
     ax.plot(UITRANS, np.arange(UNH), color='yellow')
     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-    ax.imshow(CLBMSLZENC, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    ax.imshow(CLB, aspect='equal', interpolation='none', origin='lower', cmap=CM)
     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
     ax.set_xticks(np.arange(UT.size), minor=True)
     ax.set_yticks(np.arange(UH.size), minor=True)
