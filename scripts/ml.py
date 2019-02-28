@@ -572,20 +572,14 @@ if __name__ == '__main__':
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
     ICLCM = np.argsort(CLMM)
+    CL = np.zeros(CLMSLZENC.shape)
     for i in range(NPH):
-        CLMSLZENC[CLMSLZENC == ICLCM[i]] = i+NPH
-    CLMSLZENC -= NPH
-    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
-    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
-    # make this better
-    # if NC > NPH:
-    #     LB, UB = 0, NC-1
-    #     CLMSLZENC[CLMSLZENC <= LB] = 0
-    #     CLMSLZENC[(CLMSLZENC > LB) & (CLMSLZENC < UB)] = 1
-    #     CLMSLZENC[CLMSLZENC >= UB] = NPH-1
-    #     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NPH)])
-    CLBMSLZENC = np.array([[np.bincount(CLMSLZENC.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
-    UTRANS = np.array([odr_fit(logistic, UT, CLBMSLZENC[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
+        CL[CLMSLZENC == ICLCM[i]] = i
+    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+
+    CLB = np.array([[np.bincount(CL.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
+    UTRANS = np.array([odr_fit(logistic, UT, CLB[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
     UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
     UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
     UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
@@ -618,11 +612,11 @@ if __name__ == '__main__':
         ax = fig.add_subplot(111)
     for i in range(NPH):
         if ED == 3:
-            ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
+            ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
                        c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
                        s=32, alpha=0.0625, edgecolors='k')
         if ED == 2:
-            ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1],
+            ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1],
                        c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
                        s=32, alpha=0.0625, edgecolors='k')
     fig.savefig(OUTPREF+'.vae.emb.clst.png')
