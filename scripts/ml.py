@@ -210,7 +210,7 @@ def build_variational_autoencoder():
                              kernel_initializer='he_normal', padding='same', strides=1)(rd1)
     convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt0)
-    usmpl0 = UpSampling2D(size=2)(convt1)
+    upsmpl0 = UpSampling2D(size=2)(convt1)
     convt2 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(upsmpl0)
     convt3 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
