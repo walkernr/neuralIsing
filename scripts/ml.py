@@ -616,11 +616,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1], MSLZENC[CLMSLZENC == -1, 2],
-                   c='k', s=32, alpha=0.25, edgecolors='k')
+                   c='c', s=32, alpha=0.5, edgecolors='k')
     elif ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1],
-                   c='k', s=32, alpha=0.25, edgecolors='k')
+                   c='c', s=32, alpha=0.5, edgecolors='k')
     for i in range(NC):
         if ED == 3:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
@@ -636,11 +636,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1], MSLZENC[CL == -1, 2],
-                   c='k', s=32, alpha=0.25, edgecolors='k')
+                   c='c', s=32, alpha=0.5, edgecolors='k')
     elif ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1],
-                   c='k', s=32, alpha=0.25, edgecolors='k')
+                   c='c', s=32, alpha=0.5, edgecolors='k')
     for i in range(NPH):
         if ED == 3:
             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
