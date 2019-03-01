@@ -44,7 +44,7 @@ def parse_args():
                         type=int, default=2)
     parser.add_argument('-cl', '--clustering', help='clustering method',
                         type=str, default='kmeans')
-    parser.add_argument('-nc', '--clusters', help='number of clusters',
+    parser.add_argument('-nc', '--clusters', help='number of clusters (ignored for dbscan)',
                         type=int, default=3)
     parser.add_argument('-bk', '--backend', help='keras backend',
                         type=str, default='tensorflow')
@@ -544,7 +544,8 @@ if __name__ == '__main__':
     # clustering dictionary
     CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
              'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
-             'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, random_state=SEED)}
+             'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, random_state=SEED),
+             'dbscan': DBSCAN(eps=0.5, min_samples=5, leaf_size=30)}
     try:
         CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d.zenc.inl.clst.npy' \
                             % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED))
@@ -559,10 +560,14 @@ if __name__ == '__main__':
             print('inlier selected z encoding manifold clustering computed')
             print(100*'-')
 
+    if CLST == 'dbscan':
+        NC = np.unique(CLMSLZENC[CLMSLZENC > -1]).size
+
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMMFC[:, np.newaxis]) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
+    CL[CLMSLZENC == -1] = -1
     for i in range(NC):
         CL[CLMSLZENC == i] = CLC[i]
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
@@ -574,7 +579,8 @@ if __name__ == '__main__':
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
-    CLB = np.array([[np.bincount(CL.reshape(UNH, UNT, UNS)[i, j], minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
+    CLB = np.array([[np.bincount(CL.reshape(UNH, UNT, UNS)[i, j][CL.reshape(UNH, UNT, UNS)[i, j] > -1],
+                                 minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
     UTRANS = np.array([odr_fit(logistic, UT, CLB[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
     UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
     UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
@@ -604,8 +610,12 @@ if __name__ == '__main__':
     fig = plt.figure()
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1], MSLZENC[CL == -1, 2],
+                   c='k', s=32, alpha=0.0625, edgecolors='k')
     elif ED == 2:
         ax = fig.add_subplot(111)
+        ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1],
+                   c='k', s=32, alpha=0.0625, edgecolors='k')
     for i in range(NPH):
         if ED == 3:
             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
