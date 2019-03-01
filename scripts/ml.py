@@ -563,6 +563,9 @@ if __name__ == '__main__':
     if CLST == 'dbscan':
         NC = np.unique(CLMSLZENC[CLMSLZENC > -1]).size
 
+    CLESFC = np.mean(np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NC)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
+    CLMSFC = np.mean(np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NC)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
+
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
 
@@ -667,3 +670,22 @@ if __name__ == '__main__':
     plt.ylabel('H')
     plt.title('Ising Model Phase Diagram')
     fig.savefig(OUTPREF+'.vae.diag.phase.png')
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.xaxis.set_ticks_position('bottom')
+    ax.yaxis.set_ticks_position('left')
+    ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    ax.imshow(CLMSFC, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    ax.set_xticks(np.arange(UT.size), minor=True)
+    ax.set_yticks(np.arange(UH.size), minor=True)
+    plt.xticks(np.arange(UT.size)[::2], np.round(UT, 2)[::2], rotation=-60)
+    plt.yticks(np.arange(UT.size)[::2], np.round(UH, 2)[::2])
+    plt.xlabel('T')
+    plt.ylabel('H')
+    plt.title('Ising Model Phase Diagram')
+    fig.savefig(OUTPREF+'.vae.diag.mag.png')
