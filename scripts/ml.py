@@ -221,7 +221,7 @@ def build_variational_autoencoder():
     convt5 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
                              kernel_initializer='he_normal', padding='same', strides=1)(convt4)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
-                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt3)
+                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt5)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
