@@ -569,8 +569,8 @@ if __name__ == '__main__':
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
 
-    CLCTN = np.array([np.mean(MSLZENC[CLMSLZENC == i], 0) for i in range(NC)])
-    CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(np.concatenate((CLCTN, CLMEFC[:, np.newaxis], CLMMFC[:, np.newaxis]), 1)) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
+    CLCTN = np.array([np.mean(SLZENC[CLMSLZENC == i], 0) for i in range(NC)])
+    CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(CLCTN)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
     for i in range(NC):
