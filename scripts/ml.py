@@ -565,7 +565,7 @@ if __name__ == '__main__':
 
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLMMFC[:, np.newaxis]) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
     for i in range(NC):
