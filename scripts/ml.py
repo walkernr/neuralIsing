@@ -567,7 +567,7 @@ if __name__ == '__main__':
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
 
     CLCTN = np.array([np.mean(MSLZENC[CLMSLZENC == i], 0) for i in range(NC)])
-    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLCTN) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
+    CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(CLCTN) # np.swapaxes(np.array([CLMEFC, CLMMFC]), 0, 1))
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
     for i in range(NC):
@@ -577,7 +577,7 @@ if __name__ == '__main__':
     ICLCM = np.argsort(CLMM)
     for i in range(NPH):
         CL[CL == ICLCM[i]] = i+NPH
-    CL -= NPH
+    CL[CL > -1] -= NPH
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
@@ -613,11 +613,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1], MSLZENC[CLMSLZENC == -1, 2],
-                   c='k', s=32, alpha=0.0625, edgecolors='k')
+                   c='k', s=32, alpha=0.25, edgecolors='k')
     elif ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1],
-                   c='k', s=32, alpha=0.0625, edgecolors='k')
+                   c='k', s=32, alpha=0.25, edgecolors='k')
     for i in range(NC):
         if ED == 3:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
@@ -633,11 +633,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1], MSLZENC[CL == -1, 2],
-                   c='k', s=32, alpha=0.0625, edgecolors='k')
+                   c='k', s=32, alpha=0.25, edgecolors='k')
     elif ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1],
-                   c='k', s=32, alpha=0.0625, edgecolors='k')
+                   c='k', s=32, alpha=0.25, edgecolors='k')
     for i in range(NPH):
         if ED == 3:
             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
