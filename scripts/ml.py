@@ -605,11 +605,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], MSLZENC[:, 2], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=32, alpha=0.0625, edgecolors='k')
+                   s=32, alpha=0.0625, edgecolors='')
     if ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=32, alpha=0.0625, edgecolors='k')
+                   s=32, alpha=0.25, edgecolors='')
     fig.savefig(OUTPREF+'.vae.emb.smpl.png')
 
     fig = plt.figure()
