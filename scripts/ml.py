@@ -43,9 +43,9 @@ def parse_args():
     parser.add_argument('-ed', '--embed_dimension', help='number of embedded dimensions in manifold',
                         type=int, default=2)
     parser.add_argument('-cl', '--clustering', help='clustering method',
-                        type=str, default='kmeans')
-    parser.add_argument('-nc', '--clusters', help='number of clusters (ignored for dbscan)',
-                        type=int, default=3)
+                        type=str, default='dbscan')
+    parser.add_argument('-nc', '--clusters', help='number of clusters (neighbor criterion eps for dbscan)',
+                        type=float, default=1e-3)
     parser.add_argument('-bk', '--backend', help='keras backend',
                         type=str, default='tensorflow')
     parser.add_argument('-opt', '--optimizer', help='optimization function',
@@ -91,7 +91,10 @@ def write_specs():
         print('manifold learning:         %s' % MNFLD)
         print('embedded projections:      %d' % ED)
         print('clustering:                %s' % CLST)
-        print('clusters:                  %d' % NC)
+        if CLST == 'dbscan':
+            print('neighbor eps:              %.2e' % NC)
+        else:
+            print('clusters:                  %d' % NC)
         print('backend:                   %s' % BACKEND)
         print('network:                   %s' % 'cnn2d')
         print('optimizer:                 %s' % OPT)
@@ -122,7 +125,10 @@ def write_specs():
         out.write('# manifold learning:         %s\n' % MNFLD)
         out.write('# embedded dimension:        %d\n' % ED)
         out.write('# clustering:                %s\n' % CLST)
-        out.write('# clusters:                  %d\n' % NC)
+        if CLST == 'dbscan':
+            out.write('# neighbor eps:              %.2e\n' % NC)
+        else:
+            out.write('# clusters:                  %d\n' % NC)
         out.write('# backend:                   %s\n' % BACKEND)
         out.write('# network:                   %s\n' % 'cnn2d')
         out.write('# optimizer:                 %s\n' % OPT)
@@ -280,9 +286,14 @@ if __name__ == '__main__':
      UNI, UNS, SNI, SNS,
      SCLR, LD, MNFLD, ED, CLST, NC,
      BACKEND, OPT, LSS, EP, LR, SEED, EV) = parse_args()
+    if CLST == 'dbscan':
+        NCS = '%.0e' % NC
+    else:
+        NC = int(NC)
+        NCS = '%d' % NC
     CWD = os.getcwd()
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d' % \
-              (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED)
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d' % \
+              (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, FFT, SEED)
     write_specs()
     EPS = 0.025
     # number of phases
@@ -545,35 +556,37 @@ if __name__ == '__main__':
     CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
              'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
              'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, random_state=SEED),
-             'dbscan': DBSCAN(eps=2**-64, min_samples=256, leaf_size=30)}
+             'dbscan': DBSCAN(eps=NC, min_samples=256, leaf_size=30)}
     try:
-        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d.zenc.inl.clst.npy' \
-                            % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED))
+        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.zenc.inl.clst.npy' \
+                            % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, FFT, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
             print(100*'-')
     except:
         CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%d.%d.%d.zenc.inl.clst.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NC, FFT, SEED), CLMSLZENC)
+        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.zenc.inl.clst.npy' \
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, FFT, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
             print(100*'-')
 
     if CLST == 'dbscan':
-        NC = np.unique(CLMSLZENC[CLMSLZENC > -1]).size
+        NCL = np.unique(CLMSLZENC[CLMSLZENC > -1]).size
+    else:
+        NCL = NC
 
-    CLESFC = np.mean(np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NC)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
-    CLMSFC = np.mean(np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NC)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
+    CLESFC = np.mean(np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NCL)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
+    CLMSFC = np.mean(np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NCL)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
 
-    CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
-    CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NC)])
+    CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
+    CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
 
-    CLCTN = np.array([np.mean(TSNEINIT[CLMSLZENC == i], 0) for i in range(NC)])
+    CLCTN = np.array([np.mean(TSNEINIT[CLMSLZENC == i], 0) for i in range(NCL)])
     CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLCTN)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
-    for i in range(NC):
+    for i in range(NCL):
         CL[CLMSLZENC == i] = CLC[i]
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
@@ -621,7 +634,7 @@ if __name__ == '__main__':
         ax = fig.add_subplot(111)
         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1],
                    c='c', s=32, alpha=1.0, edgecolors='')
-    for i in range(NC):
+    for i in range(NCL):
         if ED == 3:
             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
                        c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[np.newaxis, :],
