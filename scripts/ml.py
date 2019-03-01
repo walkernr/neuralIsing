@@ -184,7 +184,7 @@ def build_variational_autoencoder():
                    kernel_initializer='he_normal', padding='same', strides=1)(pool0)
     conv3 = Conv2D(filters=64, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(conv2)
-    pool1 = AveragePooling2D(pool_size=2)(conv3, padding='same')
+    pool1 = AveragePooling2D(pool_size=2, padding='same')(conv3)
     conv4 = Conv2D(filters=32, kernel_size=3, activation='relu',
                    kernel_initializer='he_normal', padding='same', strides=1)(pool1)
     conv5 = Conv2D(filters=64, kernel_size=3, activation='relu',
