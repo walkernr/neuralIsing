@@ -584,7 +584,9 @@ if __name__ == '__main__':
 
     CLCTN = np.array([np.mean(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)[CLMSLZENC == i], 0) for i in range(NCL)])
     if MNFLD == 'tsne':
-        MNFLDS[MNFLD].set_params({'perplexity': 4, 'init': PCA(n_components=ED).fit_transform(CLCTN)})
+        MNFLDS[MNFLD] = TSNE(n_components=ED, perplexity=int(NCL/NPH),
+                             early_exaggeration=24, learning_rate=200, n_iter=1000,
+                             verbose=VERBOSE, n_jobs=THREADS, init=PCA(n_components=ED).fit_transform(CLCTN))
     MCLCTN = MNFLDS[MNFLD].fit_transform(CLCTN)
     CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
