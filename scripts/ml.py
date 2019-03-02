@@ -583,7 +583,9 @@ if __name__ == '__main__':
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
 
     # CLCTN = np.array([np.concatenate((np.mean(MSLZENC[CLMSLZENC == i], 0), np.std(MSLZENC[CLMSLZENC == i], 0)), 0) for i in range(NCL)])
-    CLCTN = np.array([np.mean(MSLZENC[CLMSLZENC == i], 0) for i in range(NCL)])
+    CLCTN = np.array([np.mean(SLZENC[CLMSLZENC == i], 0) for i in range(NCL)])
+    if MNFLD == 'tsne':
+        MNFLDS[MNFLD].set_params({'perplexity': 4, 'init': PCA(n_components=ED).fit_transform(CLCTN)})
     MCLCTN = MNFLDS[MNFLD].fit_transform(CLCTN)
     CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
