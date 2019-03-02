@@ -588,7 +588,7 @@ if __name__ == '__main__':
                              early_exaggeration=24, learning_rate=200, n_iter=1000,
                              verbose=False, n_jobs=THREADS, init=PCA(n_components=ED).fit_transform(CLCTN))
     MCLCTN = TSNEINITPCA.transform(CLCTN) # MNFLDS[MNFLD].fit_transform(CLCTN) #
-    CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(MCLCTN) # KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN)
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN) # AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(MCLCTN) #
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
     for i in range(NCL):
@@ -599,8 +599,8 @@ if __name__ == '__main__':
     for i in range(NPH):
         CL[CL == ICLCM[i]] = i+NPH
     CL[CL > -1] -= NPH
-    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    CLMES = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    CLMMS = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
     CLB = np.array([[np.bincount(CL.reshape(UNH, UNT, UNS)[i, j][CL.reshape(UNH, UNT, UNS)[i, j] > -1],
                                  minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
@@ -662,11 +662,11 @@ if __name__ == '__main__':
     for i in range(NPH):
         if ED == 3:
             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
-                       c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
+                       c=np.array(CM(SCALE(CLMMS[i], SLMS.reshape(-1))))[np.newaxis, :],
                        s=32, alpha=0.25, edgecolors='')
         if ED == 2:
             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1],
-                       c=np.array(CM(SCALE(CLMM[i], SLMS.reshape(-1))))[np.newaxis, :],
+                       c=np.array(CM(SCALE(CLMMS[i], SLMS.reshape(-1))))[np.newaxis, :],
                        s=32, alpha=0.25, edgecolors='')
     fig.savefig(OUTPREF+'.vae.emb.clst.rc.png')
 
@@ -674,11 +674,11 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(MCLCTN[:, 0], MCLCTN[:, 1], MCLCTN[:, 2], c=CLMMFC, cmap=plt.get_cmap('plasma'),
-                   s=256, alpha=1.0, edgecolors='') # np.array(CM(SCALE(CLMM[CLC], SLMS.reshape(-1))))[np.newaxis, :])
+                   s=256, alpha=1.0, edgecolors=CLMM[CLC])
     if ED == 2:
         ax = fig.add_subplot(111)
         ax.scatter(MCLCTN[:, 0], MCLCTN[:, 1], c=CLMMFC, cmap=plt.get_cmap('plasma'),
-                   s=256, alpha=1.0, edgecolors='') # np.array(CM(SCALE(CLMM[CLC], SLMS.reshape(-1))))[np.newaxis, :])
+                   s=256, alpha=1.0, edgecolors=CLMM[CLC])
     fig.savefig(OUTPREF+'.vae.emb.ld.png')
 
     fig = plt.figure()
