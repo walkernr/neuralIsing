@@ -595,10 +595,10 @@ if __name__ == '__main__':
         CL[CLMSLZENC == i] = CLC[i]
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-    # ICLCM = np.argsort(CLMM)
-    # for i in range(NPH):
-    #     CL[CL == ICLCM[i]] = i+NPH
-    # CL[CL > -1] -= NPH
+    ICLCM = np.argsort(CLMM)
+    for i in range(NPH):
+        CL[CL == ICLCM[i]] = i+NPH
+    CL[CL > -1] -= NPH
     CLMES = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMMS = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
@@ -674,12 +674,14 @@ if __name__ == '__main__':
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
         for i in range(NPH):
-            ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], MCLCTN[CLC == i, 2], c=CLMMFC[CLC == i], cmap=plt.get_cmap('plasma'),
+            ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], MCLCTN[CLC == i, 2],
+                       c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[:, np.newaxis],
                        s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=4.0)
     if ED == 2:
         ax = fig.add_subplot(111)
         for i in range(NPH):
-            ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], c=CLMMFC[CLC == i], cmap=plt.get_cmap('plasma'),
+            ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1],
+                       c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[:, np.newaxis],
                        s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=4.0)
     fig.savefig(OUTPREF+'.vae.emb.ld.png')
 
