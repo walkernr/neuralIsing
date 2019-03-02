@@ -588,7 +588,7 @@ if __name__ == '__main__':
                              early_exaggeration=24, learning_rate=200, n_iter=1000,
                              verbose=False, n_jobs=THREADS, init=PCA(n_components=ED).fit_transform(CLCTN))
     MCLCTN = MNFLDS[MNFLD].fit_transform(CLCTN) # TSNEINITPCA.transform(CLCTN) #
-    CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(MCLCTN) # KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN) #
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN) # AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(MCLCTN) #
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
     for i in range(NCL):
