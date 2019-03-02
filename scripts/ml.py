@@ -582,8 +582,9 @@ if __name__ == '__main__':
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
 
-    CLCTN = np.array([np.mean(TSNEINIT[CLMSLZENC == i], 0) for i in range(NCL)])
-    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(CLCTN)
+    CLCTN = np.array([np.concatenate((np.mean(TSNEINIT[CLMSLZENC == i], 0), np.std(TSNEINIT[CLMSLZENC == i], 0)), 1) for i in range(NCL)])
+    PCLCTN = PCA(n_components=2*ED).fit_transform(CLCTN)
+    CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(PCLCTN)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
     CL[CLMSLZENC == -1] = -1
     for i in range(NCL):
@@ -668,11 +669,11 @@ if __name__ == '__main__':
     fig = plt.figure()
     if ED == 3:
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(CLCTN[:, 0], CLCTN[:, 1], CLCTN[:, 2], c=CLMMFC, cmap=plt.get_cmap('plasma'),
+        ax.scatter(PCLCTN[:, 0], PCLCTN[:, 1], PCLCTN[:, 2], c=CLMMFC, cmap=plt.get_cmap('plasma'),
                    s=256, alpha=1.0, edgecolors='')
     if ED == 2:
         ax = fig.add_subplot(111)
-        ax.scatter(CLCTN[:, 0], CLCTN[:, 1], c=CLMMFC, cmap=plt.get_cmap('plasma'),
+        ax.scatter(PCLCTN[:, 0], PCLCTN[:, 1], c=CLMMFC, cmap=plt.get_cmap('plasma'),
                    s=256, alpha=1.0, edgecolors='')
     fig.savefig(OUTPREF+'.vae.emb.ld.png')
 
