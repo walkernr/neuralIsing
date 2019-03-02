@@ -672,7 +672,7 @@ if __name__ == '__main__':
                    s=256, alpha=1.0, edgecolors='')
     if ED == 2:
         ax = fig.add_subplot(111)
-        ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=CLMMFC, cmap=plt.get_cmap('plasma'),
+        ax.scatter(CLCTN[:, 0], CLCTN[:, 1], c=CLMMFC, cmap=plt.get_cmap('plasma'),
                    s=256, alpha=1.0, edgecolors='')
     fig.savefig(OUTPREF+'.vae.emb.ld.png')
 
