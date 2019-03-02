@@ -675,12 +675,12 @@ if __name__ == '__main__':
         ax = fig.add_subplot(111, projection='3d')
         for i in range(NPH):
             ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], MCLCTN[CLC == i, 2], c=CLMMFC[CLC == i], cmap=plt.get_cmap('plasma'),
-                    s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))))
+                    s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=16.0)
     if ED == 2:
         ax = fig.add_subplot(111)
         for i in range(NPH):
             ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], c=CLMMFC[CLC == i], cmap=plt.get_cmap('plasma'),
-                    s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))))
+                    s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=16.0)
     fig.savefig(OUTPREF+'.vae.emb.ld.png')
 
     fig = plt.figure()
