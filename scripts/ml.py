@@ -460,7 +460,7 @@ if __name__ == '__main__':
             print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
         print(100*'-')
 
-    with open(OUTPREF+'.out', 'w') as out:
+    with open(OUTPREF+'.out', 'a') as out:
         out.write('# variational autoencoder training history information\n')
         out.write('# ' + 100*'-' + '\n')
         out.write('# | epoch | training loss | validation loss |\n')
@@ -522,7 +522,7 @@ if __name__ == '__main__':
         print('explained variances: '+ED*'%f ' % tuple(SLZEVAR))
         print('total: %f' % np.sum(SLZEVAR))
         print(100*'-')
-    with open(OUTPREF+'.out', 'w') as out:
+    with open(OUTPREF+'.out', 'a') as out:
         out.write('# pca fit information\n')
         out.write('# ' + 100*'-' + '\n')
         out.write('# explained variances: '+ED*'%f ' % tuple(SLZEVAR)+'\n')
@@ -622,6 +622,14 @@ if __name__ == '__main__':
         print(4*'%.2f ' % tuple(UCPOPT))
         print(4*'%.2f ' % tuple(UCPERR))
         print(100*'-')
+    with open(OUTPREF+'.out', 'a') as out:
+        out.write('# fit parameters calculated (t_c = a*|h-b|**c+d)\n')
+        out.write('# '+100*'-'+'\n')
+        out.write('# | a | b | c | d |\n')
+        out.write('# '+100*'-'+'\n')
+        out.write('# '+4*'%.2f ' % tuple(UCPOPT) +'\n')
+        out.write('# '+4*'%.2f ' % tuple(UCPERR) +'\n')
+        out.write('# ' + 100*'-' + '\n')
 
     fig = plt.figure()
     if ED == 3:
