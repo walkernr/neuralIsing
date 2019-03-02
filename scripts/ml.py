@@ -582,7 +582,7 @@ if __name__ == '__main__':
     CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
     CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
 
-    CLCTN = np.array([np.concatenate((np.mean(TSNEINIT[CLMSLZENC == i], 0), np.std(TSNEINIT[CLMSLZENC == i], 0)), 0) for i in range(NCL)])
+    CLCTN = np.array([np.concatenate((np.mean(MSLZENC[CLMSLZENC == i], 0), np.std(MSLZENC[CLMSLZENC == i], 0)), 0) for i in range(NCL)])
     PCLCTN = PCA(n_components=2*ED).fit_transform(CLCTN)
     CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(PCLCTN)
     CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
