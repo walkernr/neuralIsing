@@ -595,10 +595,10 @@ if __name__ == '__main__':
         CL[CLMSLZENC == i] = CLC[i]
     CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-    ICLCM = np.argsort(CLMM)
-    for i in range(NPH):
-        CL[CL == ICLCM[i]] = i+NPH
-    CL[CL > -1] -= NPH
+    # ICLCM = np.argsort(CLMM)
+    # for i in range(NPH):
+    #     CL[CL == ICLCM[i]] = i+NPH
+    # CL[CL > -1] -= NPH
     CLMES = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
     CLMMS = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
