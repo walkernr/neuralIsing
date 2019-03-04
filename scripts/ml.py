@@ -513,7 +513,7 @@ if __name__ == '__main__':
     SLMS = SLDAT[:, :, :, 1]
 
     SLEM = np.mean(SLES, -1)
-    SLSP = np.divide(np.mean(np.square(SLES), -1)-np.square(SLEM), UH[np.newaxis, :])
+    SLSP = np.divide(np.mean(np.square(SLES), -1)-np.square(SLEM), UT[np.newaxis, :])
     SLMM = np.mean(SLMS, -1)
     SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), UT[np.newaxis, :])
 
