@@ -743,7 +743,7 @@ if __name__ == '__main__':
     ax.yaxis.set_ticks_position('left')
     ax.plot(UITRANS, np.arange(UNH), color='yellow')
     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-    ax.imshow(np.mean(TSNEINIT[:, 0].reshape(UNH, UNT, UNS), -1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    ax.imshow(np.mean(TSNEINIT[:, 1].reshape(UNH, UNT, UNS), -1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
     ax.set_xticks(np.arange(UT.size), minor=True)
     ax.set_yticks(np.arange(UH.size), minor=True)
