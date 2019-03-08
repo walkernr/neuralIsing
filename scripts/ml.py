@@ -527,7 +527,7 @@ if __name__ == '__main__':
     TSNEINITPCA = PCA(n_components=ED)
     TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
     SLZEVAR = TSNEINITPCA.explained_variance_ratio_
-    STSNEINIT = SCLRS['tanh'].fit_transform(TSNEINITPCA)
+    STSNEINIT = SCLRS['tanh'].fit_transform(TSNEINIT)
     PTRANS = np.array([odr_fit(logistic, UT, STSNEINIT.reshape(UNH, UNT, UNS)[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
     PITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
     PCPOPT, PCPERR, PCDOM, PCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
