@@ -514,12 +514,12 @@ if __name__ == '__main__':
             print('inlier selected z encodings computed')
             print(100*'-')
 
-    SLZENC = SCLRS['tanh'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)).reshape(UNH, UNT, UNS, len(EIND)*LD)
-
     UH, UT = CH[::UNI], CT[::UNI]
     UNH, UNT = UH.size, UT.size
     SLES = SLDAT[:, :, :, 0]
     SLMS = SLDAT[:, :, :, 1]
+
+    SLZENC = SCLRS['tanh'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)).reshape(UNH, UNT, UNS, len(EIND)*LD)
 
     SLEM = np.mean(SLES, -1)
     SLSP = np.divide(np.mean(np.square(SLES), -1)-np.square(SLEM), UT[np.newaxis, :])
