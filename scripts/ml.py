@@ -400,7 +400,7 @@ if __name__ == '__main__':
         if FFT:
             FCDMP = np.fft.fft2(CDMP, axes=(3, 4))
             CDMP = np.concatenate((np.real(FCDMP)[:, :, :, :, :, np.newaxis],
-                                np.imag(FCDMP)[:, :, :, :, :, np.newaxis]), axis=-1)
+                                   np.imag(FCDMP)[:, :, :, :, :, np.newaxis]), axis=-1)
             del FCDMP
         else:
             CDMP = CDMP[:, :, :, :, :, np.newaxis]
@@ -513,6 +513,8 @@ if __name__ == '__main__':
         if VERBOSE:
             print('inlier selected z encodings computed')
             print(100*'-')
+
+    SLZENC = SCLRS['tanh'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)).reshape(UNH, UNT, UNS, len(EIND)*LD)
 
     UH, UT = CH[::UNI], CT[::UNI]
     UNH, UNT = UH.size, UT.size
