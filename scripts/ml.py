@@ -289,7 +289,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
 
 if __name__ == '__main__':
     # parse command line arguments
-    (VERBOSE, PLOT, PARALLEL, GPU, FFT, AD, THREADS, NAME, N,
+    (VERBOSE, PLOT, PARALLEL, GPU, AD, FFT, THREADS, NAME, N,
      UNI, UNS, SNI, SNS,
      SCLR, LD, MNFLD, ED, CLST, NC,
      BACKEND, OPT, LSS, EP, LR, SEED, EV) = parse_args()
@@ -300,7 +300,7 @@ if __name__ == '__main__':
         NCS = '%d' % NC
     CWD = os.getcwd()
     OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d' % \
-              (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, FFT, AD, SEED)
+              (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED)
     write_specs()
     EPS = 0.025
     # number of phases
@@ -498,18 +498,18 @@ if __name__ == '__main__':
     EIND = [i for i in range(len(EV)) if EV[i] == '1']
     try:
         SLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.%d.zenc.inl.npy' \
-                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, FFT, AD, SEED))
+                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, AD, FFT, SEED))
         SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.%d.dat.inl.npy' \
-                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, FFT, AD, SEED))
+                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, AD, FFT, SEED))
         if VERBOSE:
             print('inlier selected z encodings loaded from file')
             print(100*'-')
     except:
         SLZENC, SLDAT = inlier_selection(ZENC[:, EIND, :].reshape(SNH, SNT, SNS, len(EIND)*LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.%d.zenc.inl.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, FFT, AD, SEED), SLZENC)
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, AD, FFT, SEED), SLZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.%d.dat.inl.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, FFT, AD, SEED), SLDAT)
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, AD, FFT, SEED), SLDAT)
         if VERBOSE:
             print('inlier selected z encodings computed')
             print(100*'-')
@@ -526,17 +526,11 @@ if __name__ == '__main__':
 
     TSNEINITPCA = PCA(n_components=ED)
     TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
-    SLZEVAR = TSNEINITPCA.explained_variance_ratio_
-    PARG = np.mean(SCLRS['tanh'].fit_transform(TSNEINIT).reshape(UNH, UNT, UNS, ED), 2)
-    PTRANS = np.array([odr_fit(logistic, UT, PARG[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
-    PITRANS = (PTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
-    PCPOPT, PCPERR, PCDOM, PCVAL = odr_fit(absolute, UH, PTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
     if VERBOSE:
         print('pca fit information')
         print(100*'-')
         print('explained variances: '+ED*'%f ' % tuple(SLZEVAR))
         print('total: %f' % np.sum(SLZEVAR))
-        print(PCPOPT)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('# pca fit information\n')
@@ -555,14 +549,14 @@ if __name__ == '__main__':
 
     try:
         MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.%d.zenc.inl.mfld.npy' \
-                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, FFT, AD, SEED))
+                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, AD, FFT, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
             print(100*'-')
     except:
         MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.%d.zenc.inl.mfld.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, FFT, AD, SEED), MSLZENC)
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, AD, FFT, SEED), MSLZENC)
         if VERBOSE:
             if MNFLD == 'tsne':
                 print(100*'-')
@@ -576,14 +570,14 @@ if __name__ == '__main__':
              'dbscan': DBSCAN(eps=NC, min_samples=np.max([4, int(UNS/4)]), leaf_size=30)}
     try:
         CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d.zenc.inl.clst.npy' \
-                            % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, FFT, AD, SEED))
+                            % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold clustering loaded from file')
             print(100*'-')
     except:
         CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d.zenc.inl.clst.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, FFT, AD, SEED), CLMSLZENC)
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED), CLMSLZENC)
         if VERBOSE:
             print('inlier selected z encoding manifold clustering computed')
             print(100*'-')
