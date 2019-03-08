@@ -519,22 +519,24 @@ if __name__ == '__main__':
     SLES = SLDAT[:, :, :, 0]
     SLMS = SLDAT[:, :, :, 1]
 
-    SLZENC = SCLRS['tanh'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)).reshape(UNH, UNT, UNS, len(EIND)*LD)
-
     SLEM = np.mean(SLES, -1)
     SLSP = np.divide(np.mean(np.square(SLES), -1)-np.square(SLEM), UT[np.newaxis, :])
     SLMM = np.mean(SLMS, -1)
     SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), UT[np.newaxis, :])
 
-    # reduction dictionary
     TSNEINITPCA = PCA(n_components=ED)
     TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
     SLZEVAR = TSNEINITPCA.explained_variance_ratio_
+    STSNEINIT = SCLR['tanh'].fit_transform(TSNEINITPCA)
+    PTRANS = np.array([odr_fit(logistic, UT, STSNEINIT.reshape(UNH, UNT, UNS)[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
+    PITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
+    PCPOPT, PCPERR, PCDOM, PCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
     if VERBOSE:
         print('pca fit information')
         print(100*'-')
         print('explained variances: '+ED*'%f ' % tuple(SLZEVAR))
         print('total: %f' % np.sum(SLZEVAR))
+        print(PCPOPT)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('# pca fit information\n')
@@ -542,6 +544,7 @@ if __name__ == '__main__':
         out.write('# explained variances: '+ED*'%f ' % tuple(SLZEVAR)+'\n')
         out.write('# total: %f\n' % np.sum(SLZEVAR))
         out.write('# ' + 100*'-' + '\n')
+    # reduction dictionary
     MNFLDS = {'pca':PCA(n_components=ED),
               'kpca':KernelPCA(n_components=ED, n_jobs=THREADS),
               'isomap':Isomap(n_components=ED, n_jobs=THREADS),
