@@ -289,7 +289,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
 
 if __name__ == '__main__':
     # parse command line arguments
-    (VERBOSE, PLOT, PARALLEL, GPU, AD, FFT, THREADS, NAME, N,
+    (VERBOSE, PLOT, PARALLEL, GPU, FFT, AD, THREADS, NAME, N,
      UNI, UNS, SNI, SNS,
      SCLR, LD, MNFLD, ED, CLST, NC,
      BACKEND, OPT, LSS, EP, LR, SEED, EV) = parse_args()
@@ -486,7 +486,7 @@ if __name__ == '__main__':
         if VERBOSE:
             print('predicting z encodings of scaled selected classification samples')
             print(100*'-')
-        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)[:, :2, :]
+        ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
         np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.zenc.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), ZENC.reshape(SNH, SNT, SNS, 2, LD))
