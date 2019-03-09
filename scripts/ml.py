@@ -527,10 +527,6 @@ if __name__ == '__main__':
     TSNEINITPCA = PCA(n_components=ED)
     TSNEINIT = TSNEINITPCA.fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
     SLZEVAR = TSNEINITPCA.explained_variance_ratio_
-    PARG = np.mean(SCLRS['tanh'].fit_transform(TSNEINIT).reshape(UNH, UNT, UNS, ED), 2)
-    PTRANS = np.array([odr_fit(logistic, UT, PARG[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
-    PITRANS = (PTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
-    PCPOPT, PCPERR, PCDOM, PCVAL = odr_fit(absolute, UH, PTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
     if VERBOSE:
         print('pca fit information')
         print(100*'-')
@@ -543,305 +539,328 @@ if __name__ == '__main__':
         out.write('# explained variances: '+ED*'%f ' % tuple(SLZEVAR)+'\n')
         out.write('# total: %f\n' % np.sum(SLZEVAR))
         out.write('# ' + 100*'-' + '\n')
-    # reduction dictionary
-    MNFLDS = {'pca':PCA(n_components=ED),
-              'kpca':KernelPCA(n_components=ED, n_jobs=THREADS),
-              'isomap':Isomap(n_components=ED, n_jobs=THREADS),
-              'lle':LocallyLinearEmbedding(n_components=ED, n_jobs=THREADS),
-              'tsne':TSNE(n_components=ED, perplexity=UNS,
-                          early_exaggeration=24, learning_rate=200, n_iter=1000,
-                          verbose=VERBOSE, n_jobs=THREADS, init=TSNEINIT)}
 
-    try:
-        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.%d.zenc.inl.mfld.npy' \
-                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, AD, FFT, SEED))
-        if VERBOSE:
-            print('inlier selected z encoding manifold loaded from file')
-            print(100*'-')
-    except:
-        MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.%d.zenc.inl.mfld.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, AD, FFT, SEED), MSLZENC)
-        if VERBOSE:
-            if MNFLD == 'tsne':
-                print(100*'-')
-            print('inlier selected z encoding manifold computed')
-            print(100*'-')
-
-    # clustering dictionary
-    CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
-             'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
-             'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, random_state=SEED),
-             'dbscan': DBSCAN(eps=NC, min_samples=np.max([4, int(UNS/4)]), leaf_size=30)}
-    try:
-        CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d.zenc.inl.clst.npy' \
-                            % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED))
-        if VERBOSE:
-            print('inlier selected z encoding manifold clustering loaded from file')
-            print(100*'-')
-    except:
-        CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
-        np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d.zenc.inl.clst.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED), CLMSLZENC)
-        if VERBOSE:
-            print('inlier selected z encoding manifold clustering computed')
-            print(100*'-')
-
-    if CLST == 'dbscan':
-        NCL = np.unique(CLMSLZENC[CLMSLZENC > -1]).size
-    else:
-        NCL = NC
-
-    CLESFC = np.mean(np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NCL)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
-    CLMSFC = np.mean(np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NCL)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
-
-    CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
-    CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
-
-    CLCTN = np.array([np.mean(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)[CLMSLZENC == i], 0) for i in range(NCL)])
-    if MNFLD == 'tsne':
-        MNFLDS[MNFLD] = TSNE(n_components=ED, perplexity=int(NCL/NPH),
-                             early_exaggeration=24, learning_rate=200, n_iter=1000,
-                             verbose=False, n_jobs=THREADS, init=PCA(n_components=ED).fit_transform(CLCTN))
-    # MCLCTN = MNFLDS[MNFLD].fit_transform(CLCTN)
-    MCLCTN = TSNEINITPCA.transform(CLCTN)
-    CLC = SpectralClustering(n_jobs=THREADS, n_clusters=NPH, random_state=SEED).fit_predict(MCLCTN)
-    # CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN)
-    # CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(MCLCTN)
-    CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
-    CL[CLMSLZENC == -1] = -1
-    for i in range(NCL):
-        CL[CLMSLZENC == i] = CLC[i]
-    CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-    CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-    ICLCM = np.argsort(CLMM)
-    for i in range(NPH):
-        CL[CL == ICLCM[i]] = i+NPH
-    CL[CL > -1] -= NPH
-    CLMES = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-    CLMMS = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
-
-    CLB = np.array([[np.bincount(CL.reshape(UNH, UNT, UNS)[i, j][CL.reshape(UNH, UNT, UNS)[i, j] > -1],
-                                 minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
-    UTRANS = np.array([odr_fit(logistic, UT, CLB[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
-    UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
-    UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
-    UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
-    UICVAL = (UCVAL-UT[0])/(UT[-1]-UT[0])*(UNT-1)
-
-    if VERBOSE:
-        print('fit parameters calculated (t_c = a*|h-b|**c+d)')
-        print(100*'-')
-        print('| a | b | c | d |')
-        print(100*'-')
-        print(4*'%.2f ' % tuple(UCPOPT))
-        print(4*'%.2f ' % tuple(UCPERR))
-        print(100*'-')
-    with open(OUTPREF+'.out', 'a') as out:
-        out.write('# fit parameters calculated (t_c = a*|h-b|**c+d)\n')
-        out.write('# '+100*'-'+'\n')
-        out.write('# | a | b | c | d |\n')
-        out.write('# '+100*'-'+'\n')
-        out.write('# '+4*'%.2f ' % tuple(UCPOPT) +'\n')
-        out.write('# '+4*'%.2f ' % tuple(UCPERR) +'\n')
-        out.write('# ' + 100*'-' + '\n')
-
-    if PLOT:
-        fig = plt.figure()
-        if ED == 3:
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], MSLZENC[:, 2], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                    s=32, alpha=0.25, edgecolors='')
-        if ED == 2:
+    for i in range(2):
+        for j in range(2):
+            fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                    s=32, alpha=0.25, edgecolors='')
-        fig.savefig(OUTPREF+'.vae.emb.smpl.png')
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.xaxis.set_ticks_position('bottom')
+            ax.yaxis.set_ticks_position('left')
+            if i == 0:
+                ax.imshow(np.mean(SLZENC, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            if i == 1:
+                ax.imshow(np.std(SLZENC, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.arange(UT.size), minor=True)
+            ax.set_yticks(np.arange(UH.size), minor=True)
+            plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+            plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+            plt.xlabel('T')
+            plt.ylabel('H')
+            # plt.title('Ising Model Phase Diagram')
+            fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.png' % (i, j))
 
-        fig = plt.figure()
-        if ED == 3:
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1], MSLZENC[CLMSLZENC == -1, 2],
-                    c='c', s=32, alpha=1.0, edgecolors='')
-        elif ED == 2:
-            ax = fig.add_subplot(111)
-            ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1],
-                    c='c', s=32, alpha=1.0, edgecolors='')
-        for i in range(NCL):
-            if ED == 3:
-                ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
-                        c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[np.newaxis, :],
-                        s=32, alpha=0.25, edgecolors='')
-            if ED == 2:
-                ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1],
-                        c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[np.newaxis, :],
-                        s=32, alpha=0.25, edgecolors='')
-        fig.savefig(OUTPREF+'.vae.emb.clst.fc.png')
+    # # reduction dictionary
+    # MNFLDS = {'pca':PCA(n_components=ED),
+    #           'kpca':KernelPCA(n_components=ED, n_jobs=THREADS),
+    #           'isomap':Isomap(n_components=ED, n_jobs=THREADS),
+    #           'lle':LocallyLinearEmbedding(n_components=ED, n_jobs=THREADS),
+    #           'tsne':TSNE(n_components=ED, perplexity=UNS,
+    #                       early_exaggeration=24, learning_rate=200, n_iter=1000,
+    #                       verbose=VERBOSE, n_jobs=THREADS, init=TSNEINIT)}
 
-        fig = plt.figure()
-        if ED == 3:
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1], MSLZENC[CL == -1, 2],
-                    c='c', s=32, alpha=1.0, edgecolors='')
-        elif ED == 2:
-            ax = fig.add_subplot(111)
-            ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1],
-                    c='c', s=32, alpha=1.0, edgecolors='')
-        for i in range(NPH):
-            if ED == 3:
-                ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
-                        c=np.array(CM(SCALE(CLMMS[i], SLMS.reshape(-1))))[np.newaxis, :],
-                        s=32, alpha=0.25, edgecolors='')
-            if ED == 2:
-                ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1],
-                        c=np.array(CM(SCALE(CLMMS[i], SLMS.reshape(-1))))[np.newaxis, :],
-                        s=32, alpha=0.25, edgecolors='')
-        fig.savefig(OUTPREF+'.vae.emb.clst.rc.png')
+    # try:
+    #     MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.%d.zenc.inl.mfld.npy' \
+    #                       % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, AD, FFT, SEED))
+    #     if VERBOSE:
+    #         print('inlier selected z encoding manifold loaded from file')
+    #         print(100*'-')
+    # except:
+    #     MSLZENC = MNFLDS[MNFLD].fit_transform(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD))
+    #     np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%d.%d.%d.zenc.inl.mfld.npy' \
+    #             % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, AD, FFT, SEED), MSLZENC)
+    #     if VERBOSE:
+    #         if MNFLD == 'tsne':
+    #             print(100*'-')
+    #         print('inlier selected z encoding manifold computed')
+    #         print(100*'-')
 
-        fig = plt.figure()
-        if ED == 3:
-            ax = fig.add_subplot(111, projection='3d')
-            for i in range(NPH):
-                ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], MCLCTN[CLC == i, 2],
-                        c=np.array(CM(SCALE(CLMMFC[CLC == i], SLMS.reshape(-1)))),
-                        s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=4.0)
-        if ED == 2:
-            ax = fig.add_subplot(111)
-            for i in range(NPH):
-                ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1],
-                        c=np.array(CM(SCALE(CLMMFC[CLC == i], SLMS.reshape(-1)))),
-                        s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=4.0)
-        fig.savefig(OUTPREF+'.vae.emb.ld.png')
+    # # clustering dictionary
+    # CLSTS = {'agglomerative': AgglomerativeClustering(n_clusters=NC, linkage='ward'),
+    #          'kmeans': KMeans(n_jobs=THREADS, n_clusters=NC, init='k-means++'),
+    #          'spectral': SpectralClustering(n_jobs=THREADS, n_clusters=NC, random_state=SEED),
+    #          'dbscan': DBSCAN(eps=NC, min_samples=np.max([4, int(UNS/4)]), leaf_size=30)}
+    # try:
+    #     CLMSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d.zenc.inl.clst.npy' \
+    #                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED))
+    #     if VERBOSE:
+    #         print('inlier selected z encoding manifold clustering loaded from file')
+    #         print(100*'-')
+    # except:
+    #     CLMSLZENC = CLSTS[CLST].fit_predict(MSLZENC)
+    #     np.save(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d.zenc.inl.clst.npy' \
+    #             % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED), CLMSLZENC)
+    #     if VERBOSE:
+    #         print('inlier selected z encoding manifold clustering computed')
+    #         print(100*'-')
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(CLB, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.phase.png')
+    # if CLST == 'dbscan':
+    #     NCL = np.unique(CLMSLZENC[CLMSLZENC > -1]).size
+    # else:
+    #     NCL = NC
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(np.mean(TSNEINIT[:, 0].reshape(UNH, UNT, UNS), -1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.pca.0.png')
+    # CLESFC = np.mean(np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NCL)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
+    # CLMSFC = np.mean(np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(-1, NCL)])[CLMSLZENC+1].reshape(UNH, UNT, UNS), -1)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(np.mean(TSNEINIT[:, 1].reshape(UNH, UNT, UNS), -1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.pca.1.png')
+    # CLMEFC = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
+    # CLMMFC = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CLMSLZENC == i]) for i in range(NCL)])
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(SLSP, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.st.spheat.png')
+    # CLCTN = np.array([np.mean(SLZENC.reshape(UNH*UNT*UNS, len(EIND)*LD)[CLMSLZENC == i], 0) for i in range(NCL)])
+    # if MNFLD == 'tsne':
+    #     MNFLDS[MNFLD] = TSNE(n_components=ED, perplexity=int(NCL/NPH),
+    #                          early_exaggeration=24, learning_rate=200, n_iter=1000,
+    #                          verbose=False, n_jobs=THREADS, init=PCA(n_components=ED).fit_transform(CLCTN))
+    # # MCLCTN = MNFLDS[MNFLD].fit_transform(CLCTN)
+    # MCLCTN = TSNEINITPCA.transform(CLCTN)
+    # CLC = SpectralClustering(n_jobs=THREADS, n_clusters=NPH, random_state=SEED).fit_predict(MCLCTN)
+    # # CLC = KMeans(n_jobs=THREADS, n_clusters=NPH, init='k-means++').fit_predict(MCLCTN)
+    # # CLC = AgglomerativeClustering(n_clusters=NPH, linkage='ward').fit_predict(MCLCTN)
+    # CL = np.zeros(CLMSLZENC.shape, dtype=np.int32)
+    # CL[CLMSLZENC == -1] = -1
+    # for i in range(NCL):
+    #     CL[CLMSLZENC == i] = CLC[i]
+    # CLME = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    # CLMM = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    # ICLCM = np.argsort(CLMM)
+    # for i in range(NPH):
+    #     CL[CL == ICLCM[i]] = i+NPH
+    # CL[CL > -1] -= NPH
+    # CLMES = np.array([np.mean(SLES.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
+    # CLMMS = np.array([np.mean(SLMS.reshape(UNH*UNT*UNS)[CL == i]) for i in range(NPH)])
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(SLSU, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.st.magsus.png')
+    # CLB = np.array([[np.bincount(CL.reshape(UNH, UNT, UNS)[i, j][CL.reshape(UNH, UNT, UNS)[i, j] > -1],
+    #                              minlength=NPH) for j in range(UNT)] for i in range(UNH)])/UNS
+    # UTRANS = np.array([odr_fit(logistic, UT, CLB[i, :, 1], EPS*np.ones(UNT), (1, 2.5))[0][1] for i in range(UNH)])
+    # UITRANS = (UTRANS-UT[0])/(UT[-1]-UT[0])*(UNT-1)
+    # UCPOPT, UCPERR, UCDOM, UCVAL = odr_fit(absolute, UH, UTRANS, EPS*np.ones(UNT), (1.0, 0.0, 1.0, 2.5))
+    # UICDOM = (UCDOM-UH[0])/(UH[-1]-UH[0])*(UNH-1)
+    # UICVAL = (UCVAL-UT[0])/(UT[-1]-UT[0])*(UNT-1)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(SLEM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.st.ener.png')
+    # if VERBOSE:
+    #     print('fit parameters calculated (t_c = a*|h-b|**c+d)')
+    #     print(100*'-')
+    #     print('| a | b | c | d |')
+    #     print(100*'-')
+    #     print(4*'%.2f ' % tuple(UCPOPT))
+    #     print(4*'%.2f ' % tuple(UCPERR))
+    #     print(100*'-')
+    # with open(OUTPREF+'.out', 'a') as out:
+    #     out.write('# fit parameters calculated (t_c = a*|h-b|**c+d)\n')
+    #     out.write('# '+100*'-'+'\n')
+    #     out.write('# | a | b | c | d |\n')
+    #     out.write('# '+100*'-'+'\n')
+    #     out.write('# '+4*'%.2f ' % tuple(UCPOPT) +'\n')
+    #     out.write('# '+4*'%.2f ' % tuple(UCPERR) +'\n')
+    #     out.write('# ' + 100*'-' + '\n')
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.plot(UITRANS, np.arange(UNH), color='yellow')
-        ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
-        ax.imshow(SLMM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(UT.size), minor=True)
-        ax.set_yticks(np.arange(UH.size), minor=True)
-        plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
-        # plt.title('Ising Model Phase Diagram')
-        fig.savefig(OUTPREF+'.vae.diag.st.mag.png')
+    # if PLOT:
+    #     fig = plt.figure()
+    #     if ED == 3:
+    #         ax = fig.add_subplot(111, projection='3d')
+    #         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], MSLZENC[:, 2], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
+    #                 s=32, alpha=0.25, edgecolors='')
+    #     if ED == 2:
+    #         ax = fig.add_subplot(111)
+    #         ax.scatter(MSLZENC[:, 0], MSLZENC[:, 1], c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
+    #                 s=32, alpha=0.25, edgecolors='')
+    #     fig.savefig(OUTPREF+'.vae.emb.smpl.png')
+
+    #     fig = plt.figure()
+    #     if ED == 3:
+    #         ax = fig.add_subplot(111, projection='3d')
+    #         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1], MSLZENC[CLMSLZENC == -1, 2],
+    #                 c='c', s=32, alpha=1.0, edgecolors='')
+    #     elif ED == 2:
+    #         ax = fig.add_subplot(111)
+    #         ax.scatter(MSLZENC[CLMSLZENC == -1, 0], MSLZENC[CLMSLZENC == -1, 1],
+    #                 c='c', s=32, alpha=1.0, edgecolors='')
+    #     for i in range(NCL):
+    #         if ED == 3:
+    #             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1], MSLZENC[CLMSLZENC == i, 2],
+    #                     c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[np.newaxis, :],
+    #                     s=32, alpha=0.25, edgecolors='')
+    #         if ED == 2:
+    #             ax.scatter(MSLZENC[CLMSLZENC == i, 0], MSLZENC[CLMSLZENC == i, 1],
+    #                     c=np.array(CM(SCALE(CLMMFC[i], SLMS.reshape(-1))))[np.newaxis, :],
+    #                     s=32, alpha=0.25, edgecolors='')
+    #     fig.savefig(OUTPREF+'.vae.emb.clst.fc.png')
+
+    #     fig = plt.figure()
+    #     if ED == 3:
+    #         ax = fig.add_subplot(111, projection='3d')
+    #         ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1], MSLZENC[CL == -1, 2],
+    #                 c='c', s=32, alpha=1.0, edgecolors='')
+    #     elif ED == 2:
+    #         ax = fig.add_subplot(111)
+    #         ax.scatter(MSLZENC[CL == -1, 0], MSLZENC[CL == -1, 1],
+    #                 c='c', s=32, alpha=1.0, edgecolors='')
+    #     for i in range(NPH):
+    #         if ED == 3:
+    #             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1], MSLZENC[CL == i, 2],
+    #                     c=np.array(CM(SCALE(CLMMS[i], SLMS.reshape(-1))))[np.newaxis, :],
+    #                     s=32, alpha=0.25, edgecolors='')
+    #         if ED == 2:
+    #             ax.scatter(MSLZENC[CL == i, 0], MSLZENC[CL == i, 1],
+    #                     c=np.array(CM(SCALE(CLMMS[i], SLMS.reshape(-1))))[np.newaxis, :],
+    #                     s=32, alpha=0.25, edgecolors='')
+    #     fig.savefig(OUTPREF+'.vae.emb.clst.rc.png')
+
+    #     fig = plt.figure()
+    #     if ED == 3:
+    #         ax = fig.add_subplot(111, projection='3d')
+    #         for i in range(NPH):
+    #             ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1], MCLCTN[CLC == i, 2],
+    #                     c=np.array(CM(SCALE(CLMMFC[CLC == i], SLMS.reshape(-1)))),
+    #                     s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=4.0)
+    #     if ED == 2:
+    #         ax = fig.add_subplot(111)
+    #         for i in range(NPH):
+    #             ax.scatter(MCLCTN[CLC == i, 0], MCLCTN[CLC == i, 1],
+    #                     c=np.array(CM(SCALE(CLMMFC[CLC == i], SLMS.reshape(-1)))),
+    #                     s=256, alpha=1.0, edgecolors=CM(SCALE(CLMM[i], SLMS.reshape(-1))), linewidths=4.0)
+    #     fig.savefig(OUTPREF+'.vae.emb.ld.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(CLB, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.phase.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(np.mean(TSNEINIT[:, 0].reshape(UNH, UNT, UNS), -1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.pca.0.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(np.mean(TSNEINIT[:, 1].reshape(UNH, UNT, UNS), -1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.pca.1.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(SLSP, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.st.spheat.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(SLSU, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.st.magsus.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(SLEM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.st.ener.png')
+
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.xaxis.set_ticks_position('bottom')
+    #     ax.yaxis.set_ticks_position('left')
+    #     ax.plot(UITRANS, np.arange(UNH), color='yellow')
+    #     ax.plot(UICVAL, UICDOM, color='yellow', linestyle='--')
+    #     ax.imshow(SLMM, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+    #     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+    #     ax.set_xticks(np.arange(UT.size), minor=True)
+    #     ax.set_yticks(np.arange(UH.size), minor=True)
+    #     plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+    #     plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+    #     plt.xlabel('T')
+    #     plt.ylabel('H')
+    #     # plt.title('Ising Model Phase Diagram')
+    #     fig.savefig(OUTPREF+'.vae.diag.st.mag.png')
