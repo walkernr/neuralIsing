@@ -540,8 +540,10 @@ if __name__ == '__main__':
         out.write('# total: %f\n' % np.sum(SLZEVAR))
         out.write('# ' + 100*'-' + '\n')
 
+    DIAGLV = SCLRS['minmax'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, LD)).reshape(UNH, UNT, UNS, LD)
+    DIAGMV = SCLRS['minmax'].fit_transform(SLDAT.reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2)
     for i in range(2):
-        for j in range(2):
+        for j in range(LD):
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.spines['right'].set_visible(False)
@@ -549,9 +551,9 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(np.mean(SLZENC, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(np.mean(DIAGLV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
             if i == 1:
-                ax.imshow(np.std(SLZENC, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(np.std(DIAGLV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
@@ -561,6 +563,27 @@ if __name__ == '__main__':
             plt.ylabel('H')
             # plt.title('Ising Model Phase Diagram')
             fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.png' % (i, j))
+    for i in range(2):
+        for j in range(2):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.xaxis.set_ticks_position('bottom')
+            ax.yaxis.set_ticks_position('left')
+            if i == 0:
+                ax.imshow(np.mean(DIAGMV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            if i == 1:
+                ax.imshow(np.std(DIAGMV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.arange(UT.size), minor=True)
+            ax.set_yticks(np.arange(UH.size), minor=True)
+            plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+            plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+            plt.xlabel('T')
+            plt.ylabel('H')
+            # plt.title('Ising Model Phase Diagram')
+            fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
 
     # # reduction dictionary
     # MNFLDS = {'pca':PCA(n_components=ED),
