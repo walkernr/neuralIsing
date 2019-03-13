@@ -597,7 +597,7 @@ if __name__ == '__main__':
             if i == 0:
                 ax.imshow(np.abs(np.mean(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower', cmap=CM)
             if i == 1:
-                ax.imshow(np.abs(np.std(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(np.abs(np.std(DIAGMV, 2)[:, :, j]-np.std(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower', cmap=CM)
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
