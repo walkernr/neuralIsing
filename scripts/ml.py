@@ -611,6 +611,17 @@ if __name__ == '__main__':
             plt.ylabel('H')
             # plt.title('Ising Model Phase Diagram')
             fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            if i == 0:
+                ax.scatter(DIAGMMV[:, :, j].reshape(-1), DIAGMLV[:, :, j].reshape(-1),
+                           c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                           s=32, alpha=0.25, edgecolors='')
+            if i == 0:
+                ax.scatter(DIAGSMV[:, :, j].reshape(-1), DIAGSLV[:, :, j].reshape(-1),
+                           c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                           s=32, alpha=0.25, edgecolors='')
+            fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
 
     # # reduction dictionary
     # MNFLDS = {'pca':PCA(n_components=ED),
