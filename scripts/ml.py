@@ -540,10 +540,12 @@ if __name__ == '__main__':
         out.write('# total: %f\n' % np.sum(SLZEVAR))
         out.write('# ' + 100*'-' + '\n')
 
-    DIAGLV = SCLRS['minmax'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)).reshape(UNH, UNT, UNS, 2*LD)
-    if np.mean(DIAGLV[int(UNH/2), 0, :, 1]) > np.mean(DIAGLV[int(UNH/2), -1, :, 1]):
-        DIAGLV[:, :, :, 1] = 1-DIAGLV[:, :, :, 1]
-    DIAGMV = SCLRS['minmax'].fit_transform(SLDAT[:, :, :, (1, 0)].reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2)
+    DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)).reshape(UNH, UNT, UNS, 2*LD), 2)
+    if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
+        DIAGMLV[:, :, :, 1] = 1-DIAGMLV[:, :, :, 1]
+    DIAGSLV = SCLRS['minmax'].fit_transform(np.std(SLZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2*LD)).reshape(UNH, UNT, 2*LD)
+    DIAGMMV = np.mean(SCLRS['minmax'].fit_transform(SLDAT[:, :, :, (1, 0)].reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2), 2)
+    DIAGSMV = SCLRS['minmax'].fit_transform(np.std(SLZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
     for i in range(2):
         for j in range(2*LD):
             fig = plt.figure()
@@ -553,10 +555,9 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(np.mean(DIAGLV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(DIAGMLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
             if i == 1:
-                ax.imshow(np.std(DIAGLV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2),
-                          aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(DIAGSLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
@@ -575,10 +576,9 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(np.mean(DIAGMV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(DIAGMMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
             if i == 1:
-                ax.imshow(np.std(DIAGMV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2),
-                          aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(DIAGSMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
@@ -597,11 +597,10 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(CM(np.abs(np.mean(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j])),
+                ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])),
                           aspect='equal', interpolation='none', origin='lower')
             if i == 1:
-                ax.imshow(CM(np.abs(np.std(DIAGMV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2)-
-                             np.std(DIAGLV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2))),
+                ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSLV[:, :, j])),
                           aspect='equal', interpolation='none', origin='lower')
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
