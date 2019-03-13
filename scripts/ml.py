@@ -541,7 +541,7 @@ if __name__ == '__main__':
         out.write('# ' + 100*'-' + '\n')
 
     DIAGLV = SCLRS['minmax'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)).reshape(UNH, UNT, UNS, 2*LD)
-    DIAGMV = SCLRS['minmax'].fit_transform(SLDAT.reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2)
+    DIAGMV = SCLRS['minmax'].fit_transform(SLDAT[:, :, :, :2].reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2)
     for i in range(2):
         for j in range(LD):
             fig = plt.figure()
