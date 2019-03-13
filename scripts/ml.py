@@ -617,7 +617,7 @@ if __name__ == '__main__':
                 ax.scatter(DIAGMMV[:, :, j].reshape(-1), DIAGMLV[:, :, j].reshape(-1),
                            c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                            s=32, alpha=0.25, edgecolors='')
-            if i == 0:
+            if i == 1:
                 ax.scatter(DIAGSMV[:, :, j].reshape(-1), DIAGSLV[:, :, j].reshape(-1),
                            c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                            s=32, alpha=0.25, edgecolors='')
