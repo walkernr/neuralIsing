@@ -616,11 +616,11 @@ if __name__ == '__main__':
             if i == 0:
                 ax.scatter(DIAGMMV[:, :, j].reshape(-1), DIAGMLV[:, :, j].reshape(-1),
                            c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                           s=32, alpha=0.25, edgecolors='')
+                           s=64, alpha=0.5, edgecolors='')
             if i == 1:
                 ax.scatter(DIAGSMV[:, :, j].reshape(-1), DIAGSLV[:, :, j].reshape(-1),
                            c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                           s=32, alpha=0.25, edgecolors='')
+                           s=64, alpha=0.5, edgecolors='')
             fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
 
     # # reduction dictionary
