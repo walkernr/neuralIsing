@@ -545,7 +545,7 @@ if __name__ == '__main__':
         DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
     DIAGSLV = SCLRS['minmax'].fit_transform(np.std(SLZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2*LD)).reshape(UNH, UNT, 2*LD)
     DIAGMMV = np.mean(SCLRS['minmax'].fit_transform(SLDAT[:, :, :, (1, 0)].reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2), 2)
-    DIAGSMV = SCLRS['minmax'].fit_transform(np.std(SLZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
+    DIAGSMV = SCLRS['minmax'].fit_transform(np.std(SLDAT[:, :, :, (1, 0)]/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
     for i in range(2):
         for j in range(2*LD):
             fig = plt.figure()
