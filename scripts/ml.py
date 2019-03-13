@@ -553,10 +553,10 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(np.mean(DIAGLV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(CM(np.mean(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower')
             if i == 1:
-                ax.imshow(np.std(DIAGLV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2),
-                          aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(CM(np.std(DIAGLV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2)),
+                          aspect='equal', interpolation='none', origin='lower')
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
@@ -575,10 +575,10 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(np.mean(DIAGMV, 2)[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(CM(np.mean(DIAGMV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower')
             if i == 1:
-                ax.imshow(np.std(DIAGMV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2),
-                          aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(CM(np.std(DIAGMV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2)),
+                          aspect='equal', interpolation='none', origin='lower')
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
@@ -597,9 +597,12 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(np.abs(np.mean(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(CM(np.abs(np.mean(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j])),
+                          aspect='equal', interpolation='none', origin='lower')
             if i == 1:
-                ax.imshow(np.abs(np.std(DIAGMV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2)-np.std(DIAGLV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2)), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.imshow(CM(np.abs(np.std(DIAGMV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2)-
+                             np.std(DIAGLV[:, :, :, j]/UT[np.newaxis, :, np.newaxis], 2))),
+                          aspect='equal', interpolation='none', origin='lower')
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
