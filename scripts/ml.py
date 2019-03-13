@@ -586,6 +586,27 @@ if __name__ == '__main__':
             plt.ylabel('H')
             # plt.title('Ising Model Phase Diagram')
             fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
+    for i in range(2):
+        for j in range(2):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.xaxis.set_ticks_position('bottom')
+            ax.yaxis.set_ticks_position('left')
+            if i == 0:
+                ax.imshow(np.abs(np.mean(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            if i == 1:
+                ax.imshow(np.abs(np.std(DIAGMV, 2)[:, :, j]-np.mean(DIAGLV, 2)[:, :, j]), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.arange(UT.size), minor=True)
+            ax.set_yticks(np.arange(UH.size), minor=True)
+            plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+            plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+            plt.xlabel('T')
+            plt.ylabel('H')
+            # plt.title('Ising Model Phase Diagram')
+            fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
 
     # # reduction dictionary
     # MNFLDS = {'pca':PCA(n_components=ED),
