@@ -545,7 +545,7 @@ if __name__ == '__main__':
         DIAGLV[:, :, :, 1] = 1-DIAGLV[:, :, :, 1]
     DIAGMV = SCLRS['minmax'].fit_transform(SLDAT[:, :, :, :2].reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2)
     for i in range(2):
-        for j in range(LD):
+        for j in range(2*LD):
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.spines['right'].set_visible(False)
