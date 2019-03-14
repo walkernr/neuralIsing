@@ -543,7 +543,7 @@ if __name__ == '__main__':
     DIAGMLV = np.mean(SCLRS['tanh'].fit_transform(SLZENC.reshape(UNH*UNT*UNS, 2*LD)).reshape(UNH, UNT, UNS, 2*LD), 2)
     if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
         DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
-    DIAGSLV = SCLRS['tanh'].fit_transform(np.std(SLZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2*LD)).reshape(UNH, UNT, 2*LD)
+    DIAGSLV = SCLRS['minmax'].fit_transform(np.std(SLZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2*LD)).reshape(UNH, UNT, 2*LD)
     DIAGMMV = np.mean(SCLRS['minmax'].fit_transform(SLDAT[:, :, :, (1, 0)].reshape(UNH*UNT*UNS, 2)).reshape(UNH, UNT, UNS, 2), 2)
     DIAGSMV = SCLRS['minmax'].fit_transform(np.std(SLDAT[:, :, :, (1, 0)]/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
     for i in range(2):
