@@ -299,9 +299,6 @@ if __name__ == '__main__':
         NC = int(NC)
         NCS = '%d' % NC
     CWD = os.getcwd()
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d' % \
-              (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED)
-    write_specs()
     EPS = 0.025
     # number of phases
     NPH = 3
@@ -354,6 +351,10 @@ if __name__ == '__main__':
         plt.rcParams.update(PPARAMS)
         SCALE = lambda a, b: (a-np.min(b))/(np.max(b)-np.min(b))
         CM = plt.get_cmap('plasma')
+
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.%s.%s.%d.%s.%s.%d.%d.%d' % \
+              (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, EV, MNFLD, ED, CLST, NCS, AD, FFT, SEED)
+    write_specs()
 
     try:
         CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
