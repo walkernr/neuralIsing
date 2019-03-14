@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument('-fft', '--fft', help='use fft of spin data', action='store_true')
     parser.add_argument('-ad', '--anomaly_detection', help='anomaly detection for embedding', action='store_true')
     parser.add_argument('-nt', '--threads', help='number of threads',
-                        type=int, default=16)
+                        type=int, default=20)
     parser.add_argument('-n', '--name', help='simulation name',
                             type=str, default='ising_init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size (side length)',
@@ -597,11 +597,9 @@ if __name__ == '__main__':
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
             if i == 0:
-                ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])),
-                          aspect='equal', interpolation='none', origin='lower')
+                ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
             if i == 1:
-                ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSLV[:, :, j])),
-                          aspect='equal', interpolation='none', origin='lower')
+                ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(UT.size), minor=True)
             ax.set_yticks(np.arange(UH.size), minor=True)
