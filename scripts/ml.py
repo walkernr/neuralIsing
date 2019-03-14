@@ -319,6 +319,8 @@ if __name__ == '__main__':
         os.environ['openmp'] = 'True'
     else:
         THREADS = 1
+    if GPU:
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     from keras.models import Model
     from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
     from keras.losses import binary_crossentropy, mse
@@ -360,14 +362,14 @@ if __name__ == '__main__':
         CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
         CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
-            print(100*'-')
+            # print(100*'-')
             print('selected classification samples loaded from file')
             print(100*'-')
     except:
         DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
         DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
         if VERBOSE:
-            print(100*'-')
+            # print(100*'-')
             print('full dataset loaded from file')
             print(100*'-')
         CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
@@ -443,7 +445,7 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.cnn2d.%s.%s.%d.%d.%.0e.%d.%d.vae.log.csv' \
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, FFT, SEED), append=True, separator=',')
         TRN, VAL = train_test_split(SCDMP, test_size=0.25, shuffle=True)
-        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=SNH,
+        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=256,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, History()])
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
