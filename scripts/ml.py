@@ -574,8 +574,8 @@ if __name__ == '__main__':
     SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), np.square(UT[np.newaxis, :]))
 
     if PLOT:
-        DIAGMMV = np.concatenate((SLMM, SLEM), axis=-1)
-        DIAGSMV = np.concatenate((SLSU, SLSP), axis=-1)
+        DIAGMMV = np.stack((SLMM, SLEM), axis=-1)
+        DIAGSMV = np.stack((SLSU, SLSP), axis=-1)
 
         DIAGMLV = np.mean(SCLRS['tanh'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
         if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
