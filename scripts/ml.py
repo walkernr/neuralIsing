@@ -98,7 +98,7 @@ def write_specs():
         print(100*'-')
     with open(OUTPREF+'.out', 'w') as out:
         out.write(100*'-' + '\n')
-        out.write(input summary\n')
+        out.write('input summary\n')
         out.write(100*'-' + '\n')
         out.write('plot:                      %d\n' % PLOT)
         out.write('parallel:                  %d\n' % PARALLEL)
