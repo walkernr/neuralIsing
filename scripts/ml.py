@@ -574,10 +574,12 @@ if __name__ == '__main__':
     SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), np.square(UT[np.newaxis, :]))
 
     if PLOT:
-        DIAGMMV = np.stack((SLMM, SLEM), axis=-1)
-        DIAGSMV = np.stack((SLSU, SLSP), axis=-1)
+        DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((SLMM, SLEM), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
+        DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SLSU, SLSP), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
 
         DIAGMLV = np.mean(SCLRS['tanh'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
+        if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
+            DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
         if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
             DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
         DIAGSLV = SCLRS['tanh'].fit_transform(np.var(SLPZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
