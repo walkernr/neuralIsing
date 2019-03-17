@@ -577,12 +577,12 @@ if __name__ == '__main__':
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((SLMM, SLEM), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SLSU, SLSP), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
 
-        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
+        DIAGMLV = np.mean(SCLRS['tanh'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
         if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
             DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
         if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
             DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
-        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
+        DIAGSLV = SCLRS['tanh'].fit_transform(np.var(SLPZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
 
         for i in range(2):
             for j in range(ED):
