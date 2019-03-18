@@ -577,12 +577,12 @@ if __name__ == '__main__':
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((SLMM, SLEM), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SLSU, SLSP), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
 
-        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
+        DIAGMLV = np.arctanh(np.mean(SCLRS['minmax'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2))
         if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
             DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
         if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
             DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
-        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
+        DIAGSLV = np.arctanh(SCLRS['minmax'].fit_transform(np.var(SLPZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED))
 
         for i in range(2):
             for j in range(ED):
@@ -650,11 +650,11 @@ if __name__ == '__main__':
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 if i == 0:
-                    ax.scatter(DIAGMMV[:, :, j].reshape(-1), DIAGMLV[:, :, j].reshape(-1),
-                            c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                            s=64, alpha=0.5, edgecolors='')
+                    ax.scatter(DIAGMLV[:, :, j].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
+                               c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                               s=64, alpha=0.5, edgecolors='')
                 if i == 1:
-                    ax.scatter(DIAGSMV[:, :, j].reshape(-1), DIAGSLV[:, :, j].reshape(-1),
-                            c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                            s=64, alpha=0.5, edgecolors='')
+                    ax.scatter(DIAGSLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
+                               c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                               s=64, alpha=0.5, edgecolors='')
                 fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
