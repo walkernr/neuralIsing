@@ -425,9 +425,10 @@ if __name__ == '__main__':
             print(100*'-')
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.vae.log.csv'
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), append=True, separator=',')
+        LR_DECAY = ReduceLROnPlateau(monitor='val_loss', patience=8, verbose=VERBOSE)
         TRN, VAL = train_test_split(SCDMP, test_size=0.25, shuffle=True)
         VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=SNT,
-                shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, History()])
+                shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
         VLOSS = VAE.history.history['val_loss']
