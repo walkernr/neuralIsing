@@ -574,6 +574,19 @@ if __name__ == '__main__':
     SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), np.square(UT[np.newaxis, :]))
 
     if PLOT:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.scatter(SLPZENC[:, :, :, 0].reshape(-1), SLPZENC[:, :, :, 1].reshape(-1),
+                   c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
+                   s=64, alpha=0.5, edgecolors='')
+        plt.xlabel('mu')
+        plt.ylabel('sigma')
+        fig.savefig(OUTPREF+'.vae.prj.ld.png')
+
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((SLMM, SLEM), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SLSU, SLSP), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
 
@@ -603,7 +616,6 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                # plt.title('Ising Model Phase Diagram')
                 fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.png' % (i, j))
         for i in range(2):
             for j in range(ED):
@@ -624,7 +636,6 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                # plt.title('Ising Model Phase Diagram')
                 fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
         for i in range(2):
             for j in range(ED):
@@ -645,7 +656,6 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                # plt.title('Ising Model Phase Diagram')
                 fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
@@ -653,8 +663,20 @@ if __name__ == '__main__':
                     ax.scatter(DIAGMLV[:, :, j].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
                                c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
+                    if j == 0:
+                        plt.xlabel('mu')
+                        plt.ylabel('M')
+                    if j == 1:
+                        plt.xlabel('sigma')
+                        plt.ylabel('E')
                 if i == 1:
                     ax.scatter(DIAGSLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
                                c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
+                    if j == 0:
+                        plt.xlabel('std(mu/T)')
+                        plt.ylabel('std(M/T)')
+                    if j == 1:
+                        plt.xlabel('std(sigma/T)')
+                        plt.ylabel('std(E/T)')
                 fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
