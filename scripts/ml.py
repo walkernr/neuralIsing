@@ -372,7 +372,14 @@ if __name__ == '__main__':
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNH, SNT = CH.size, CT.size
+    ES = CDAT[:, :, :, 0]
+    MS = CDAT[:, :, :, 1]
     NCH = 1
+
+    EM = np.mean(ES, -1)
+    SP = np.divide(np.mean(np.square(ES), -1)-np.square(EM), np.square(UT[np.newaxis, :]))
+    MM = np.mean(SLMS, -1)
+    SU = np.divide(np.mean(np.square(MS), -1)-np.square(MM), np.square(UT[np.newaxis, :]))
 
     # scaler dictionary
     SCLRS = {'minmax':MinMaxScaler(feature_range=(0, 1)),
@@ -546,6 +553,138 @@ if __name__ == '__main__':
             out.write(LD*'%f ' % tuple(VZENC[i, :]) + '\n')
             out.write(100*'-'+'\n')
 
+    if PLOT:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.scatter(PZENC[:, :, :, 0, 0].reshape(-1), PZENC[:, :, :, 1, 0].reshape(-1),
+                   c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
+                   s=64, alpha=0.5, edgecolors='')
+        plt.xlabel('mu')
+        plt.ylabel('sigma')
+        fig.savefig(OUTPREF+'.vae.prj.ld.png')
+
+        DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+        DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+
+        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(ZENC[:, :, :, :, :].reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
+        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC[:, :, :, :, :]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED, LD)).reshape(SNH, SNT, ED, LD)
+
+        DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(PZENC[:, :, :, :, 0].reshape(SNH*SNT*SNS, ED)).reshape(SNH, SNT, SNS, ED), 2)
+        if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
+            DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
+        if np.mean(DIAGMLV[int(SNH/2), 0, 1]) > np.mean(DIAGMLV[int(SNH/2), -1, 1]):
+            DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
+        DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC[:, :, :, :, 0]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED)).reshape(SNH, SNT, ED)
+
+        for i in range(2):
+            for j in range(ED):
+                for k in range(LD):
+                    fig = plt.figure()
+                    ax = fig.add_subplot(111)
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['top'].set_visible(False)
+                    ax.xaxis.set_ticks_position('bottom')
+                    ax.yaxis.set_ticks_position('left')
+                    if i == 0:
+                        ax.imshow(DIAGMLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    if i == 1:
+                        ax.imshow(DIAGSLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                    ax.set_xticks(np.arange(CT.size), minor=True)
+                    ax.set_yticks(np.arange(CH.size), minor=True)
+                    plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+                    plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
+                    plt.xlabel('T')
+                    plt.ylabel('H')
+                    fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
+        for i in range(2):
+            for j in range(ED):
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                if i == 0:
+                    ax.imshow(DIAGMLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                if i == 1:
+                    ax.imshow(DIAGSPLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+                plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
+                plt.xlabel('T')
+                plt.ylabel('H')
+                fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.png' % (i, j))
+        for i in range(2):
+            for j in range(ED):
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                if i == 0:
+                    ax.imshow(DIAGMMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                if i == 1:
+                    ax.imshow(DIAGSMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+                plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
+                plt.xlabel('T')
+                plt.ylabel('H')
+                fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
+        for i in range(2):
+            for j in range(ED):
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                if i == 0:
+                    ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
+                if i == 1:
+                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSPLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+                plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
+                plt.xlabel('T')
+                plt.ylabel('H')
+                fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                if i == 0:
+                    ax.scatter(DIAGMLV[:, :, j].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
+                               c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                               s=64, alpha=0.5, edgecolors='')
+                    if j == 0:
+                        plt.xlabel('mu')
+                        plt.ylabel('M')
+                    if j == 1:
+                        plt.xlabel('sigma')
+                        plt.ylabel('E')
+                if i == 1:
+                    ax.scatter(DIAGSPLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
+                               c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                               s=64, alpha=0.5, edgecolors='')
+                    if j == 0:
+                        plt.xlabel('std(mu/T)')
+                        plt.ylabel('std(M/T)')
+                    if j == 1:
+                        plt.xlabel('std(sigma/T)')
+                        plt.ylabel('std(E/T)')
+                fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
+
     try:
         SLPZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.zenc.pca.prj.inl.npy' \
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, SEED))
@@ -573,135 +712,3 @@ if __name__ == '__main__':
     SLSP = np.divide(np.mean(np.square(SLES), -1)-np.square(SLEM), np.square(UT[np.newaxis, :]))
     SLMM = np.mean(SLMS, -1)
     SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), np.square(UT[np.newaxis, :]))
-
-    if PLOT:
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.scatter(SLPZENC[:, :, :, 0].reshape(-1), SLPZENC[:, :, :, 1].reshape(-1),
-                   c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=64, alpha=0.5, edgecolors='')
-        plt.xlabel('mu')
-        plt.ylabel('sigma')
-        fig.savefig(OUTPREF+'.vae.prj.ld.png')
-
-        DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((SLMM, SLEM), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
-        DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SLSU, SLSP), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
-
-        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC[:, :, :, :, :].reshape(UNH*UNT*UNS, ED*LD)).reshape(UNH, UNT, UNS, ED, LD), 2)
-        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC[:, :, :, :, :]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED, LD)).reshape(UNH, UNT, ED, LD)
-
-        DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC[:, :, :, :, 0].reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
-        if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
-            DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
-        if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
-            DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
-        DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC[:, :, :, :, 0]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
-
-        for i in range(2):
-            for j in range(ED):
-                for k in range(LD):
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.spines['right'].set_visible(False)
-                    ax.spines['top'].set_visible(False)
-                    ax.xaxis.set_ticks_position('bottom')
-                    ax.yaxis.set_ticks_position('left')
-                    if i == 0:
-                        ax.imshow(DIAGMLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    if i == 1:
-                        ax.imshow(DIAGSLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                    ax.set_xticks(np.arange(UT.size), minor=True)
-                    ax.set_yticks(np.arange(UH.size), minor=True)
-                    plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-                    plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-                    plt.xlabel('T')
-                    plt.ylabel('H')
-                    fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
-        for i in range(2):
-            for j in range(ED):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    ax.imshow(DIAGMLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                if i == 1:
-                    ax.imshow(DIAGSPLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(UT.size), minor=True)
-                ax.set_yticks(np.arange(UH.size), minor=True)
-                plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-                plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-                plt.xlabel('T')
-                plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.png' % (i, j))
-        for i in range(2):
-            for j in range(ED):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    ax.imshow(DIAGMMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                if i == 1:
-                    ax.imshow(DIAGSMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(UT.size), minor=True)
-                ax.set_yticks(np.arange(UH.size), minor=True)
-                plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-                plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-                plt.xlabel('T')
-                plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
-        for i in range(2):
-            for j in range(ED):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
-                if i == 1:
-                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSPLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(UT.size), minor=True)
-                ax.set_yticks(np.arange(UH.size), minor=True)
-                plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
-                plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
-                plt.xlabel('T')
-                plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                if i == 0:
-                    ax.scatter(DIAGMLV[:, :, j].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
-                               c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                               s=64, alpha=0.5, edgecolors='')
-                    if j == 0:
-                        plt.xlabel('mu')
-                        plt.ylabel('M')
-                    if j == 1:
-                        plt.xlabel('sigma')
-                        plt.ylabel('E')
-                if i == 1:
-                    ax.scatter(DIAGSPLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
-                               c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                               s=64, alpha=0.5, edgecolors='')
-                    if j == 0:
-                        plt.xlabel('std(mu/T)')
-                        plt.ylabel('std(M/T)')
-                    if j == 1:
-                        plt.xlabel('std(sigma/T)')
-                        plt.ylabel('std(E/T)')
-                fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
