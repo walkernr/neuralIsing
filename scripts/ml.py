@@ -378,7 +378,7 @@ if __name__ == '__main__':
 
     EM = np.mean(ES, -1)
     SP = np.divide(np.mean(np.square(ES), -1)-np.square(EM), np.square(CT[np.newaxis, :]))
-    MM = np.mean(SLMS, -1)
+    MM = np.mean(MS, -1)
     SU = np.divide(np.mean(np.square(MS), -1)-np.square(MM), np.square(CT[np.newaxis, :]))
 
     # scaler dictionary
