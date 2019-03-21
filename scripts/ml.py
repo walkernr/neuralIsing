@@ -488,11 +488,11 @@ if __name__ == '__main__':
         VZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.var.npy'
                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
         if VERBOSE:
-            print('pca reduction of z encodings to 2 dimensions loaded from file')
+            print('pca projections of z encodings  loaded from file')
             print(100*'-')
     except:
         if VERBOSE:
-            print('pca reducing z encodings to 2 dimensions')
+            print('pca projecting z encodings')
             print(100*'-')
         PCAZENC = PCA(n_components=LD)
         PZENC = np.zeros((SNH*SNT*SNS, ED, LD))
@@ -503,7 +503,7 @@ if __name__ == '__main__':
             CZENC[i, :, :] = PCAZENC.components_
             VZENC[i, :] = PCAZENC.explained_variance_ratio_
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.prj.npy'
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), PZENC.reshape(SNH, SNT, SNS, LD))
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), PZENC.reshape(SNH, SNT, SNS, ED, LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.cmp.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), CZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.var.npy'
