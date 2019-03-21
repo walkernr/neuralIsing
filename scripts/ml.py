@@ -251,7 +251,7 @@ def random_selection(dmp, dat, intrvl, ns):
 def inlier_selection(dmp, dat, intrvl, ns):
     rdmp = dmp[::intrvl, ::intrvl]
     rdat = dat[::intrvl, ::intrvl]
-    nh, nt, _, _ = rdmp.shape
+    nh, nt, _, _, _ = rdmp.shape
     if AD:
         lof = LocalOutlierFactor(contamination='auto', n_jobs=THREADS)
     idat = np.zeros((nh, nt, ns), dtype=np.uint16)
@@ -261,7 +261,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
     for i in tqdm(range(nh), disable=not VERBOSE):
         for j in tqdm(range(nt), disable=not VERBOSE):
                 if AD:
-                    fpred = lof.fit_predict(rdmp[i, j])
+                    fpred = lof.fit_predict(rdmp[i, j, :, 0])
                     try:
                         idat[i, j] = np.random.choice(np.where(fpred==1)[0], size=ns, replace=False)
                     except:
@@ -270,8 +270,8 @@ def inlier_selection(dmp, dat, intrvl, ns):
                     idat[i, j] = np.random.permutation(rdat[i, j].shape[0])[:ns]
     if VERBOSE:
         print('\n'+100*'-')
-    sldmp = np.array([[rdmp[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
-    sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
+    sldmp = np.array([[rdmp[i, j, idat[i, j], :, :] for j in range(nt)] for i in range(nh)])
+    sldat = np.array([[rdat[i, j, idat[i, j], :, :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
 
 
@@ -463,7 +463,7 @@ if __name__ == '__main__':
 
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.npy'
-                       % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 2, LD)
+                       % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, ED, LD)
         if VERBOSE:
             print('z encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -474,7 +474,7 @@ if __name__ == '__main__':
         ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)[:, :2, :]
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.npy'
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), ZENC.reshape(SNH, SNT, SNS, 2, LD))
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), ZENC.reshape(SNH, SNT, SNS, ED, LD))
         if VERBOSE:
             print(100*'-')
             print('z encodings of scaled selected classification samples predicted')
@@ -482,7 +482,7 @@ if __name__ == '__main__':
 
     try:
         PZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.prj.npy'
-                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, 2)
+                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, ED, LD)
         CZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.cmp.npy'
                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
         VZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.var.npy'
@@ -495,15 +495,15 @@ if __name__ == '__main__':
             print('pca reducing z encodings to 2 dimensions')
             print(100*'-')
         PCAZENC = PCA(n_components=LD)
-        PZENC = np.zeros((SNH*SNT*SNS, ED))
+        PZENC = np.zeros((SNH*SNT*SNS, ED, LD))
         CZENC = np.zeros((ED, LD, LD))
         VZENC = np.zeros((ED, LD))
         for i in range(ED):
-            PZENC[:, i] = PCAZENC.fit_transform(ZENC[:, i, :])[:, 0]
+            PZENC[:, i, :] = PCAZENC.fit_transform(ZENC[:, i, :])
             CZENC[i, :, :] = PCAZENC.components_
             VZENC[i, :] = PCAZENC.explained_variance_ratio_
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.prj.npy'
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), PZENC.reshape(SNH, SNT, SNS, 2))
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), PZENC.reshape(SNH, SNT, SNS, LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.cmp.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), CZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.var.npy'
@@ -555,7 +555,7 @@ if __name__ == '__main__':
             print('inlier selected z encodings loaded from file')
             print(100*'-')
     except:
-        SLPZENC, SLDAT = inlier_selection(PZENC.reshape(SNH, SNT, SNS, ED), CDAT, UNI, UNS)
+        SLPZENC, SLDAT = inlier_selection(PZENC.reshape(SNH, SNT, SNS, ED, LD), CDAT, UNI, UNS)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.zenc.pca.prj.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, SEED), SLPZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.dat.inl.npy' \
@@ -591,13 +591,37 @@ if __name__ == '__main__':
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((SLMM, SLEM), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SLSU, SLSP), axis=-1).reshape(UNH*UNT, 2)).reshape(UNH, UNT, 2)
 
-        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC.reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
+        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC[:, :, :, :, :].reshape(UNH*UNT*UNS, ED*LD)).reshape(UNH, UNT, UNS, ED, LD), 2)
+        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC[:, :, :, :, :]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED, LD)).reshape(UNH, UNT, ED, LD)
+
+        DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(SLPZENC[:, :, :, :, 0].reshape(UNH*UNT*UNS, ED)).reshape(UNH, UNT, UNS, ED), 2)
         if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
             DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
         if np.mean(DIAGMLV[int(UNH/2), 0, 1]) > np.mean(DIAGMLV[int(UNH/2), -1, 1]):
             DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
-        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC/UT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
+        DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(SLPZENC[:, :, :, :, 0]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(UNH*UNT, ED)).reshape(UNH, UNT, ED)
 
+        for i in range(2):
+            for j in range(ED):
+                for k in range(LD):
+                    fig = plt.figure()
+                    ax = fig.add_subplot(111)
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['top'].set_visible(False)
+                    ax.xaxis.set_ticks_position('bottom')
+                    ax.yaxis.set_ticks_position('left')
+                    if i == 0:
+                        ax.imshow(DIAGMLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    if i == 1:
+                        ax.imshow(DIAGSLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                    ax.set_xticks(np.arange(UT.size), minor=True)
+                    ax.set_yticks(np.arange(UH.size), minor=True)
+                    plt.xticks(np.arange(UT.size)[::4], np.round(UT, 2)[::4], rotation=-60)
+                    plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
+                    plt.xlabel('T')
+                    plt.ylabel('H')
+                    fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
         for i in range(2):
             for j in range(ED):
                 fig = plt.figure()
@@ -609,7 +633,7 @@ if __name__ == '__main__':
                 if i == 0:
                     ax.imshow(DIAGMLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 if i == 1:
-                    ax.imshow(DIAGSLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.imshow(DIAGSPLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                 ax.set_xticks(np.arange(UT.size), minor=True)
                 ax.set_yticks(np.arange(UH.size), minor=True)
@@ -617,7 +641,7 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(UT.size)[::4], np.round(UH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.png' % (i, j))
+                fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.png' % (i, j))
         for i in range(2):
             for j in range(ED):
                 fig = plt.figure()
@@ -649,7 +673,7 @@ if __name__ == '__main__':
                 if i == 0:
                     ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
                 if i == 1:
-                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
+                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSPLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                 ax.set_xticks(np.arange(UT.size), minor=True)
                 ax.set_yticks(np.arange(UH.size), minor=True)
@@ -671,7 +695,7 @@ if __name__ == '__main__':
                         plt.xlabel('sigma')
                         plt.ylabel('E')
                 if i == 1:
-                    ax.scatter(DIAGSLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
+                    ax.scatter(DIAGSPLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
                                c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
                     if j == 0:
