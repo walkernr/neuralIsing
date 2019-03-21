@@ -377,9 +377,9 @@ if __name__ == '__main__':
     NCH = 1
 
     EM = np.mean(ES, -1)
-    SP = np.divide(np.mean(np.square(ES), -1)-np.square(EM), np.square(UT[np.newaxis, :]))
+    SP = np.divide(np.mean(np.square(ES), -1)-np.square(EM), np.square(CT[np.newaxis, :]))
     MM = np.mean(SLMS, -1)
-    SU = np.divide(np.mean(np.square(MS), -1)-np.square(MM), np.square(UT[np.newaxis, :]))
+    SU = np.divide(np.mean(np.square(MS), -1)-np.square(MM), np.square(CT[np.newaxis, :]))
 
     # scaler dictionary
     SCLRS = {'minmax':MinMaxScaler(feature_range=(0, 1)),
