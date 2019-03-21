@@ -623,7 +623,7 @@ if __name__ == '__main__':
                 ax.xaxis.set_ticks_position('bottom')
                 ax.yaxis.set_ticks_position('left')
                 if i == 0:
-                    ax.imshow(DIAGMLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.imshow(DIAGMPLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 if i == 1:
                     ax.imshow(DIAGSPLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
