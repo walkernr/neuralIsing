@@ -560,25 +560,38 @@ if __name__ == '__main__':
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ax.scatter(PZENC[:, :, :, 0, 0].reshape(-1), PZENC[:, :, :, 1, 0].reshape(-1),
+        ax.scatter(ZENC[:, 0, 0], ZENC[:, 1, 0],
                    c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
                    s=64, alpha=0.5, edgecolors='')
         plt.xlabel('mu')
         plt.ylabel('sigma')
         fig.savefig(OUTPREF+'.vae.prj.ld.png')
 
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.scatter(PZENC[:, 0, 0], PZENC[:, 1, 0],
+                   c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
+                   s=64, alpha=0.5, edgecolors='')
+        plt.xlabel('mu')
+        plt.ylabel('sigma')
+        fig.savefig(OUTPREF+'.vae.pca.prj.ld.png')
+
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
 
-        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(ZENC[:, :, :, :, :].reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
-        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC[:, :, :, :, :]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED, LD)).reshape(SNH, SNT, ED, LD)
+        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(ZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
+        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/ST[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED, LD)).reshape(SNH, SNT, ED, LD)
 
-        DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(PZENC[:, :, :, :, 0].reshape(SNH*SNT*SNS, ED)).reshape(SNH, SNT, SNS, ED), 2)
+        DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(PZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
         if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
             DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
         if np.mean(DIAGMLV[int(SNH/2), 0, 1]) > np.mean(DIAGMLV[int(SNH/2), -1, 1]):
             DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
-        DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC[:, :, :, :, 0]/UT[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED)).reshape(SNH, SNT, ED)
+        DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/ST[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED, LD)).reshape(SNH, SNT, ED, LD)
 
         for i in range(2):
             for j in range(ED):
@@ -610,9 +623,9 @@ if __name__ == '__main__':
                 ax.xaxis.set_ticks_position('bottom')
                 ax.yaxis.set_ticks_position('left')
                 if i == 0:
-                    ax.imshow(DIAGMLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.imshow(DIAGMLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 if i == 1:
-                    ax.imshow(DIAGSPLV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.imshow(DIAGSPLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                 ax.set_xticks(np.arange(CT.size), minor=True)
                 ax.set_yticks(np.arange(CH.size), minor=True)
@@ -650,9 +663,9 @@ if __name__ == '__main__':
                 ax.xaxis.set_ticks_position('bottom')
                 ax.yaxis.set_ticks_position('left')
                 if i == 0:
-                    ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
+                    ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMPLV[:, :, j, 0])), aspect='equal', interpolation='none', origin='lower')
                 if i == 1:
-                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSPLV[:, :, j])), aspect='equal', interpolation='none', origin='lower')
+                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSPLV[:, :, j, 0])), aspect='equal', interpolation='none', origin='lower')
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                 ax.set_xticks(np.arange(CT.size), minor=True)
                 ax.set_yticks(np.arange(CH.size), minor=True)
@@ -664,8 +677,8 @@ if __name__ == '__main__':
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 if i == 0:
-                    ax.scatter(DIAGMLV[:, :, j].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
-                               c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                    ax.scatter(DIAGMLV[:, :, j, 0].reshape(-1), DIAGMMV[:, :, j, 0].reshape(-1),
+                               c=DIAGMMV[:, :, j, 0].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
                     if j == 0:
                         plt.xlabel('mu')
@@ -674,8 +687,8 @@ if __name__ == '__main__':
                         plt.xlabel('sigma')
                         plt.ylabel('E')
                 if i == 1:
-                    ax.scatter(DIAGSPLV[:, :, j].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
-                               c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
+                    ax.scatter(DIAGSPLV[:, :, j, 0].reshape(-1), DIAGSMV[:, :, j, 0].reshape(-1),
+                               c=DIAGSMV[:, :, j, 0].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
                     if j == 0:
                         plt.xlabel('std(mu/T)')
