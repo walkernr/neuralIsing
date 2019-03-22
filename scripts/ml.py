@@ -587,10 +587,11 @@ if __name__ == '__main__':
         DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
         DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(PZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
-        if DIAGMPLV[0, 0, 0, 0] > DIAGMLV[-1, 0, 0, 0]:
-            DIAGMLV[:, :, 0, 0] = 1-DIAGMLV[:, :, 0, 0]
-        if DIAGMLV[int(SNH/2), 0, 1, 0] > DIAGMLV[int(SNH/2), -1, 1, 0]:
-            DIAGMLV[:, :, 1, 0] = 1-DIAGMLV[:, :, 1, 0]
+        for i in range(LD):
+            if DIAGMPLV[0, 0, 0, i] > DIAGMLV[-1, 0, 0, i]:
+                DIAGMLV[:, :, 0, i] = 1-DIAGMLV[:, :, 0, i]
+            if DIAGMLV[int(SNH/2), 0, 1, i] > DIAGMLV[int(SNH/2), -1, 1, i]:
+                DIAGMLV[:, :, 1, i] = 1-DIAGMLV[:, :, 1, i]
         DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
         for i in range(2):
