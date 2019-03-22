@@ -271,7 +271,7 @@ def inlier_selection(dmp, dat, intrvl, ns):
     if VERBOSE:
         print('\n'+100*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :, :] for j in range(nt)] for i in range(nh)])
-    sldat = np.array([[rdat[i, j, idat[i, j], :, :] for j in range(nt)] for i in range(nh)])
+    sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
 
 
@@ -377,9 +377,9 @@ if __name__ == '__main__':
     NCH = 1
 
     EM = np.mean(ES, -1)
-    SP = np.divide(np.mean(np.square(ES), -1)-np.square(EM), np.square(CT[np.newaxis, :]))
+    SP = np.var(ES/CT[np.newaxis, :, np.newaxis], 2)
     MM = np.mean(MS, -1)
-    SU = np.divide(np.mean(np.square(MS), -1)-np.square(MM), np.square(CT[np.newaxis, :]))
+    SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
 
     # scaler dictionary
     SCLRS = {'minmax':MinMaxScaler(feature_range=(0, 1)),
@@ -616,24 +616,25 @@ if __name__ == '__main__':
                     fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
         for i in range(2):
             for j in range(ED):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    ax.imshow(DIAGMPLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                if i == 1:
-                    ax.imshow(DIAGSPLV[:, :, j, 0], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(CT.size), minor=True)
-                ax.set_yticks(np.arange(CH.size), minor=True)
-                plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-                plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
-                plt.xlabel('T')
-                plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.png' % (i, j))
+                for k in range(LD):
+                    fig = plt.figure()
+                    ax = fig.add_subplot(111)
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['top'].set_visible(False)
+                    ax.xaxis.set_ticks_position('bottom')
+                    ax.yaxis.set_ticks_position('left')
+                    if i == 0:
+                        ax.imshow(DIAGMPLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    if i == 1:
+                        ax.imshow(DIAGSPLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                    ax.set_xticks(np.arange(CT.size), minor=True)
+                    ax.set_yticks(np.arange(CH.size), minor=True)
+                    plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+                    plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
+                    plt.xlabel('T')
+                    plt.ylabel('H')
+                    fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
         for i in range(2):
             for j in range(ED):
                 fig = plt.figure()
@@ -722,6 +723,6 @@ if __name__ == '__main__':
     SLMS = SLDAT[:, :, :, 1]
 
     SLEM = np.mean(SLES, -1)
-    SLSP = np.divide(np.mean(np.square(SLES), -1)-np.square(SLEM), np.square(UT[np.newaxis, :]))
+    SLSP = np.std(SLES/UT[np.newaxis, :, np.newaxis], 2)
     SLMM = np.mean(SLMS, -1)
-    SLSU = np.divide(np.mean(np.square(SLMS), -1)-np.square(SLMM), np.square(UT[np.newaxis, :]))
+    SLSU = np.std(SLMS/UT[np.newaxis, :, np.newaxis], 2)
