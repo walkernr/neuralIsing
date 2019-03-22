@@ -587,10 +587,10 @@ if __name__ == '__main__':
         DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
         DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(PZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
-        if np.mean(DIAGMLV[0, 0, 0]) > np.mean(DIAGMLV[-1, 0, 0]):
-            DIAGMLV[:, :, 0] = 1-DIAGMLV[:, :, 0]
-        if np.mean(DIAGMLV[int(SNH/2), 0, 1]) > np.mean(DIAGMLV[int(SNH/2), -1, 1]):
-            DIAGMLV[:, :, 1] = 1-DIAGMLV[:, :, 1]
+        if DIAGMPLV[0, 0, 0, 0] > DIAGMLV[-1, 0, 0, 0]:
+            DIAGMLV[:, :, 0, 0] = 1-DIAGMLV[:, :, 0, 0]
+        if DIAGMLV[int(SNH/2), 0, 1, 0] > DIAGMLV[int(SNH/2), -1, 1, 0]:
+            DIAGMLV[:, :, 1, 0] = 1-DIAGMLV[:, :, 1, 0]
         DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
         for i in range(2):
@@ -614,6 +614,7 @@ if __name__ == '__main__':
                     plt.xlabel('T')
                     plt.ylabel('H')
                     fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
+                    plt.close()
         for i in range(2):
             for j in range(ED):
                 for k in range(LD):
@@ -635,6 +636,7 @@ if __name__ == '__main__':
                     plt.xlabel('T')
                     plt.ylabel('H')
                     fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    plt.close()
         for i in range(2):
             for j in range(ED):
                 fig = plt.figure()
@@ -655,6 +657,7 @@ if __name__ == '__main__':
                 plt.xlabel('T')
                 plt.ylabel('H')
                 fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
+                plt.close()
         for i in range(2):
             for j in range(ED):
                 fig = plt.figure()
@@ -675,6 +678,7 @@ if __name__ == '__main__':
                 plt.xlabel('T')
                 plt.ylabel('H')
                 fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
+                plt.close()
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 if i == 0:
@@ -692,12 +696,13 @@ if __name__ == '__main__':
                                c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
                     if j == 0:
-                        plt.xlabel('std(mu/T)')
-                        plt.ylabel('std(M/T)')
+                        plt.xlabel('var(mu/T)')
+                        plt.ylabel('var(M/T)')
                     if j == 1:
-                        plt.xlabel('std(sigma/T)')
-                        plt.ylabel('std(E/T)')
+                        plt.xlabel('var(sigma/T)')
+                        plt.ylabel('var(E/T)')
                 fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
+                plt.close()
 
     try:
         SLPZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.zenc.pca.prj.inl.npy' \
