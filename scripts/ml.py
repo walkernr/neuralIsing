@@ -677,8 +677,8 @@ if __name__ == '__main__':
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 if i == 0:
-                    ax.scatter(DIAGMLV[:, :, j, 0].reshape(-1), DIAGMMV[:, :, j, 0].reshape(-1),
-                               c=DIAGMMV[:, :, j, 0].reshape(-1), cmap=plt.get_cmap('plasma'),
+                    ax.scatter(DIAGMLV[:, :, j, 0].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
+                               c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
                     if j == 0:
                         plt.xlabel('mu')
@@ -687,8 +687,8 @@ if __name__ == '__main__':
                         plt.xlabel('sigma')
                         plt.ylabel('E')
                 if i == 1:
-                    ax.scatter(DIAGSPLV[:, :, j, 0].reshape(-1), DIAGSMV[:, :, j, 0].reshape(-1),
-                               c=DIAGSMV[:, :, j, 0].reshape(-1), cmap=plt.get_cmap('plasma'),
+                    ax.scatter(DIAGSPLV[:, :, j, 0].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
+                               c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
                                s=64, alpha=0.5, edgecolors='')
                     if j == 0:
                         plt.xlabel('std(mu/T)')
