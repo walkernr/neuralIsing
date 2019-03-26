@@ -158,7 +158,7 @@ def odr_fit(func, dom, mrng, srng, pg):
     return popt, perr, fdom, fval
 
 
-def sampling(beta):
+def gauss_sampling(beta):
     z_mean, z_log_var = beta
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
@@ -185,7 +185,7 @@ def build_variational_autoencoder():
     d0 = Dense(1024, activation='relu')(fconv3)
     z_mean = Dense(LD, name='z_mean')(d0)
     z_log_var = Dense(LD, name='z_log_std')(d0) # more numerically stable to use log(var_z)
-    z = Lambda(sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
+    z = Lambda(gauss_sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
     # construct encoder
     encoder = Model(input, [z_mean, z_log_var, z], name='encoder')
     if VERBOSE:
@@ -315,7 +315,7 @@ if __name__ == '__main__':
     from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
     from keras.losses import binary_crossentropy, mse
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
-    from keras.callbacks import History, CSVLogger
+    from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
     from keras import backend as K
     if PLOT:
         import matplotlib as mpl
@@ -390,6 +390,7 @@ if __name__ == '__main__':
     try:
         SCDMP = np.load(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' \
                         % (NAME, N, SNI, SNS, SCLR, SEED)).reshape(SNH*SNT*SNS, N, N, NCH)
+        del CDMP
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
             print(100*'-')
@@ -471,6 +472,7 @@ if __name__ == '__main__':
     try:
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.npy'
                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, ED, LD)
+        del SCDMP
         if VERBOSE:
             print('z encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -480,6 +482,7 @@ if __name__ == '__main__':
             print(100*'-')
         ZENC = np.swapaxes(np.array(ENC.predict(SCDMP, verbose=VERBOSE)), 0, 1)[:, :2, :]
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
+        del SCDMP
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), ZENC.reshape(SNH, SNT, SNS, ED, LD))
         if VERBOSE:
