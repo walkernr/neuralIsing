@@ -586,10 +586,10 @@ if __name__ == '__main__':
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
 
-        DIAGMLV = np.mean(SCLRS['minmax'].fit_transform(ZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
+        DIAGMLV = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
         DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
-        DIAGMPLV = np.mean(SCLRS['minmax'].fit_transform(PZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH, SNT, SNS, ED, LD), 2)
+        DIAGMPLV = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
         for i in range(LD):
             if DIAGMPLV[0, 0, 0, i] > DIAGMLV[-1, 0, 0, i]:
                 DIAGMLV[:, :, 0, i] = 1-DIAGMLV[:, :, 0, i]
