@@ -735,3 +735,44 @@ if __name__ == '__main__':
     SLSP = np.std(SLES/UT[np.newaxis, :, np.newaxis], 2)
     SLMM = np.mean(SLMS, -1)
     SLSU = np.std(SLMS/UT[np.newaxis, :, np.newaxis], 2)
+
+    # reduction dictionary
+    MNFLDS = {'pca':PCA(n_components=1),
+              'kpca':KernelPCA(n_components=1, n_jobs=THREADS),
+              'isomap':Isomap(n_components=1, n_jobs=THREADS),
+              'lle':LocallyLinearEmbedding(n_components=1, n_jobs=THREADS),
+              'tsne':TSNE(n_components=1, perplexity=UNS,
+                          early_exaggeration=24, learning_rate=200, n_iter=1000,
+                          verbose=VERBOSE, n_jobs=THREADS)}
+
+    try:
+        MSLPZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.mfld.inl.npy' \
+                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED))
+        if VERBOSE:
+            print('inlier selected z encoding manifold loaded from file')
+            print(100*'-')
+    except:
+        MSLPZENC = np.zeros((UNH*UNT*UNS, ED))
+        for i in range(ED):
+            MSLPZENC[:, i] = MNFLDS[MNFLD].fit_transform(SLPZENC[:, :, :, i, :].reshape(UNH*UNT*UNS, LD))
+        np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.mfld.inl.npy' \
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED), MSLPZENC)
+        if VERBOSE:
+            if MNFLD == 'tsne':
+                print(100*'-')
+            print('inlier selected z encoding manifold computed')
+            print(100*'-')
+
+    if PLOT:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.scatter(MSLPZENC[:, 0], MSLPZENC[:, 1],
+                   c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
+                   s=64, alpha=0.5, edgecolors='')
+        plt.xlabel('mu')
+        plt.ylabel('sigma')
+        fig.savefig(OUTPREF+'.vae.mnfld.prj.ld.png')
