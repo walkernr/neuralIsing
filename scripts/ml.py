@@ -322,8 +322,6 @@ if __name__ == '__main__':
         mpl.use('Agg')
         import matplotlib.pyplot as plt
         from mpl_toolkits.axes_grid1 import ImageGrid
-        if ED == 3:
-            from mpl_toolkits.mplot3d import Axes3D
         plt.rc('font', family='sans-serif')
         FTSZ = 28
         FIGW = 16
@@ -347,6 +345,8 @@ if __name__ == '__main__':
     OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%s.%s.%s.%d' % \
               (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, MNFLD, CLST, NCS, SEED)
     write_specs()
+
+    LDIR = os.listdir()
 
     try:
         CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
@@ -556,7 +556,7 @@ if __name__ == '__main__':
             out.write(LD*'%f ' % tuple(VZENC[i, :]) + '\n')
             out.write(100*'-'+'\n')
 
-    if PLOT:
+    def vae_plots():
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.spines['right'].set_visible(False)
@@ -708,11 +708,15 @@ if __name__ == '__main__':
                 fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
                 plt.close()
 
+    if PLOT:
+        vae_plots()
+
     try:
         SLPZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.zenc.pca.prj.inl.npy' \
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, SEED))
         SLDAT = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.dat.inl.npy' \
                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, SEED))
+        del PZENC, CZENC, VZENC, CDAT
         if VERBOSE:
             print('inlier selected z encodings loaded from file')
             print(100*'-')
@@ -722,6 +726,7 @@ if __name__ == '__main__':
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, SEED), SLPZENC)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%d.dat.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, SEED), SLDAT)
+        del PZENC, CZENC, VZENC, CDAT
         if VERBOSE:
             print('inlier selected z encodings computed')
             print(100*'-')
@@ -754,7 +759,7 @@ if __name__ == '__main__':
     except:
         MSLPZENC = np.zeros((UNH*UNT*UNS, ED))
         for i in range(ED):
-            MSLPZENC[:, i] = MNFLDS[MNFLD].fit_transform(SLPZENC[:, :, :, i, :].reshape(UNH*UNT*UNS, LD))
+            MSLPZENC[:, i] = MNFLDS[MNFLD].fit_transform(SLPZENC[:, :, :, i, :].reshape(UNH*UNT*UNS, LD))[:, 0]
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.mfld.inl.npy' \
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED), MSLPZENC)
         if VERBOSE:
