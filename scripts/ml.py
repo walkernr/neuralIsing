@@ -557,6 +557,9 @@ if __name__ == '__main__':
             out.write(100*'-'+'\n')
 
     def vae_plots():
+        outpref = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d' % \
+                  (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)
+
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.spines['right'].set_visible(False)
@@ -568,7 +571,7 @@ if __name__ == '__main__':
                    s=64, alpha=0.5, edgecolors='')
         plt.xlabel('mu')
         plt.ylabel('sigma')
-        fig.savefig(OUTPREF+'.vae.prj.ld.png')
+        fig.savefig(outpref+'.vae.prj.ld.png')
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -581,7 +584,7 @@ if __name__ == '__main__':
                    s=64, alpha=0.5, edgecolors='')
         plt.xlabel('mu')
         plt.ylabel('sigma')
-        fig.savefig(OUTPREF+'.vae.pca.prj.ld.png')
+        fig.savefig(outpref+'.vae.pca.prj.ld.png')
 
         DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
         DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
@@ -617,7 +620,7 @@ if __name__ == '__main__':
                     plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
                     plt.xlabel('T')
                     plt.ylabel('H')
-                    fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(outpref+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
                     plt.close()
         for i in range(2):
             for j in range(ED):
@@ -639,7 +642,7 @@ if __name__ == '__main__':
                     plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
                     plt.xlabel('T')
                     plt.ylabel('H')
-                    fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(outpref+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
         for i in range(2):
             for j in range(ED):
@@ -660,7 +663,7 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
+                fig.savefig(outpref+'.vae.diag.mv.%d.%d.png' % (i, j))
                 plt.close()
         for i in range(2):
             for j in range(ED):
@@ -681,7 +684,7 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(CT.size)[::4], np.round(CH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.er.%d.%d.png' % (i, j))
+                fig.savefig(outpref+'.vae.diag.er.%d.%d.png' % (i, j))
                 plt.close()
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
@@ -705,7 +708,7 @@ if __name__ == '__main__':
                     if j == 1:
                         plt.xlabel('var(sigma/T)')
                         plt.ylabel('var(E/T)')
-                fig.savefig(OUTPREF+'.vae.reg.%d.%d.png' % (i, j))
+                fig.savefig(outpref+'.vae.reg.%d.%d.png' % (i, j))
                 plt.close()
 
     if PLOT:
