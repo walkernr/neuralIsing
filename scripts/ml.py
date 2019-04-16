@@ -773,7 +773,7 @@ if __name__ == '__main__':
 
     if PLOT:
         outpref = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%d.%s.%d' % \
-                  (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, MNFLD, SEED)\
+                  (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, AD, MNFLD, SEED)
         for i in range(ED):
             fig = plt.figure()
             ax = fig.add_subplot(111)
