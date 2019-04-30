@@ -594,10 +594,10 @@ if __name__ == '__main__':
 
         DIAGMPLV = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
         for i in range(LD):
-            if DIAGMPLV[0, 0, 0, i] > DIAGMLV[-1, 0, 0, i]:
-                DIAGMLV[:, :, 0, i] = 1-DIAGMLV[:, :, 0, i]
-            if DIAGMLV[int(SNH/2), 0, 1, i] > DIAGMLV[int(SNH/2), -1, 1, i]:
-                DIAGMLV[:, :, 1, i] = 1-DIAGMLV[:, :, 1, i]
+            if DIAGMPLV[0, 0, 0, i] > DIAGMPLV[-1, 0, 0, i]:
+                DIAGMPLV[:, :, 0, i] = 1-DIAGMPLV[:, :, 0, i]
+            if DIAGMPLV[int(SNH/2), 0, 1, i] > DIAGMPLV[int(SNH/2), -1, 1, i]:
+                DIAGMPLV[:, :, 1, i] = 1-DIAGMPLV[:, :, 1, i]
         DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
         for i in range(2):
@@ -754,17 +754,17 @@ if __name__ == '__main__':
                           verbose=VERBOSE, n_jobs=THREADS)}
 
     try:
-        MSLPZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.mfld.inl.npy' \
-                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED))
+        MSLZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.mfld.inl.npy' \
+                          % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED))
         if VERBOSE:
             print('inlier selected z encoding manifold loaded from file')
             print(100*'-')
     except:
-        MSLPZENC = np.zeros((UNH*UNT*UNS, ED, 2))
+        MSLZENC = np.zeros((UNH*UNT*UNS, ED, 2))
         for i in range(ED):
-            MSLPZENC[:, i, :] = MNFLDS[MNFLD].fit_transform(SLPZENC[:, :, :, i, :].reshape(UNH*UNT*UNS, LD))
+            MSLZENC[:, i, :] = MNFLDS[MNFLD].fit_transform(SLZENC[:, :, :, i, :].reshape(UNH*UNT*UNS, LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.%d.%s.%d.%d.zenc.mfld.inl.npy' \
-                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED), MSLPZENC)
+                % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, UNI, UNS, MNFLD, AD, SEED), MSLZENC)
         if VERBOSE:
             if MNFLD == 'tsne':
                 print(100*'-')
@@ -781,7 +781,7 @@ if __name__ == '__main__':
             ax.spines['top'].set_visible(False)
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
-            ax.scatter(MSLPZENC[:, i, 0], MSLPZENC[:, i, 1],
+            ax.scatter(MSLZENC[:, i, 0], MSLZENC[:, i, 1],
                        c=SLMS.reshape(-1), cmap=plt.get_cmap('plasma'),
                        s=64, alpha=0.5, edgecolors='')
             plt.xlabel('mu')
