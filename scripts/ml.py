@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 28 20:34:06 2019
+
+@author: Nicholas
+"""
+
 import argparse
 import os
 import numpy as np
