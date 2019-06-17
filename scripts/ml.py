@@ -251,7 +251,7 @@ def random_selection(dmp, dat, intrvl, ns):
     if VERBOSE:
         print('\n'+100*'-')
     sldmp = np.array([[rdmp[i, j, idat[i, j], :, :] for j in range(nt)] for i in range(nh)])
-    sldat = np.array([[rdat[i, j, idat[i, j], :, :] for j in range(nt)] for i in range(nh)])
+    sldat = np.array([[rdat[i, j, idat[i, j], :] for j in range(nt)] for i in range(nh)])
     return sldmp, sldat
 
 
