@@ -417,7 +417,7 @@ if __name__ == '__main__':
             print('scaled selected classification samples computed')
             print(100*'-')
 
-    OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=False),
+    OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
             'adam': Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True),
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
@@ -440,7 +440,7 @@ if __name__ == '__main__':
             print(100*'-')
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.vae.log.csv'
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), append=True, separator=',')
-        LR_DECAY = ReduceLROnPlateau(monitor='val_loss', patience=8, verbose=VERBOSE)
+        LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
         TRN, VAL = train_test_split(SCDMP, test_size=0.25, shuffle=True)
         VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=64,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
