@@ -564,48 +564,68 @@ if __name__ == '__main__':
             out.write(100*'-'+'\n')
 
     def vae_plots():
+
         outpref = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d' % \
                   (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.scatter(ZENC[:, 0, 0], ZENC[:, 1, 0],
-                   c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=64, alpha=0.5, edgecolors='')
-        plt.xlabel('mu')
-        plt.ylabel('sigma')
-        fig.savefig(outpref+'.vae.prj.ld.png')
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        ax.scatter(PZENC[:, 0, 0], PZENC[:, 1, 0],
-                   c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                   s=64, alpha=0.5, edgecolors='')
-        plt.xlabel('mu')
-        plt.ylabel('sigma')
-        fig.savefig(outpref+'.vae.pca.prj.ld.png')
-
-        DIAGMMV = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
-        DIAGSMV = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
-
-        DIAGMLV = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
-        DIAGSLV = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
-
-        DIAGMPLV = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
+        SCPZENC = np.copy(ZENC)
+        RNGS = [(-1, 1), (0, 1)]
+        for i in range(ED):
+            SCPZENC[:, i, :] = MinMaxScaler(feature_range=RNGS[i]).fit_transform(SCPZENC[:, i, :].reshape(SNH*SNT*SNS, LD))
+        SCPZENC = SCPZENC.reshape(SNH, SNT, SNS, ED, LD)
         for i in range(LD):
-            if DIAGMPLV[0, 0, 0, i] > DIAGMPLV[-1, 0, 0, i]:
-                DIAGMPLV[:, :, 0, i] = 1-DIAGMPLV[:, :, 0, i]
-            if DIAGMPLV[int(SNH/2), 0, 1, i] > DIAGMPLV[int(SNH/2), -1, 1, i]:
-                DIAGMPLV[:, :, 1, i] = 1-DIAGMPLV[:, :, 1, i]
-        DIAGSPLV = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
+            if np.max(SCPZENC[0, 0, :, 0, i]) > np.max(SCPZENC[-1, 0, :, 0, i]):
+                SCPZENC[:, :, :, 0, i] = (-1)*SCPZENC[:, :, :, 0, i]
+            if np.max(SCPZENC[int(SNH/2), 0, :, 1, i]) > np.max(SCPZENC[int(SNH/2), -1, :, 1, i]):
+                SCPZENC[:, :, :, 1, i] = 1-SCPZENC[:, :, :, 1, i]
+        SCPZENC = SCPZENC.reshape(SNH*SNT*SNS, ED, LD)
+        SCPZENC = SCLRS['minmax'](feature_range=(0, 1)).fit_transform(SCPZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH*SNT*SNS, ED, LD)
+
+        MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+        MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+
+        ZMDIAG = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
+        ZVDIAG = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/\
+                                                      CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
+
+        PZMDIAG = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
+        for i in range(LD):
+            if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
+                PZMDIAG[:, :, 0, i] = 1-PZMDIAG[:, :, 0, i]
+            if PZMDIAG[int(SNH/2), 0, 1, i] > PZMDIAG[int(SNH/2), -1, 1, i]:
+                PZMDIAG[:, :, 1, i] = 1-PZMDIAG[:, :, 1, i]
+        PZVDIAG = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/\
+                                                       CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
+
+        for i in range(LD):
+            for j in range(i, LD):
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                ax.scatter(ZENC[:, 0, i], ZENC[:, 1, j],
+                           c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
+                           s=64, alpha=0.5, edgecolors='')
+                plt.xlabel('LVM %d' % i)
+                plt.ylabel('LVS %d' % j)
+                fig.savefig(outpref+'.vae.prj.ld.%d.%d.png' % (i, j))
+
+        for i in range(LD):
+            for j in range(i, LD):
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                ax.scatter(SCPZENC[:, 0, i], SCPZENC[:, 1, j],
+                           c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
+                           s=64, alpha=0.5, edgecolors='')
+                plt.xlabel('PLVM %d' % i)
+                plt.ylabel('PLVS %d' % j)
+                fig.savefig(outpref+'.vae.pca.prj.ld.%d.%d.png' % (i, j))
 
         for i in range(2):
             for j in range(ED):
@@ -617,9 +637,9 @@ if __name__ == '__main__':
                     ax.xaxis.set_ticks_position('bottom')
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
-                        ax.imshow(DIAGMLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        ax.imshow(ZMDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     if i == 1:
-                        ax.imshow(DIAGSLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        ax.imshow(ZVDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
                     ax.set_yticks(np.arange(CH.size), minor=True)
@@ -639,9 +659,9 @@ if __name__ == '__main__':
                     ax.xaxis.set_ticks_position('bottom')
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
-                        ax.imshow(DIAGMPLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        ax.imshow(PZMDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     if i == 1:
-                        ax.imshow(DIAGSPLV[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        ax.imshow(PZVDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
                     ax.set_yticks(np.arange(CH.size), minor=True)
@@ -660,9 +680,9 @@ if __name__ == '__main__':
                 ax.xaxis.set_ticks_position('bottom')
                 ax.yaxis.set_ticks_position('left')
                 if i == 0:
-                    ax.imshow(DIAGMMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.imshow(MEMDIAG[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 if i == 1:
-                    ax.imshow(DIAGSMV[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.imshow(MEVDIAG[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                 ax.set_xticks(np.arange(CT.size), minor=True)
                 ax.set_yticks(np.arange(CH.size), minor=True)
@@ -671,51 +691,6 @@ if __name__ == '__main__':
                 plt.xlabel('T')
                 plt.ylabel('H')
                 fig.savefig(outpref+'.vae.diag.mv.%d.%d.png' % (i, j))
-                plt.close()
-        for i in range(2):
-            for j in range(ED):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    ax.imshow(CM(np.abs(DIAGMMV[:, :, j]-DIAGMPLV[:, :, j, 0])), aspect='equal', interpolation='none', origin='lower')
-                if i == 1:
-                    ax.imshow(CM(np.abs(DIAGSMV[:, :, j]-DIAGSPLV[:, :, j, 0])), aspect='equal', interpolation='none', origin='lower')
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(CT.size), minor=True)
-                ax.set_yticks(np.arange(CH.size), minor=True)
-                plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-                plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-                plt.xlabel('T')
-                plt.ylabel('H')
-                fig.savefig(outpref+'.vae.diag.er.%d.%d.png' % (i, j))
-                plt.close()
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                if i == 0:
-                    ax.scatter(DIAGMLV[:, :, j, 0].reshape(-1), DIAGMMV[:, :, j].reshape(-1),
-                               c=DIAGMMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                               s=64, alpha=0.5, edgecolors='')
-                    if j == 0:
-                        plt.xlabel('mu')
-                        plt.ylabel('M')
-                    if j == 1:
-                        plt.xlabel('sigma')
-                        plt.ylabel('E')
-                if i == 1:
-                    ax.scatter(DIAGSPLV[:, :, j, 0].reshape(-1), DIAGSMV[:, :, j].reshape(-1),
-                               c=DIAGSMV[:, :, j].reshape(-1), cmap=plt.get_cmap('plasma'),
-                               s=64, alpha=0.5, edgecolors='')
-                    if j == 0:
-                        plt.xlabel('var(mu/T)')
-                        plt.ylabel('var(M/T)')
-                    if j == 1:
-                        plt.xlabel('var(sigma/T)')
-                        plt.ylabel('var(E/T)')
-                fig.savefig(outpref+'.vae.reg.%d.%d.png' % (i, j))
                 plt.close()
 
     if PLOT:
