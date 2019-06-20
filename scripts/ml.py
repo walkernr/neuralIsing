@@ -579,7 +579,7 @@ if __name__ == '__main__':
             if np.max(SCPZENC[int(SNH/2), 0, :, 1, i]) > np.max(SCPZENC[int(SNH/2), -1, :, 1, i]):
                 SCPZENC[:, :, :, 1, i] = 1-SCPZENC[:, :, :, 1, i]
         SCPZENC = SCPZENC.reshape(SNH*SNT*SNS, ED, LD)
-        SCPZENC = SCLRS['minmax'](feature_range=(0, 1)).fit_transform(SCPZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH*SNT*SNS, ED, LD)
+        SCPZENC = MinMaxScaler(feature_range=(0, 1)).fit_transform(SCPZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH*SNT*SNS, ED, LD)
 
         MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
         MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
