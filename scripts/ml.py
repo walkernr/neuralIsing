@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument('-n', '--name', help='simulation name',
                             type=str, default='ising_init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size (side length)',
-                        type=int, default=32)
+                        type=int, default=8)
     parser.add_argument('-ui', '--unsuper_interval', help='interval for selecting phase points (manifold)',
                         type=int, default=1)
     parser.add_argument('-un', '--unsuper_samples', help='number of samples per phase point (manifold)',
@@ -178,20 +178,28 @@ def build_variational_autoencoder():
         print('building variational autoencoder network')
         print(100*'-')
     # encoder layers
+    init = 'he_normal'
+    nf = 32
+    nc = np.int32(np.log2(N/4.))
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    conv0 = Conv2D(filters=32, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=1)(input)
-    conv1 = Conv2D(filters=64, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=2)(conv0)
-    conv2 = Conv2D(filters=32, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=1)(conv1)
-    conv3 = Conv2D(filters=64, kernel_size=3, activation='relu',
-                   kernel_initializer='he_normal', padding='same', strides=2)(conv2)
-    shape = K.int_shape(conv3)
-    fconv3 = Flatten()(conv3)
-    d0 = Dense(8*LD, activation='relu')(fconv3)
-    z_mean = Dense(LD, name='z_mean')(d0)
-    z_log_var = Dense(LD, name='z_log_std')(d0) # more numerically stable to use log(var_z)
+    for i in range(nc):
+        if i == 0:
+            c = Conv2D(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
+                       padding='same', strides=2)(input)
+        else:
+            c = Conv2D(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
+                       padding='same', strides=2)(c)
+        c = BatchNormalization()(c)
+        # c = Activation('relu')(c)
+        # c = LeakyReLU(alpha=0.2)(c)
+        c = PReLU()(c)
+    shape = K.int_shape(c)
+    d0 = Flatten()(c)
+    # d0 = Dense(np.int32(np.sqrt(np.prod(shape[1:]))), kernel_initializer=init)(d0)
+    # d0 = PReLU()(d0)
+    z_mean = Dense(LD, name='z_mean', kernel_initializer=init, activation='linear')(d0)
+    # more numerically stable to use log(var_z)
+    z_log_var = Dense(LD, name='z_log_std', kernel_initializer=init, activation='linear')(d0)
     z = Lambda(gauss_sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
     # construct encoder
     encoder = Model(input, [z_mean, z_log_var, z], name='encoder')
@@ -202,18 +210,23 @@ def build_variational_autoencoder():
         print(100*'-')
     # decoder layers
     latent_input = Input(shape=(LD,), name='z_sampling')
-    d1 = Dense(np.prod(shape[1:]), activation='relu')(latent_input)
+    d1 = Dense(np.prod(shape[1:]), kernel_initializer=init)(latent_input)
+    d1 = Activation('linear')(d1)
+    # d1 = PReLU()(d1)
     rd1 = Reshape(shape[1:])(d1)
-    convt0 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=1)(rd1)
-    convt1 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=2)(convt0)
-    convt2 = Conv2DTranspose(filters=64, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=1)(convt1)
-    convt3 = Conv2DTranspose(filters=32, kernel_size=3, activation='relu',
-                             kernel_initializer='he_normal', padding='same', strides=2)(convt2)
+    for i in range(nc-1, -1, -1):
+        if i == nc-1:
+            ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
+                                 padding='same', strides=2)(rd1)
+        else:
+            ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
+                                 padding='same', strides=2)(ct)
+        ct = BatchNormalization()(ct)
+        # ct = Activation('relu')(ct)
+        # ct = LeakyReLU(alpha=0.2)(ct)
+        ct = PReLU()(ct)
     output = Conv2DTranspose(filters=NCH, kernel_size=3, activation='sigmoid',
-                             kernel_initializer='he_normal', padding='same', name='decoder_output')(convt3)
+                             kernel_initializer=init, padding='same', name='decoder_output')(ct)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
@@ -225,10 +238,11 @@ def build_variational_autoencoder():
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
     reconstruction_losses = {'bc': lambda a, b: binary_crossentropy(a, b),
-                             'mse': lambda a, b: mse(a, b)}
+                             'mse': lambda a, b: mse(a, b),
+                             'hyb': lambda a, b: 0.5*(binary_crossentropy(a, b)+mse(a, b))}
     # vae loss
     reconstruction_loss = N*N*reconstruction_losses[LSS](K.flatten(input), K.flatten(output))
-    kl_loss = -0.5*K.sum(1+z_log_var-K.square(z_mean)-K.exp(z_log_var), axis=-1)
+    kl_loss = 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
     # compile vae
@@ -319,9 +333,13 @@ if __name__ == '__main__':
     if GPU:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     from keras.models import Model
-    from keras.layers import Input, Lambda, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
+    from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
+                              Flatten, Reshape, BatchNormalization, Activation)
     from keras.losses import binary_crossentropy, mse
+    from keras.activations import relu, sigmoid, linear
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
+    from keras.activations import relu, tanh, sigmoid, linear
+    from keras.layers.advanced_activations import LeakyReLU, PReLU
     from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
     from keras import backend as K
     if PLOT:
@@ -355,54 +373,47 @@ if __name__ == '__main__':
 
     LDIR = os.listdir()
 
-    try:
-        CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
-        CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
-        if VERBOSE:
-            # print(100*'-')
-            print('selected classification samples loaded from file')
-            print(100*'-')
-    except:
-        DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
-        DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
-        if VERBOSE:
-            # print(100*'-')
-            print('full dataset loaded from file')
-            print(100*'-')
-        CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
-        del DAT, DMP
-        np.save(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
-        np.save(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
-        if VERBOSE:
-            print('selected classification samples generated')
-            print(100*'-')
-    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
-    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
-    SNH, SNT = CH.size, CT.size
-    ES = CDAT[:, :, :, 0]
-    MS = CDAT[:, :, :, 1]
-    NCH = 1
-
-    EM = np.mean(ES, -1)
-    SP = np.var(ES/CT[np.newaxis, :, np.newaxis], 2)
-    MM = np.mean(MS, -1)
-    SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
-
     # scaler dictionary
     SCLRS = {'minmax':MinMaxScaler(feature_range=(0, 1)),
              'standard':StandardScaler(),
              'robust':RobustScaler(),
              'tanh':TanhScaler()}
 
+    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
+    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
+    SNH, SNT = CH.size, CT.size
+    NCH = 1
+
     try:
         SCDMP = np.load(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' \
                         % (NAME, N, SNI, SNS, SCLR, SEED)).reshape(SNH*SNT*SNS, N, N, NCH)
-        del CDMP
+        CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
             print(100*'-')
     except:
-        CDMP = CDMP[:, :, :, :, :, np.newaxis]
+        try:
+            CDMP = np.load(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED))
+            CDAT = np.load(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED))
+            if VERBOSE:
+                # print(100*'-')
+                print('selected classification samples loaded from file')
+                print(100*'-')
+        except:
+            DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
+            DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
+            if VERBOSE:
+                # print(100*'-')
+                print('full dataset loaded from file')
+                print(100*'-')
+            CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
+            del DAT, DMP
+            np.save(CWD+'/%s.%d.%d.%d.%d.dmp.c.npy' % (NAME, N, SNI, SNS, SEED), CDMP)
+            np.save(CWD+'/%s.%d.%d.%d.%d.dat.c.npy' % (NAME, N, SNI, SNS, SEED), CDAT)
+            if VERBOSE:
+                print('selected classification samples generated')
+                print(100*'-')
+
         if SCLR == 'global':
             SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
             for i in range(NCH):
@@ -416,6 +427,13 @@ if __name__ == '__main__':
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(100*'-')
+
+    ES = CDAT[:, :, :, 0]
+    MS = CDAT[:, :, :, 1]
+    EM = np.mean(ES, -1)
+    SP = np.var(ES/CT[np.newaxis, :, np.newaxis], 2)
+    MM = np.mean(MS, -1)
+    SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
 
     OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
@@ -441,8 +459,8 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.vae.log.csv'
                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), append=True, separator=',')
         LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
-        TRN, VAL = train_test_split(SCDMP, test_size=0.25, shuffle=True)
-        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=64,
+        TRN, VAL = train_test_split(SCDMP, test_size=0.125, shuffle=True)
+        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=SNT*SNH,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
@@ -480,9 +498,11 @@ if __name__ == '__main__':
         ZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.npy'
                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)).reshape(SNH*SNT*SNS, ED, LD)
         ERRDISTN = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.dist.neg.npy'
-                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
+                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), allow_pickle=True)
         ERRDISTP = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.dist.pos.npy'
-                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
+                           % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), allow_pickle=True)
+        ERR = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.npy'
+                      % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
         MERR = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.mean.npy'
                        % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
         SERR = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.stdv.npy'
@@ -499,7 +519,6 @@ if __name__ == '__main__':
                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
         MNKLD = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.kld.min.npy'
                         % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED))
-        del SCDMP
         if VERBOSE:
             print('z encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -514,10 +533,7 @@ if __name__ == '__main__':
         ERR = ZDEC-SCDMP
         ERRDISTN = np.array(np.histogram(ERR, np.linspace(-1.0, 0.0, 9)))
         ERRDISTP = np.array(np.histogram(ERR, np.linspace(0.0, 1.0, 9)))
-        KLD = np.sum(1+np.log(np.square(ZENC[:, 1, :]))-np.square(ZENC[:, 0, :])-np.square(ZENC[:, 1, :]), axis=1)
-        ERRDISTN = np.array(np.histogram(ERR, np.linspace(-1.0, 0.0, 9)))
-        ERRDISTP = np.array(np.histogram(ERR, np.linspace(0.0, 1.0, 9)))
-        KLD = np.sum(1+np.log(np.square(ZENC[:, 1, :]))-np.square(ZENC[:, 0, :])-np.square(ZENC[:, 1, :]), axis=1)
+        KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), ZENC.reshape(SNH, SNT, SNS, ED, LD))
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zdec.npy'
@@ -554,10 +570,50 @@ if __name__ == '__main__':
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), MXKLD)
         np.save(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zerr.kld.min.npy'
                 % (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED), MNKLD)
-        if VERBOSE:
-            print(100*'-')
-            print('z encodings of scaled selected classification samples predicted')
-            print(100*'-')
+
+    if VERBOSE:
+        print(100*'-')
+        print('z encodings of scaled selected classification samples predicted')
+        print(100*'-')
+        print('mean sig:        %f' % np.mean(SCDMP))
+        print('stdv sig:        %f' % np.std(SCDMP))
+        print('max sig          %f' % np.max(SCDMP))
+        print('min sig          %f' % np.min(SCDMP))
+        print('mean error:      %f' % MERR)
+        print('stdv error:      %f' % SERR)
+        print('max error:       %f' % MXERR)
+        print('min error:       %f' % MNERR)
+        print('mean kl div:     %f' % MKLD)
+        print('stdv kl div:     %f' % SKLD)
+        print('max kl div:      %f' % MXKLD)
+        print('min kl div:      %f' % MNKLD)
+        print(100*'-')
+        print('error |'+ERRDISTN[0].size*' %.2e' % tuple(ERRDISTN[1][:-1]))
+        print('count |'+ERRDISTN[0].size*'  %.2e' % tuple(ERRDISTN[0][:]))
+        print('error |'+ERRDISTP[0].size*' %.2e' % tuple(ERRDISTP[1][1:]))
+        print('count |'+ERRDISTP[0].size*' %.2e' % tuple(ERRDISTP[0][:]))
+        print(100*'-')
+    with open(OUTPREF+'.out', 'a') as out:
+        out.write('fitting errors\n')
+        out.write(100*'-'+'\n')
+        out.write('mean sig:        %f\n' % np.mean(SCDMP))
+        out.write('stdv sig:        %f\n' % np.std(SCDMP))
+        out.write('max sig          %f\n' % np.max(SCDMP))
+        out.write('min sig          %f\n' % np.min(SCDMP))
+        out.write('mean error:      %f\n' % MERR)
+        out.write('stdv error:      %f\n' % SERR)
+        out.write('max error:       %f\n' % MXERR)
+        out.write('min error:       %f\n' % MNERR)
+        out.write('mean kl div:     %f\n' % MKLD)
+        out.write('stdv kl div:     %f\n' % SKLD)
+        out.write('max kl div:      %f\n' % MXKLD)
+        out.write('min kl div:      %f\n' % MNKLD)
+        out.write(100*'-'+'\n')
+        # out.write('error |'+ERRDISTN[0].size*' %.2e'+'\n' % tuple(ERRDISTN[1][:-1]))
+        # out.write('dnsty |'+ERRDISTN[0].size*'  %.2e'+'\n' % tuple(ERRDISTN[0][:]))
+        # out.write('error |'+ERRDISTP[0].size*' %.2e'+'\n' % tuple(ERRDISTP[1][1:]))
+        # out.write('dnsty |'+ERRDISTP[0].size*' %.2e'+'\n' % tuple(ERRDISTP[0][:]))
+        # out.write(100*'-'+'\n')
 
     try:
         PZENC = np.load(CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d.zenc.pca.prj.npy'
@@ -630,6 +686,27 @@ if __name__ == '__main__':
         outpref = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d' % \
                   (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)
 
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ex = np.linspace(-1.0, 1.0, 33)
+        er = np.histogram(ERR, ex)[0]/(SNH*SNT*SNS*N*N)
+        dex = ex[1]-ex[0]
+        ey = np.linspace(0, 0.5, 3)
+        ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
+        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+        ax.set_xticks(np.linspace(-1.0, 1.0, 5), minor=True)
+        ax.set_yticks(ey, minor=True)
+        plt.xticks(np.linspace(-1.0, 1.0, 5))
+        plt.yticks(ey)
+        plt.xlabel('ERR')
+        plt.ylabel('DENSITY')
+        fig.savefig(outpref+'.vae.err.png')
+        plt.close()
+
         SCPZENC = np.copy(ZENC)
         RNGS = [(-1, 1), (0, 1)]
         for i in range(ED):
@@ -659,59 +736,62 @@ if __name__ == '__main__':
         PZVDIAG = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/\
                                                        CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
-        for i in range(LD):
-            for j in range(i, LD):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                ax.scatter(ZENC[:, 0, i], ZENC[:, 1, j],
-                           c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                           s=64, alpha=0.5, edgecolors='')
-                plt.xlabel('LVM %d' % i)
-                plt.ylabel('LVS %d' % j)
-                fig.savefig(outpref+'.vae.prj.ld.%d.%d.png' % (i, j))
+        # for i in range(LD):
+        #     for j in range(i, LD):
+        #         fig = plt.figure()
+        #         ax = fig.add_subplot(111)
+        #         ax.spines['right'].set_visible(False)
+        #         ax.spines['top'].set_visible(False)
+        #         ax.xaxis.set_ticks_position('bottom')
+        #         ax.yaxis.set_ticks_position('left')
+        #         ax.scatter(ZENC[:, 0, i], ZENC[:, 1, j],
+        #                    c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
+        #                    s=64, alpha=0.5, edgecolors='')
+        #         plt.xlabel('LVM %d' % i)
+        #         plt.ylabel('LVS %d' % j)
+        #         fig.savefig(outpref+'.vae.prj.ld.%d.%d.png' % (i, j))
+        #         plt.close()
 
-        for i in range(LD):
-            for j in range(i, LD):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                ax.scatter(SCPZENC[:, 0, i], SCPZENC[:, 1, j],
-                           c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
-                           s=64, alpha=0.5, edgecolors='')
-                plt.xlabel('PLVM %d' % i)
-                plt.ylabel('PLVS %d' % j)
-                fig.savefig(outpref+'.vae.pca.prj.ld.%d.%d.png' % (i, j))
+        # for i in range(LD):
+        #     for j in range(i, LD):
+        #         fig = plt.figure()
+        #         ax = fig.add_subplot(111)
+        #         ax.spines['right'].set_visible(False)
+        #         ax.spines['top'].set_visible(False)
+        #         ax.xaxis.set_ticks_position('bottom')
+        #         ax.yaxis.set_ticks_position('left')
+        #         ax.scatter(SCPZENC[:, 0, i], SCPZENC[:, 1, j],
+        #                    c=MS.reshape(-1), cmap=plt.get_cmap('plasma'),
+        #                    s=64, alpha=0.5, edgecolors='')
+        #         plt.xlabel('PLVM %d' % i)
+        #         plt.ylabel('PLVS %d' % j)
+        #         fig.savefig(outpref+'.vae.pca.prj.ld.%d.%d.png' % (i, j))
+        #         plt.close()
 
-        for i in range(2):
-            for j in range(ED):
-                for k in range(LD):
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.spines['right'].set_visible(False)
-                    ax.spines['top'].set_visible(False)
-                    ax.xaxis.set_ticks_position('bottom')
-                    ax.yaxis.set_ticks_position('left')
-                    if i == 0:
-                        ax.imshow(ZMDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    if i == 1:
-                        ax.imshow(ZVDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                    ax.set_xticks(np.arange(CT.size), minor=True)
-                    ax.set_yticks(np.arange(CH.size), minor=True)
-                    plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-                    plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-                    plt.xlabel('T')
-                    plt.ylabel('H')
-                    fig.savefig(outpref+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
-                    plt.close()
-        for i in range(2):
+        # for i in range(1):
+        #     for j in range(ED):
+        #         for k in range(LD):
+        #             fig = plt.figure()
+        #             ax = fig.add_subplot(111)
+        #             ax.spines['right'].set_visible(False)
+        #             ax.spines['top'].set_visible(False)
+        #             ax.xaxis.set_ticks_position('bottom')
+        #             ax.yaxis.set_ticks_position('left')
+        #             if i == 0:
+        #                 ax.imshow(ZMDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        #             if i == 1:
+        #                 ax.imshow(ZVDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        #             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+        #             ax.set_xticks(np.arange(CT.size), minor=True)
+        #             ax.set_yticks(np.arange(CH.size), minor=True)
+        #             plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+        #             plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
+        #             plt.xlabel('T')
+        #             plt.ylabel('H')
+        #             fig.savefig(outpref+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
+        #             plt.close()
+
+        for i in range(1):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
@@ -733,6 +813,7 @@ if __name__ == '__main__':
                     plt.ylabel('H')
                     fig.savefig(outpref+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
+
         for i in range(2):
             for j in range(ED):
                 fig = plt.figure()

@@ -53,7 +53,7 @@ def parse_args():
     parser.add_argument('-n', '--name', help='simulation name',
                         type=str, default='ising_init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size',
-                        type=int, default=4)
+                        type=int, default=8)
     parser.add_argument('-j', '--interaction', help='interaction energy',
                         type=float, default=1.0)
     parser.add_argument('-mm', '--magnetic_moment', help='magnetic moment',
@@ -423,7 +423,7 @@ def load_samples_restart():
             print('\n----------------------------------')
         print('loading samples from previous dump')
         print('----------------------------------')
-    return list(np.load(os.getcwd()+'/%s.%d.rstrt.%d.npy' % (RENAME, N, RESTEP)))
+    return list(np.load(os.getcwd()+'/%s.%d.rstrt.%d.npy' % (RENAME, N, RESTEP), allow_pickle=True))
 
 
 def dump_samples_restart():
