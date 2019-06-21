@@ -273,15 +273,9 @@ def inlier_selection(dmp, dat, intrvl, ns):
 
 if __name__ == '__main__':
     # parse command line arguments
-    (VERBOSE, PLOT, PARALLEL, GPU, AD, THREADS, NAME, N,
-     UNI, UNS, SNI, SNS,
-     SCLR, LD, MNFLD, CLST, NC,
+    (VERBOSE, PLOT, PARALLEL, GPU, THREADS,
+     NAME, N, SNI, SNS, SCLR, LD,
      BACKEND, OPT, LSS, EP, LR, SEED) = parse_args()
-    if CLST == 'dbscan':
-        NCS = '%.0e' % NC
-    else:
-        NC = int(NC)
-        NCS = '%d' % NC
     CWD = os.getcwd()
     EPS = 0.025
     # number of phases
@@ -343,7 +337,7 @@ if __name__ == '__main__':
         CM = plt.get_cmap('plasma')
 
     PRM = (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d'
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d' % PRM
 
     write_specs()
 
@@ -370,7 +364,7 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         try:
-            CDMP = np.load(SCPREF+'dmp.c.npy')
+            CDMP = np.load(SCPREF+'.dmp.c.npy')
             CDAT = np.load(SCPREF+'.dat.c.npy')
             if VERBOSE:
                 # print(100*'-')
@@ -421,8 +415,8 @@ if __name__ == '__main__':
 
     try:
         VAE.load_weights(OUTPREF+'.vae.wt.h5', by_name=True)
-        TLOSS = np.load(OUTPREF+'/.vae.loss.trn.npy')
-        VLOSS = np.load(OUTPREF+'/.vae.loss.val.npy')
+        TLOSS = np.load(OUTPREF+'.vae.loss.trn.npy')
+        VLOSS = np.load(OUTPREF+'.vae.loss.val.npy')
         if VERBOSE:
             print('variational autoencoder trained weights loaded from file')
             print(100*'-')
@@ -465,14 +459,14 @@ if __name__ == '__main__':
         out.write(100*'-' + '\n')
 
     try:
-        ZENC = np.load(OUTPREF+'/.zenc.npy').reshape(SNH*SNT*SNS, ED, LD)
-        ERRDISTN = np.load(OUTPREF+'/.zerr.dist.neg.npy', allow_pickle=True)
-        ERRDISTP = np.load(OUTPREF+'/.zerr.dist.pos.npy', allow_pickle=True)
-        ERR = np.load(OUTPREF+'/.zerr.npy')
-        MERR = np.load(OUTPREF+'/.zerr.mean.npy')
+        ZENC = np.load(OUTPREF+'.zenc.npy').reshape(SNH*SNT*SNS, ED, LD)
+        ERR = np.load(OUTPREF+'.zerr.npy')
+        RERR = np.load(OUTPREF+'.zerr.round.npy')
+        MERR = np.load(OUTPREF+'.zerr.mean.npy')
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
         MNERR = np.load(OUTPREF+'.zerr.min.npy')
+        KLD = np.load(OUTPREF+'.zerr.kld.npy')
         MKLD = np.load(OUTPREF+'.zerr.kld.mean.npy')
         SKLD = np.load(OUTPREF+'.zerr.kld.stdv.npy')
         MXKLD = np.load(OUTPREF+'.zerr.kld.max.npy')
@@ -488,15 +482,13 @@ if __name__ == '__main__':
         ZDEC = np.array(DEC.predict(ZENC[2, :, :], verbose=VERBOSE))
         ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
-        ERR = ZDEC-SCDMP
-        ERRDISTN = np.array(np.histogram(ERR, np.linspace(-1.0, 0.0, 9)))
-        ERRDISTP = np.array(np.histogram(ERR, np.linspace(0.0, 1.0, 9)))
+        ERR = SCDMP-ZDEC
+        RERR = np.unique(SCDMP-np.round(ZDEC), return_counts=True)
         KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(SNH, SNT, SNS, ED, LD))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(SNH, SNT, SNS, N, N, NCH))
         np.save(OUTPREF+'.zerr.npy', ERR.reshape(SNH, SNT, SNS, N, N, NCH))
-        np.save(OUTPREF+'.zerr.dist.neg.npy', ERRDISTN)
-        np.save(OUTPREF+'.zerr.dist.pos.npy', ERRDISTP)
+        np.save(OUTPREF+'.zerr.round.npy', RERR)
         np.save(OUTPREF+'.zerr.kld.npy', KLD.reshape(SNH, SNT, SNS))
         MERR = np.mean(ERR)
         SERR = np.std(ERR)
@@ -531,6 +523,12 @@ if __name__ == '__main__':
         print('stdv kl div:     %f' % SKLD)
         print('max kl div:      %f' % MXKLD)
         print('min kl div:      %f' % MNKLD)
+        print(100*'-')
+        print('rounded output error')
+        print(100*'-')
+        print('error:'+RERR[0].size*' %0.2e' % tuple(RERR[0]))
+        print('count:'+RERR[1].size*' %0.2e' % tuple(RERR[1]))
+        print('prop: '+RERR[1].size*' %0.2e' % tuple(RERR[1]/np.sum(RERR[1])))
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
@@ -611,8 +609,26 @@ if __name__ == '__main__':
 
     def vae_plots():
 
-        outpref = OUTPREF+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d' % \
-                  (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ex = np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 33)
+        er = np.histogram(ERR, ex)[0]/(SNH*SNT*SNS*N*N)
+        dex = ex[1]-ex[0]
+        ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
+        ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
+        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+        ax.set_xticks(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5), minor=True)
+        ax.set_yticks(ey, minor=True)
+        plt.xticks(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5))
+        plt.yticks(ey)
+        plt.xlabel('ERROR')
+        plt.ylabel('DENSITY')
+        fig.savefig(OUTPREF+'.vae.err.png')
+        plt.close()
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -620,33 +636,20 @@ if __name__ == '__main__':
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ex = np.linspace(-1.0, 1.0, 33)
-        er = np.histogram(ERR, ex)[0]/(SNH*SNT*SNS*N*N)
+        ex = np.linspace(0.0, np.ceil(KLD.max()), 33)
+        er = np.histogram(KLD, ex)[0]/(SNH*SNT*SNS)
         dex = ex[1]-ex[0]
-        ey = np.linspace(0, 0.5, 3)
+        ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
         ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
         ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.linspace(-1.0, 1.0, 5), minor=True)
+        ax.set_xticks(np.linspace(0.0, np.ceil(KLD.max()), 5), minor=True)
         ax.set_yticks(ey, minor=True)
-        plt.xticks(np.linspace(-1.0, 1.0, 5))
+        plt.xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
         plt.yticks(ey)
         plt.xlabel('ERR')
         plt.ylabel('DENSITY')
-        fig.savefig(outpref+'.vae.err.png')
+        fig.savefig(OUTPREF+'.vae.kld.png')
         plt.close()
-
-        SCPZENC = np.copy(ZENC)
-        RNGS = [(-1, 1), (0, 1)]
-        for i in range(ED):
-            SCPZENC[:, i, :] = MinMaxScaler(feature_range=RNGS[i]).fit_transform(SCPZENC[:, i, :].reshape(SNH*SNT*SNS, LD))
-        SCPZENC = SCPZENC.reshape(SNH, SNT, SNS, ED, LD)
-        for i in range(LD):
-            if np.max(SCPZENC[0, 0, :, 0, i]) > np.max(SCPZENC[-1, 0, :, 0, i]):
-                SCPZENC[:, :, :, 0, i] = (-1)*SCPZENC[:, :, :, 0, i]
-            if np.max(SCPZENC[int(SNH/2), 0, :, 1, i]) > np.max(SCPZENC[int(SNH/2), -1, :, 1, i]):
-                SCPZENC[:, :, :, 1, i] = 1-SCPZENC[:, :, :, 1, i]
-        SCPZENC = SCPZENC.reshape(SNH*SNT*SNS, ED, LD)
-        SCPZENC = MinMaxScaler(feature_range=(0, 1)).fit_transform(SCPZENC.reshape(SNH*SNT*SNS, ED*LD)).reshape(SNH*SNT*SNS, ED, LD)
 
         MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
         MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
@@ -659,7 +662,7 @@ if __name__ == '__main__':
         for i in range(LD):
             if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
                 PZMDIAG[:, :, 0, i] = 1-PZMDIAG[:, :, 0, i]
-            if PZMDIAG[int(SNH/2), 0, 1, i] > PZMDIAG[int(SNH/2), -1, 1, i]:
+            if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
                 PZMDIAG[:, :, 1, i] = 1-PZMDIAG[:, :, 1, i]
         PZVDIAG = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/\
                                                        CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
@@ -684,7 +687,7 @@ if __name__ == '__main__':
                     plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
                     plt.xlabel('T')
                     plt.ylabel('H')
-                    fig.savefig(outpref+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
                     plt.close()
 
         for i in range(1):
@@ -707,7 +710,7 @@ if __name__ == '__main__':
                     plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
                     plt.xlabel('T')
                     plt.ylabel('H')
-                    fig.savefig(outpref+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
 
         for i in range(2):
@@ -729,7 +732,7 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                fig.savefig(outpref+'.vae.diag.mv.%d.%d.png' % (i, j))
+                fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
                 plt.close()
 
     if PLOT:
