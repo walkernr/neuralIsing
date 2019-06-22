@@ -391,6 +391,8 @@ if __name__ == '__main__':
                 TMIN, TMAX = SCDMP[:, :, :, i].min(), SCDMP[:, :, :, i].max()
                 SCDMP[:, :, :, i] = (SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
             del TMIN, TMAX
+        elif SCLR == 'none':
+            SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
         else:
             SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N*NCH)).reshape(SNH*SNT*SNS, N, N, NCH)
         del CDMP
@@ -461,7 +463,8 @@ if __name__ == '__main__':
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(SNH*SNT*SNS, ED, LD)
         ERR = np.load(OUTPREF+'.zerr.npy')
-        RERR = np.load(OUTPREF+'.zerr.round.npy')
+        if SCLR in ['minmax', 'global', 'none']:
+            RERR = np.load(OUTPREF+'.zerr.round.npy')
         MERR = np.load(OUTPREF+'.zerr.mean.npy')
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
@@ -483,12 +486,13 @@ if __name__ == '__main__':
         ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
         ERR = SCDMP-ZDEC
-        RERR = np.unique(SCDMP-np.round(ZDEC), return_counts=True)
+        if SCLR in ['minmax', 'global', 'none']:
+            RERR = np.unique(SCDMP-np.round(ZDEC), return_counts=True)
+        np.save(OUTPREF+'.zerr.round.npy', RERR)
         KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(SNH, SNT, SNS, ED, LD))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(SNH, SNT, SNS, N, N, NCH))
         np.save(OUTPREF+'.zerr.npy', ERR.reshape(SNH, SNT, SNS, N, N, NCH))
-        np.save(OUTPREF+'.zerr.round.npy', RERR)
         np.save(OUTPREF+'.zerr.kld.npy', KLD.reshape(SNH, SNT, SNS))
         MERR = np.mean(ERR)
         SERR = np.std(ERR)
@@ -524,12 +528,13 @@ if __name__ == '__main__':
         print('max kl div:      %f' % MXKLD)
         print('min kl div:      %f' % MNKLD)
         print(100*'-')
-        print('rounded output error')
-        print(100*'-')
-        print('error:'+RERR[0].size*' %0.2e' % tuple(RERR[0]))
-        print('count:'+RERR[1].size*' %0.2e' % tuple(RERR[1]))
-        print('prop: '+RERR[1].size*' %0.2e' % tuple(RERR[1]/np.sum(RERR[1])))
-        print(100*'-')
+        if SCLR in ['minmax', 'global', 'none']:
+            print('rounded output error')
+            print(100*'-')
+            print('error:'+RERR[0].size*' %0.2e' % tuple(RERR[0]))
+            print('count:'+RERR[1].size*' %0.2e' % tuple(RERR[1]))
+            print('prop: '+RERR[1].size*' %0.2e' % tuple(RERR[1]/np.sum(RERR[1])))
+            print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
         out.write(100*'-'+'\n')
