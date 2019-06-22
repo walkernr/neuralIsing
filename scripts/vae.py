@@ -22,11 +22,14 @@ from scipy.odr import ODR, Model as ODRModel, RealData
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--verbose', help='verbose output', action='store_true')
-    parser.add_argument('-pt', '--plot', help='plot results', action='store_true')
-    parser.add_argument('-p', '--parallel', help='parallel run', action='store_true')
-    parser.add_argument('-g', '--gpu', help='gpu run (will default to cpu if unable)', action='store_true')
-    parser.add_argument('-ad', '--anomaly_detection', help='anomaly detection for embedding', action='store_true')
+    parser.add_argument('-v', '--verbose', help='verbose output',
+                        action='store_true')
+    parser.add_argument('-pt', '--plot', help='plot results',
+                        action='store_true')
+    parser.add_argument('-p', '--parallel', help='parallel run',
+                        action='store_true')
+    parser.add_argument('-g', '--gpu', help='gpu run (will default to cpu if unable)',
+                        action='store_true')
     parser.add_argument('-nt', '--threads', help='number of threads',
                         type=int, default=20)
     parser.add_argument('-n', '--name', help='simulation name',
@@ -39,24 +42,29 @@ def parse_args():
                         type=int, default=1024)
     parser.add_argument('-sc', '--scaler', help='feature scaler',
                         type=str, default='global')
-    parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
-                        type=int, default=8)
     parser.add_argument('-bk', '--backend', help='keras backend',
                         type=str, default='tensorflow')
+    parser.add_argument('-pr', '--prelu', help='uses PReLU activation function',
+                        action='store_true')
+    parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
+                        type=int, default=8)
     parser.add_argument('-opt', '--optimizer', help='optimization function',
                         type=str, default='nadam')
+    parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
+                        type=float, default=1e-3)
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='mse')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
                         type=int, default=32)
-    parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
-                        type=float, default=1e-3)
+    parser.add_argument('-bs', '--batch_size', help='size of batches',
+                        type=int, default=32)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=256)
     args = parser.parse_args()
-    return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name, args.lattice_size,
-            args.super_interval, args.super_samples, args.scaler, args.latent_dimension,
-            args.backend, args.optimizer, args.loss, args.epochs, args.learning_rate, args.random_seed)
+    return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
+            args.lattice_size, args.super_interval, args.super_samples,
+            args.scaler, args.backend, args.prelu, args.latent_dimension,
+            args.optimizer, args.learning_rate, args.loss, args.epochs, args.batch_size, args.random_seed)
 
 
 def write_specs():
@@ -70,18 +78,18 @@ def write_specs():
         print('threads:                   %d' % THREADS)
         print('name:                      %s' % NAME)
         print('lattice size:              %d' % N)
-        print('random seed:               %d' % SEED)
         print('super interval:            %d' % SNI)
         print('super samples:             %d' % SNS)
         print('scaler:                    %s' % SCLR)
-        print('latent dimension:          %d' % LD)
         print('backend:                   %s' % BACKEND)
-        print('network:                   %s' % 'cnn2d')
+        print('prelu:                     %s' % PRELU)
+        print('latent dimension:          %d' % LD)
         print('optimizer:                 %s' % OPT)
-        print('loss function:             %s' % LSS)
-        print('epochs:                    %d' % EP)
         print('learning rate:             %.2e' % LR)
-        print('fitting function:          %s' % 'logistic')
+        print('loss function:             %s' % LSS)
+        print('batch size:                %d' % BS)
+        print('epochs:                    %d' % EP)
+        print('random seed:               %d' % SEED)
         print(100*'-')
     with open(OUTPREF+'.out', 'w') as out:
         out.write(100*'-' + '\n')
@@ -93,18 +101,18 @@ def write_specs():
         out.write('threads:                   %d\n' % THREADS)
         out.write('name:                      %s\n' % NAME)
         out.write('lattice size:              %d\n' % N)
-        out.write('random seed:               %d\n' % SEED)
         out.write('super interval:            %d\n' % SNI)
         out.write('super samples:             %d\n' % SNS)
         out.write('scaler:                    %s\n' % SCLR)
-        out.write('latent dimension:          %d\n' % LD)
         out.write('backend:                   %s\n' % BACKEND)
-        out.write('network:                   %s\n' % 'cnn2d')
+        out.write('prelu:                     %s\n' % PRELU)
+        out.write('latent dimension:          %d\n' % LD)
         out.write('optimizer:                 %s\n' % OPT)
-        out.write('loss function:             %s\n' % LSS)
-        out.write('epochs:                    %d\n' % EP)
         out.write('learning rate:             %.2e\n' % LR)
-        out.write('fitting function:          %s\n' % 'logistic')
+        out.write('loss function:             %s\n' % LSS)
+        out.write('batch size:                %d\n' % BS)
+        out.write('epochs:                    %d\n' % EP)
+        out.write('random seed:               %d\n' % SEED)
         out.write(100*'-' + '\n')
 
 
@@ -148,33 +156,71 @@ def build_variational_autoencoder():
     if VERBOSE:
         print('building variational autoencoder network')
         print(100*'-')
+    # --------------
+    # initialization
+    # --------------
+    # output layer activation
+    # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
+    # caused by scaling
     if SCLR in ['minmax', 'tanh', 'global']:
         outact = 'sigmoid'
     else:
         outact = 'tanh'
+    # kernel initializer - customizable
+    # limited tests showed he_normal performs well
     init = 'he_normal'
+    # base number of filters
     nf = 32
+    # number of convolutions necessary to get down to size length 4
+    # should use base 2 exponential side lengths
     nc = np.int32(np.log2(N/4.))
+    # --------------
     # encoder layers
+    # --------------
+    # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
+    # loop through convolutions
+    # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
         if i == 0:
-            c = Conv2D(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
+            # 0th convoluton takes input layer
+            c = Conv2D(filters=2**i*nf, kernel_size=(3, 3), kernel_initializer=init,
                        padding='same', strides=2)(input)
         else:
-            c = Conv2D(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
+            # (i!=0)th convolution takes prior convolution
+            c = Conv2D(filters=2**i*nf, kernel_size=(3, 3), kernel_initializer=init,
                        padding='same', strides=2)(c)
-        c = BatchNormalization()(c)
-        # c = Activation('relu')(c)
-        # c = LeakyReLU(alpha=0.2)(c)
-        c = PReLU()(c)
+        # batch normalization to scale activations
+        c = BatchNormalization(epsilon=1e-4)(c)
+        # activations
+        if PRELU:
+            # like leaky relu, but with trainable layer to tune alphas
+            c = PReLU()(c)
+        else:
+            c = Activation('relu')(c)
+    # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten()(c)
+    # dense layer connected to flattened convolution output
     # d0 = Dense(np.int32(np.sqrt(np.prod(shape[1:]))), kernel_initializer=init)(d0)
     # d0 = PReLU()(d0)
-    z_mean = Dense(LD, name='z_mean', kernel_initializer=init, activation='linear')(d0)
+    # gaussian parameters as dense layers
+    z_mean = Dense(LD, name='z_mean', kernel_initializer=init)(d0)
+    # activations
+    if PRELU:
+        # like leaky relu, but with trainable layer to tune alphas
+        z_mean = PReLU()(z_mean)
+    else:
+        z_mean = Activation('linear')(z_mean)
     # more numerically stable to use log(var_z)
-    z_log_var = Dense(LD, name='z_log_std', kernel_initializer=init, activation='linear')(d0)
+    z_log_var = Dense(LD, name='z_log_std', kernel_initializer=init)(d0)
+    # activations
+    if PRELU:
+        # like leaky relu, but with trainable layer to tune alphas
+        z_log_var = PReLU()(z_log_var)
+    else:
+        z_log_var = Activation('linear')(z_log_var)
+    # samples from the gaussians
     z = Lambda(gauss_sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
     # construct encoder
     encoder = Model(input, [z_mean, z_log_var, z], name='encoder')
@@ -183,25 +229,46 @@ def build_variational_autoencoder():
         print(100*'-')
         encoder.summary()
         print(100*'-')
+    # --------------
     # decoder layers
+    # --------------
+    # input layer (latent variables z)
     latent_input = Input(shape=(LD,), name='z_sampling')
+    # dense network of same size as convolution output from encoder
     d1 = Dense(np.prod(shape[1:]), kernel_initializer=init)(latent_input)
-    d1 = Activation('linear')(d1)
-    # d1 = PReLU()(d1)
-    rd1 = Reshape(shape[1:])(d1)
+    # reshape to convolution shape
+    d1 = Reshape(shape[1:])(d1)
+    # batch renormalization to scale activations
+    d1 = BatchNormalization(epsilon=1e-4)(d1)
+    # activations
+    if PRELU:
+        # like leaky relu, but with trainable layer to tune alphas
+        d1 = PReLU()(d1)
+    else:
+        d1 = Activation('relu')(d1)
+    # loop through convolution transposes
     for i in range(nc-1, -1, -1):
         if i == nc-1:
+            # (nc-1)th convoltution transpose takes reshaped dense layer
             ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
-                                 padding='same', strides=2)(rd1)
+                                 padding='same', strides=2)(d1)
         else:
+            # (i!=(nc-1))th convolution transpose takes prior convolution transpose
             ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
                                  padding='same', strides=2)(ct)
-        ct = BatchNormalization()(ct)
-        # ct = Activation('relu')(ct)
-        # ct = LeakyReLU(alpha=0.2)(ct)
-        ct = PReLU()(ct)
-    output = Conv2DTranspose(filters=NCH, kernel_size=3, activation=outact,
-                             kernel_initializer=init, padding='same', name='decoder_output')(ct)
+        # batch normalization to scale activations
+        ct = BatchNormalization(epsilon=1e-4)(ct)
+        # activations
+        if PRELU:
+            # like leaky relu, but with trainable layer to tune alphas
+            ct = PReLU()(ct)
+        else:
+            ct = Activation('relu')(ct)
+    # output convolution transpose layer
+    output = Conv2DTranspose(filters=NCH, kernel_size=3, kernel_initializer=init,
+                             padding='same', name='decoder_output')(ct)
+    # output layer activation
+    output = Activation(outact)(output)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
@@ -209,15 +276,24 @@ def build_variational_autoencoder():
         print(100*'-')
         decoder.summary()
         print(100*'-')
+    # -------------
     # construct vae
+    # -------------
+    # combine encoder and decoder
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
+    # reconstruction losses
     reconstruction_losses = {'bc': lambda a, b: binary_crossentropy(a, b),
-                             'mse': lambda a, b: mse(a, b),
-                             'hybrid': lambda a, b: 0.5*(binary_crossentropy(a, b)+mse(a, b))}
+                             'mse': lambda a, b: mean_squared_error(a, b),
+                             'hybrid': lambda a, b: 0.5*(binary_crossentropy(a, b)+mean_squared_error(a, b)),
+                             'mea': lambda a, b: mean_absolute_error(a, b),
+                             'logcosh': lambda a, b: logcosh(a, b)}
     # vae loss
+    # scale by number of features in sample
     reconstruction_loss = N*N*reconstruction_losses[LSS](K.flatten(input), K.flatten(output))
+    # kullback-liebler divergence for gaussian distribution to regularize latent space
     kl_loss = 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
+    # combine losses
     vae_loss = K.mean(reconstruction_loss+kl_loss)
     vae.add_loss(vae_loss)
     # compile vae
@@ -273,9 +349,10 @@ def inlier_selection(dmp, dat, intrvl, ns):
 
 if __name__ == '__main__':
     # parse command line arguments
-    (VERBOSE, PLOT, PARALLEL, GPU, THREADS,
-     NAME, N, SNI, SNS, SCLR, LD,
-     BACKEND, OPT, LSS, EP, LR, SEED) = parse_args()
+    (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
+     N, SNI, SNS,
+     SCLR, BACKEND, PRELU, LD,
+     OPT, LR, LSS, EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
     EPS = 0.025
     # number of phases
@@ -304,7 +381,7 @@ if __name__ == '__main__':
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation)
-    from keras.losses import binary_crossentropy, mse
+    from keras.losses import binary_crossentropy, mean_squared_error, mean_absolute_error, logcosh
     from keras.activations import relu, sigmoid, linear
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.activations import relu, tanh, sigmoid, linear
@@ -336,8 +413,8 @@ if __name__ == '__main__':
         SCALE = lambda a, b: (a-np.min(b))/(np.max(b)-np.min(b))
         CM = plt.get_cmap('plasma')
 
-    PRM = (NAME, N, SNI, SNS, SCLR, OPT, LSS, LD, EP, LR, SEED)
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%.0e.%d' % PRM
+    PRM = (NAME, N, SNI, SNS, SCLR, PRELU, LD, OPT, LR, LSS, EP, BS, SEED)
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%d.%d.%s.%.0e.%s.%d.%d.%d' % PRM
 
     write_specs()
 
@@ -429,7 +506,7 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(OUTPREF+'.vae.log.csv', append=True, separator=',')
         LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
         TRN, VAL = train_test_split(SCDMP, test_size=0.125, shuffle=True)
-        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=SNH*SNT,
+        VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=BS,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
@@ -463,8 +540,7 @@ if __name__ == '__main__':
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(SNH*SNT*SNS, ED, LD)
         ERR = np.load(OUTPREF+'.zerr.npy')
-        if SCLR in ['minmax', 'global', 'none']:
-            RERR = np.load(OUTPREF+'.zerr.round.npy')
+        RERR = np.load(OUTPREF+'.zerr.round.npy')
         MERR = np.load(OUTPREF+'.zerr.mean.npy')
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
@@ -486,13 +562,12 @@ if __name__ == '__main__':
         ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
         ERR = SCDMP-ZDEC
-        if SCLR in ['minmax', 'global', 'none']:
-            RERR = np.unique(SCDMP-np.round(ZDEC), return_counts=True)
-        np.save(OUTPREF+'.zerr.round.npy', RERR)
+        RERR = np.unique(np.round(SCDMP)-np.round(ZDEC), return_counts=True)
         KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(SNH, SNT, SNS, ED, LD))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(SNH, SNT, SNS, N, N, NCH))
         np.save(OUTPREF+'.zerr.npy', ERR.reshape(SNH, SNT, SNS, N, N, NCH))
+        np.save(OUTPREF+'.zerr.round.npy', RERR)
         np.save(OUTPREF+'.zerr.kld.npy', KLD.reshape(SNH, SNT, SNS))
         MERR = np.mean(ERR)
         SERR = np.std(ERR)
@@ -528,13 +603,12 @@ if __name__ == '__main__':
         print('max kl div:      %f' % MXKLD)
         print('min kl div:      %f' % MNKLD)
         print(100*'-')
-        if SCLR in ['minmax', 'global', 'none']:
-            print('rounded output error')
-            print(100*'-')
-            print('error:'+RERR[0].size*' %0.2e' % tuple(RERR[0]))
-            print('count:'+RERR[1].size*' %0.2e' % tuple(RERR[1]))
-            print('prop: '+RERR[1].size*' %0.2e' % tuple(RERR[1]/np.sum(RERR[1])))
-            print(100*'-')
+        print('rounded output error')
+        print(100*'-')
+        print('error:'+RERR[0].size*' %0.2e' % tuple(RERR[0]))
+        print('count:'+RERR[1].size*' %0.2e' % tuple(RERR[1]))
+        print('prop: '+RERR[1].size*' %0.2e' % tuple(RERR[1]/np.sum(RERR[1])))
+        print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
         out.write(100*'-'+'\n')
@@ -551,6 +625,12 @@ if __name__ == '__main__':
         out.write('max kl div:      %f\n' % MXKLD)
         out.write('min kl div:      %f\n' % MNKLD)
         out.write(100*'-'+'\n')
+        out.write('rounded output error\n')
+        # out.write(100*'-'+'\n')
+        # out.write('error:'+RERR[0].size*' %0.2e'+'\n' % tuple(RERR[0]))
+        # out.write('count:'+RERR[1].size*' %0.2e'+'\n' % tuple(RERR[1]))
+        # out.write('prop: '+RERR[1].size*' %0.2e'+'\n' % tuple(RERR[1]/np.sum(RERR[1])))
+        # out.write(100*'-'+'\n')
 
     try:
         PZENC = np.load(OUTPREF+'.zenc.pca.prj.npy').reshape(SNH*SNT*SNS, ED, LD)
