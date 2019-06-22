@@ -82,7 +82,7 @@ def write_specs():
         print('super samples:             %d' % SNS)
         print('scaler:                    %s' % SCLR)
         print('backend:                   %s' % BACKEND)
-        print('prelu:                     %s' % PRELU)
+        print('prelu:                     %d' % PRELU)
         print('latent dimension:          %d' % LD)
         print('optimizer:                 %s' % OPT)
         print('learning rate:             %.2e' % LR)
@@ -105,7 +105,7 @@ def write_specs():
         out.write('super samples:             %d\n' % SNS)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('backend:                   %s\n' % BACKEND)
-        out.write('prelu:                     %s\n' % PRELU)
+        out.write('prelu:                     %d\n' % PRELU)
         out.write('latent dimension:          %d\n' % LD)
         out.write('optimizer:                 %s\n' % OPT)
         out.write('learning rate:             %.2e\n' % LR)
@@ -163,8 +163,10 @@ def build_variational_autoencoder():
     # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
     # caused by scaling
     if SCLR in ['minmax', 'tanh', 'global']:
+        hidact = 'relu'
         outact = 'sigmoid'
     else:
+        hidact = 'linear'
         outact = 'tanh'
     # kernel initializer - customizable
     # limited tests showed he_normal performs well
@@ -197,7 +199,7 @@ def build_variational_autoencoder():
             # like leaky relu, but with trainable layer to tune alphas
             c = PReLU()(c)
         else:
-            c = Activation('relu')(c)
+            c = Activation(hidact)(c)
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten()(c)
@@ -245,7 +247,7 @@ def build_variational_autoencoder():
         # like leaky relu, but with trainable layer to tune alphas
         d1 = PReLU()(d1)
     else:
-        d1 = Activation('relu')(d1)
+        d1 = Activation(hidact)(d1)
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
         if i == nc-1:
@@ -263,7 +265,7 @@ def build_variational_autoencoder():
             # like leaky relu, but with trainable layer to tune alphas
             ct = PReLU()(ct)
         else:
-            ct = Activation('relu')(ct)
+            ct = Activation(hidact)(ct)
     # output convolution transpose layer
     output = Conv2DTranspose(filters=NCH, kernel_size=3, kernel_initializer=init,
                              padding='same', name='decoder_output')(ct)
@@ -421,20 +423,28 @@ if __name__ == '__main__':
     LDIR = os.listdir()
 
     # scaler dictionary
-    SCLRS = {'minmax':MinMaxScaler(feature_range=(0, 1)),
+    FRNG = (0.0, 1.0)
+    SCLRS = {'minmax':MinMaxScaler(feature_range=FRNG),
              'standard':StandardScaler(),
              'robust':RobustScaler(),
-             'tanh':TanhScaler()}
+             'tanh':TanhScaler(feature_range=FRNG)}
 
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     SNH, SNT = CH.size, CT.size
     NCH = 1
 
+    SHP0 = (SNH, SNT, SNS, N, N, NCH)
+    SHP1 = (SNH*SNT*SNS, N, N, NCH)
+    SHP2 = (SNH*SNT*SNS, N*N*NCH)
+    SHP3 = (SNH, SNT, SNS, ED, LD)
+    SHP4 = (SNH*SNT*SNS, ED, LD)
+    SHP5 = (SNH*SNT*SNS, ED*LD)
+
     SCPREF = CWD+'/%s.%d.%d.%d.%d' % (NAME, N, SNI, SNS, SEED)
 
     try:
-        SCDMP = np.load(SCPREF+'.dmp.sc.npy').reshape(SNH*SNT*SNS, N, N, NCH)
+        SCDMP = np.load(SCPREF+'.dmp.sc.npy').reshape(*SHP1)
         CDAT = np.load(SCPREF+'.dmp.sc.npy')
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
@@ -463,17 +473,16 @@ if __name__ == '__main__':
                 print(100*'-')
 
         if SCLR == 'global':
-            SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
+            SCDMP = CDMP.reshape(*SHP1)
             for i in range(NCH):
                 TMIN, TMAX = SCDMP[:, :, :, i].min(), SCDMP[:, :, :, i].max()
                 SCDMP[:, :, :, i] = (SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
-            del TMIN, TMAX
         elif SCLR == 'none':
-            SCDMP = CDMP.reshape(SNH*SNT*SNS, N, N, NCH)
+            SCDMP = CDMP.reshape(*SHP1)
         else:
-            SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(SNH*SNT*SNS, N*N*NCH)).reshape(SNH*SNT*SNS, N, N, NCH)
+            SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(*SHP2)).reshape(*SHP1)
         del CDMP
-        np.save(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(SNH, SNT, SNS, N, N, NCH))
+        np.save(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(*SHP0))
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(100*'-')
@@ -538,7 +547,7 @@ if __name__ == '__main__':
         out.write(100*'-' + '\n')
 
     try:
-        ZENC = np.load(OUTPREF+'.zenc.npy').reshape(SNH*SNT*SNS, ED, LD)
+        ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
         ERR = np.load(OUTPREF+'.zerr.npy')
         RERR = np.load(OUTPREF+'.zerr.round.npy')
         MERR = np.load(OUTPREF+'.zerr.mean.npy')
@@ -559,14 +568,24 @@ if __name__ == '__main__':
             print(100*'-')
         ZENC = np.array(ENC.predict(SCDMP, verbose=VERBOSE))
         ZDEC = np.array(DEC.predict(ZENC[2, :, :], verbose=VERBOSE))
+        # if SCLR == 'global':
+        #     CDMP = SCDMP*(TMAX-TMIN)+TMIN
+        #     ZDEC = ZDEC*(TMAX-TMIN)+TMIN
+        # elif SCLR == 'none':
+        #     CDMP = SCDMP
+        #     ZDEC = ZDEC
+        # else:
+        #     CDMP = SCLRS[SCLR].inverse_transform(SCDMP.reshape(*SHP2)).reshape(*SHP1)
+        #     ZDEC = SCLRS[SCLR].inverse_transform(ZDEC.reshape(*SHP2)).reshape(*SHP1)
         ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
         ERR = SCDMP-ZDEC
         RERR = np.unique(np.round(SCDMP)-np.round(ZDEC), return_counts=True)
+        # del CDMP
         KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
-        np.save(OUTPREF+'.zenc.npy', ZENC.reshape(SNH, SNT, SNS, ED, LD))
-        np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(SNH, SNT, SNS, N, N, NCH))
-        np.save(OUTPREF+'.zerr.npy', ERR.reshape(SNH, SNT, SNS, N, N, NCH))
+        np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
+        np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
+        np.save(OUTPREF+'.zerr.npy', ERR.reshape(*SHP0))
         np.save(OUTPREF+'.zerr.round.npy', RERR)
         np.save(OUTPREF+'.zerr.kld.npy', KLD.reshape(SNH, SNT, SNS))
         MERR = np.mean(ERR)
@@ -633,7 +652,7 @@ if __name__ == '__main__':
         # out.write(100*'-'+'\n')
 
     try:
-        PZENC = np.load(OUTPREF+'.zenc.pca.prj.npy').reshape(SNH*SNT*SNS, ED, LD)
+        PZENC = np.load(OUTPREF+'.zenc.pca.prj.npy').reshape(*SHP4)
         CZENC = np.load(OUTPREF+'.zenc.pca.cmp.npy')
         VZENC = np.load(OUTPREF+'.zenc.pca.var.npy')
         if VERBOSE:
@@ -651,7 +670,7 @@ if __name__ == '__main__':
             PZENC[:, i, :] = PCAZENC.fit_transform(ZENC[:, i, :])
             CZENC[i, :, :] = PCAZENC.components_
             VZENC[i, :] = PCAZENC.explained_variance_ratio_
-        np.save(OUTPREF+'.zenc.pca.prj.npy', PZENC.reshape(SNH, SNT, SNS, ED, LD))
+        np.save(OUTPREF+'.zenc.pca.prj.npy', PZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zenc.pca.cmp.npy', CZENC)
         np.save(OUTPREF+'.zenc.pca.var.npy', VZENC)
 
