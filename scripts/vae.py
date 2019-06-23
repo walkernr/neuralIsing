@@ -750,7 +750,7 @@ if __name__ == '__main__':
         ax.set_yticks(ey, minor=True)
         plt.xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
         plt.yticks(ey)
-        plt.xlabel('ERR')
+        plt.xlabel('KLD')
         plt.ylabel('DENSITY')
         fig.savefig(OUTPREF+'.vae.kld.png')
         plt.close()
