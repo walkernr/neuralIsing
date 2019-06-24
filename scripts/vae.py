@@ -782,13 +782,14 @@ if __name__ == '__main__':
         fig.savefig(OUTPREF+'.vae.kld.png')
         plt.close()
 
+        # diagrams for physical measurements
         MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
         MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
-
+        # diagrams for latent variables
         ZMDIAG = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
         ZVDIAG = SCLRS['minmax'].fit_transform(np.var(ZENC.reshape(SNH, SNT, SNS, ED*LD)/\
                                                       CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
-
+        # diagrams for pca embeddings of latent variables
         PZMDIAG = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(SNH, SNT, SNS, ED*LD), 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
         for i in range(LD):
             if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
@@ -798,6 +799,7 @@ if __name__ == '__main__':
         PZVDIAG = SCLRS['minmax'].fit_transform(np.var(PZENC.reshape(SNH, SNT, SNS, ED*LD)/\
                                                        CT[np.newaxis, :, np.newaxis, np.newaxis], 2).reshape(SNH*SNT, ED*LD)).reshape(SNH, SNT, ED, LD)
 
+        # plot latent variable diagrams
         for i in range(1):
             for j in range(ED):
                 for k in range(LD):
@@ -821,6 +823,7 @@ if __name__ == '__main__':
                     fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
                     plt.close()
 
+        # plot pca latent variable diagrams
         for i in range(1):
             for j in range(ED):
                 for k in range(LD):
@@ -867,4 +870,5 @@ if __name__ == '__main__':
                 plt.close()
 
     if PLOT:
+        # plot results
         vae_plots()
