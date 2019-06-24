@@ -21,16 +21,17 @@ from scipy.odr import ODR, Model as ODRModel, RealData
 
 
 def parse_args():
+    ''' parses command line arguments '''
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', help='verbose output',
                         action='store_true')
     parser.add_argument('-pt', '--plot', help='plot results',
                         action='store_true')
-    parser.add_argument('-p', '--parallel', help='parallel run',
+    parser.add_argument('-p', '--parallel', help='parallel (cpu) mode',
                         action='store_true')
-    parser.add_argument('-g', '--gpu', help='gpu run (will default to cpu if unable)',
+    parser.add_argument('-g', '--gpu', help='gpu mode (will default to cpu if unable)',
                         action='store_true')
-    parser.add_argument('-nt', '--threads', help='number of threads',
+    parser.add_argument('-nt', '--threads', help='number of parallel threads',
                         type=int, default=20)
     parser.add_argument('-n', '--name', help='simulation name',
                         type=str, default='ising_init')
@@ -40,17 +41,17 @@ def parse_args():
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
                         type=int, default=1024)
-    parser.add_argument('-sc', '--scaler', help='feature scaler',
+    parser.add_argument('-sc', '--scaler', help='feature scaling method (none, global, minmax, robust, standard, tanh)',
                         type=str, default='global')
     parser.add_argument('-bk', '--backend', help='keras backend',
                         type=str, default='tensorflow')
-    parser.add_argument('-pr', '--prelu', help='uses PReLU activation function',
+    parser.add_argument('-pr', '--prelu', help='PReLU activation function (replaces ReLU and linear activations)',
                         action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
                         type=int, default=8)
-    parser.add_argument('-opt', '--optimizer', help='optimization function',
+    parser.add_argument('-opt', '--optimizer', help='neural network weight optimization function',
                         type=str, default='nadam')
-    parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network',
+    parser.add_argument('-lr', '--learning_rate', help='learning rate for neural networ optimizer',
                         type=float, default=1e-3)
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='mse')
@@ -68,6 +69,7 @@ def parse_args():
 
 
 def write_specs():
+    ''' writes run details to output file (and stdout if verbose is enabled) '''
     if VERBOSE:
         print(100*'-')
         print('input summary')
@@ -131,20 +133,28 @@ def absolute(beta, t):
 
 def odr_fit(func, dom, mrng, srng, pg):
     ''' performs orthogonal distance regression '''
+    # load data
     dat = RealData(dom, mrng, EPS*np.ones(len(dom)), srng+EPS)
+    # model function
     mod = ODRModel(func)
+    # odr initialization
     odr = ODR(dat, mod, pg)
+    # ord fit
     odr.set_job(fit_type=0)
     fit = odr.run()
+    # optimal parameters and error
     popt = fit.beta
     perr = fit.sd_beta
+    # new domain
     ndom = 128
     fdom = np.linspace(np.min(dom), np.max(dom), ndom)
     fval = func(popt, fdom)
+    # return optimal parameters, errors, and function values
     return popt, perr, fdom, fval
 
 
 def gauss_sampling(beta):
+    ''' samples a point in a multivariate gaussian distribution '''
     z_mean, z_log_var = beta
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
@@ -284,19 +294,13 @@ def build_variational_autoencoder():
     # combine encoder and decoder
     output = decoder(encoder(input)[2])
     vae = Model(input, output, name='vae_mlp')
-    # reconstruction losses
-    reconstruction_losses = {'bc': lambda a, b: binary_crossentropy(a, b),
-                             'mse': lambda a, b: mean_squared_error(a, b),
-                             'hybrid': lambda a, b: 0.5*(binary_crossentropy(a, b)+mean_squared_error(a, b)),
-                             'mea': lambda a, b: mean_absolute_error(a, b),
-                             'logcosh': lambda a, b: logcosh(a, b)}
     # vae loss
     # scale by number of features in sample
-    reconstruction_loss = N*N*reconstruction_losses[LSS](K.flatten(input), K.flatten(output))
+    reconstruction = N*N*RCLS[LSS](K.flatten(input), K.flatten(output))
     # kullback-liebler divergence for gaussian distribution to regularize latent space
-    kl_loss = 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
+    kl = 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
     # combine losses
-    vae_loss = K.mean(reconstruction_loss+kl_loss)
+    vae_loss = K.mean(reconstruction+kl)
     vae.add_loss(vae_loss)
     # compile vae
     vae.compile(optimizer=OPTS[OPT])
@@ -305,6 +309,7 @@ def build_variational_autoencoder():
 
 
 def random_selection(dmp, dat, intrvl, ns):
+    ''' selects random subset of data according to phase point interval and sample count '''
     rdmp = dmp[::intrvl, ::intrvl]
     rdat = dat[::intrvl, ::intrvl]
     nh, nt, _, _, _ = rdmp.shape
@@ -323,6 +328,7 @@ def random_selection(dmp, dat, intrvl, ns):
 
 
 def inlier_selection(dmp, dat, intrvl, ns):
+    ''' selects inlier subset of data '''
     rdmp = dmp[::intrvl, ::intrvl]
     rdat = dat[::intrvl, ::intrvl]
     nh, nt, _, _, _ = rdmp.shape
@@ -415,25 +421,30 @@ if __name__ == '__main__':
         SCALE = lambda a, b: (a-np.min(b))/(np.max(b)-np.min(b))
         CM = plt.get_cmap('plasma')
 
+    # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR, PRELU, LD, OPT, LR, LSS, EP, BS, SEED)
+    # output file prefix
     OUTPREF = CWD+'/%s.%d.%d.%d.%s.%d.%d.%s.%.0e.%s.%d.%d.%d' % PRM
-
+    # write output file header
     write_specs()
 
-    LDIR = os.listdir()
-
-    # scaler dictionary
+    # feature range
     FRNG = (0.0, 1.0)
+    # scaler dictionary
     SCLRS = {'minmax':MinMaxScaler(feature_range=FRNG),
              'standard':StandardScaler(),
              'robust':RobustScaler(),
              'tanh':TanhScaler(feature_range=FRNG)}
 
+    # external fields and temperatures
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
+    # external field and temperature counts
     SNH, SNT = CH.size, CT.size
+    # number of data channels
     NCH = 1
 
+    # array shapes
     SHP0 = (SNH, SNT, SNS, N, N, NCH)
     SHP1 = (SNH*SNT*SNS, N, N, NCH)
     SHP2 = (SNH*SNT*SNS, N*N*NCH)
@@ -441,9 +452,11 @@ if __name__ == '__main__':
     SHP4 = (SNH*SNT*SNS, ED, LD)
     SHP5 = (SNH*SNT*SNS, ED*LD)
 
-    SCPREF = CWD+'/%s.%d.%d.%d.%d' % (NAME, N, SNI, SNS, SEED)
+    # scaled data dump prefix
+    SCPREF = CWD+'/%s.%d.%d.%d.%s.%d' % (NAME, N, SNI, SNS, SCLR, SEED)
 
     try:
+        # check is scaled data has already been computed
         SCDMP = np.load(SCPREF+'.dmp.sc.npy').reshape(*SHP1)
         CDAT = np.load(SCPREF+'.dmp.sc.npy')
         if VERBOSE:
@@ -451,6 +464,7 @@ if __name__ == '__main__':
             print(100*'-')
     except:
         try:
+            # check if random data subset has already been selected
             CDMP = np.load(SCPREF+'.dmp.c.npy')
             CDAT = np.load(SCPREF+'.dat.c.npy')
             if VERBOSE:
@@ -458,6 +472,7 @@ if __name__ == '__main__':
                 print('selected classification samples loaded from file')
                 print(100*'-')
         except:
+            # data selection
             DMP = np.load(CWD+'/%s.%d.dmp.npy' % (NAME, N))
             DAT = np.load(CWD+'/%s.%d.dat.npy' % (NAME, N))
             if VERBOSE:
@@ -472,6 +487,7 @@ if __name__ == '__main__':
                 print('selected classification samples generated')
                 print(100*'-')
 
+        # data scaling
         if SCLR == 'global':
             SCDMP = CDMP.reshape(*SHP1)
             for i in range(NCH):
@@ -482,26 +498,41 @@ if __name__ == '__main__':
         else:
             SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(*SHP2)).reshape(*SHP1)
         del CDMP
-        np.save(CWD+'/%s.%d.%d.%d.%s.%d.dmp.sc.npy' % (NAME, N, SNI, SNS, SCLR, SEED), SCDMP.reshape(*SHP0))
+        np.save(SCPREF+'.dmp.sc.npy', SCDMP.reshape(*SHP0))
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(100*'-')
 
+    # energies
     ES = CDAT[:, :, :, 0]
+    # magnetizations
     MS = CDAT[:, :, :, 1]
+    # mean energies
     EM = np.mean(ES, -1)
+    # specific heat capacities
     SP = np.var(ES/CT[np.newaxis, :, np.newaxis], 2)
+    # mean magnetizations
     MM = np.mean(MS, -1)
+    # magnetic susceptibilities
     SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
 
+    # reconstruction losses
+    RCLS = {'bc': lambda a, b: binary_crossentropy(a, b),
+            'mse': lambda a, b: mean_squared_error(a, b),
+            'mea': lambda a, b: mean_absolute_error(a, b),
+            'logcosh': lambda a, b: logcosh(a, b)}
+
+    # optmizers
     OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
             'adam': Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True),
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
 
+    # autencoder networks
     ENC, DEC, VAE = build_variational_autoencoder()
 
     try:
+        # check if model already trained
         VAE.load_weights(OUTPREF+'.vae.wt.h5', by_name=True)
         TLOSS = np.load(OUTPREF+'.vae.loss.trn.npy')
         VLOSS = np.load(OUTPREF+'.vae.loss.val.npy')
@@ -512,11 +543,16 @@ if __name__ == '__main__':
         if VERBOSE:
             print('variational autoencoder training on scaled selected classification samples')
             print(100*'-')
+        # output log
         CSVLG = CSVLogger(OUTPREF+'.vae.log.csv', append=True, separator=',')
+        # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
+        # split data into training and validation
         TRN, VAL = train_test_split(SCDMP, test_size=0.125, shuffle=True)
+        # fit model
         VAE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=BS,
                 shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+        # remove split data
         del TRN, VAL
         TLOSS = VAE.history.history['loss']
         VLOSS = VAE.history.history['val_loss']
@@ -549,7 +585,6 @@ if __name__ == '__main__':
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
         ERR = np.load(OUTPREF+'.zerr.npy')
-        RERR = np.load(OUTPREF+'.zerr.round.npy')
         MERR = np.load(OUTPREF+'.zerr.mean.npy')
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
@@ -560,42 +595,40 @@ if __name__ == '__main__':
         MXKLD = np.load(OUTPREF+'.zerr.kld.max.npy')
         MNKLD = np.load(OUTPREF+'.zerr.kld.min.npy')
         if VERBOSE:
-            print('z encodings of scaled selected classification samples loaded from file')
+            print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
     except:
         if VERBOSE:
-            print('predicting z encodings of scaled selected classification samples')
+            print('predicting latent encodings of scaled selected classification samples')
             print(100*'-')
         ZENC = np.array(ENC.predict(SCDMP, verbose=VERBOSE))
         ZDEC = np.array(DEC.predict(ZENC[2, :, :], verbose=VERBOSE))
-        # if SCLR == 'global':
-        #     CDMP = SCDMP*(TMAX-TMIN)+TMIN
-        #     ZDEC = ZDEC*(TMAX-TMIN)+TMIN
-        # elif SCLR == 'none':
-        #     CDMP = SCDMP
-        #     ZDEC = ZDEC
-        # else:
-        #     CDMP = SCLRS[SCLR].inverse_transform(SCDMP.reshape(*SHP2)).reshape(*SHP1)
-        #     ZDEC = SCLRS[SCLR].inverse_transform(ZDEC.reshape(*SHP2)).reshape(*SHP1)
+        # swap latent space axes
         ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
+        # convert log variance to standard deviation
         ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
+        # reconstruction error (signed)
         ERR = SCDMP-ZDEC
-        RERR = np.unique(np.round(SCDMP)-np.round(ZDEC), return_counts=True)
-        # del CDMP
+        # kullback-liebler divergence
         KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
+        # dump results
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
         np.save(OUTPREF+'.zerr.npy', ERR.reshape(*SHP0))
-        np.save(OUTPREF+'.zerr.round.npy', RERR)
         np.save(OUTPREF+'.zerr.kld.npy', KLD.reshape(SNH, SNT, SNS))
+        # means and standard deviation of error
         MERR = np.mean(ERR)
         SERR = np.std(ERR)
+        # minimum and maximum error
         MXERR = np.max(ERR)
         MNERR = np.min(ERR)
+        # mean and standard deviation kullback-liebler divergence
         MKLD = np.mean(KLD)
         SKLD = np.std(KLD)
+        # minimum and maximum kullback-liebler divergence
         MXKLD = np.max(KLD)
         MNKLD = np.min(KLD)
+        # dump results
         np.save(OUTPREF+'.zerr.mean.npy', MERR)
         np.save(OUTPREF+'.zerr.stdv.npy', SERR)
         np.save(OUTPREF+'.zerr.max.npy', MXERR)
@@ -607,7 +640,7 @@ if __name__ == '__main__':
 
     if VERBOSE:
         print(100*'-')
-        print('z encodings of scaled selected classification samples predicted')
+        print('latent encodings of scaled selected classification samples predicted')
         print(100*'-')
         print('mean sig:        %f' % np.mean(SCDMP))
         print('stdv sig:        %f' % np.std(SCDMP))
@@ -621,12 +654,6 @@ if __name__ == '__main__':
         print('stdv kl div:     %f' % SKLD)
         print('max kl div:      %f' % MXKLD)
         print('min kl div:      %f' % MNKLD)
-        print(100*'-')
-        print('rounded output error')
-        print(100*'-')
-        print('error:'+RERR[0].size*' %0.2e' % tuple(RERR[0]))
-        print('count:'+RERR[1].size*' %0.2e' % tuple(RERR[1]))
-        print('prop: '+RERR[1].size*' %0.2e' % tuple(RERR[1]/np.sum(RERR[1])))
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
@@ -644,27 +671,25 @@ if __name__ == '__main__':
         out.write('max kl div:      %f\n' % MXKLD)
         out.write('min kl div:      %f\n' % MNKLD)
         out.write(100*'-'+'\n')
-        out.write('rounded output error\n')
-        # out.write(100*'-'+'\n')
-        # out.write('error:'+RERR[0].size*' %0.2e'+'\n' % tuple(RERR[0]))
-        # out.write('count:'+RERR[1].size*' %0.2e'+'\n' % tuple(RERR[1]))
-        # out.write('prop: '+RERR[1].size*' %0.2e'+'\n' % tuple(RERR[1]/np.sum(RERR[1])))
-        # out.write(100*'-'+'\n')
 
     try:
+        # check if pca projections already computed
         PZENC = np.load(OUTPREF+'.zenc.pca.prj.npy').reshape(*SHP4)
         CZENC = np.load(OUTPREF+'.zenc.pca.cmp.npy')
         VZENC = np.load(OUTPREF+'.zenc.pca.var.npy')
         if VERBOSE:
-            print('pca projections of z encodings  loaded from file')
+            print('pca projections of latent encodings loaded from file')
             print(100*'-')
     except:
         if VERBOSE:
-            print('pca projecting z encodings')
+            print('pca projecting latent encodings')
             print(100*'-')
         PCAZENC = PCA(n_components=LD)
+        # pca embeddings of latent encodings
         PZENC = np.zeros((SNH*SNT*SNS, ED, LD))
+        # pca projections of latent encodings
         CZENC = np.zeros((ED, LD, LD))
+        # explained variance ratios
         VZENC = np.zeros((ED, LD))
         for i in range(ED):
             PZENC[:, i, :] = PCAZENC.fit_transform(ZENC[:, i, :])
@@ -713,6 +738,7 @@ if __name__ == '__main__':
 
     def vae_plots():
 
+        # plot signed reconstruction error distribution
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.spines['right'].set_visible(False)
@@ -734,6 +760,7 @@ if __name__ == '__main__':
         fig.savefig(OUTPREF+'.vae.err.png')
         plt.close()
 
+        # plot kullback-liebler divergence distribution
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.spines['right'].set_visible(False)

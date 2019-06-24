@@ -262,22 +262,28 @@ def extract(config, h):
     # loop through lattice
     for i in range(N):
         for j in range(N):
-            # factor of 0.5 avoids double counting
-            ener += -0.5*J*config[i, j]*(config[(i+1)%N, j]+config[i,(j+1)%N]+
-                                         config[(i-1)%N, j]+config[i,(j-1)%N])
+            ener -= J*config[i, j]*(config[(i+1)%N, j]+config[i,(j+1)%N]+
+                                    config[(i-1)%N, j]+config[i,(j-1)%N])
+    # correction factor
+    ener = 0.25*ener
     # add in magnetic contribution to energy
-    ener += -h*mag
+    ener -= h*mag
     return ener, mag
 
 
 @nb.jit
 def init_sample(k):
     ''' initializes sample '''
+    # fetch external field strength
     i, _ = np.unravel_index(k, dims=(NH, NT), order='C')
     h = H[i]
+    # generate random ising configuration
     config = np.random.choice([-1, 1], size=(N,N))
+    # extract energies and magnetizations
     ener, mag = extract(config, h)
+    # set acceptations
     acc = 0.0
+    # return configuration
     return [config, ener, mag, acc]
 
 
@@ -314,15 +320,18 @@ def spin_flip_mc(config, h, t, nts, nas):
     nts += 1
     ener, _ = extract(config, h)
     u, v = np.random.randint(0, N, size=2)
-    config[u, v] *= -1
-    nener, _ = extract(config, h)
-    de = nener-ener
+    # config[u, v] *= -1
+    # nener, _ = extract(config, h)
+    # de = nener-ener
+    s = config[u, v]
+    de = 2*s*(J*(config[(u+1)%N, v]+config[u, (v+1)%N]+config[(u-1)%N, v]+config[u, (v-1)%N])+h)
     if de < 0 or np.random.rand() < np.exp(-de/t):
         # update acceptations
         nas += 1
-    else:
-        # revert spin
         config[u, v] *= -1
+    # else:
+        # revert spin
+        # config[u, v] *= -1
     # return spins and tries/acceptations
     return config, nts, nas
 
@@ -341,7 +350,7 @@ def gen_sample(k, state):
     nts, nas = 0, 0
     # loop through monte carlo moves
     for _ in it.repeat(None, MOD):
-        cconfig, nts, nas = spin_flip_mc(config, h, t, nts, nas)
+        config, nts, nas = spin_flip_mc(config, h, t, nts, nas)
     # extract system properties
     ener, mag = extract(config, h)
     # acceptation ratio
