@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument('-mt', '--method', help='parallelization method',
                         type=str, default='fork')
     parser.add_argument('-n', '--name', help='simulation name',
-                        type=str, default='ising_init')
+                        type=str, default='init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size',
                         type=int, default=8)
     parser.add_argument('-j', '--interaction', help='interaction energy',
