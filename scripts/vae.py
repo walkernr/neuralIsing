@@ -47,6 +47,8 @@ def parse_args():
                         type=str, default='tensorflow')
     parser.add_argument('-pd', '--prior_distribution', help='prior distribution for autoencoder',
                         type=str, default='gaussian')
+    parser.add_argument('-ki', '--kernel_initializer', help='kernel initialization function',
+                        type=str, default='he_normal')
     parser.add_argument('-pr', '--prelu', help='PReLU activation function (replaces leaky ReLU and linear activations)',
                         action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
@@ -65,8 +67,8 @@ def parse_args():
                         type=int, default=256)
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
-            args.lattice_size, args.super_interval, args.super_samples,
-            args.scaler, args.backend, args.prior_distribution, args.prelu, args.latent_dimension,
+            args.lattice_size, args.super_interval, args.super_samples, args.scaler,
+            args.backend, args.prior_distribution, args.kernel_initializer, args.prelu, args.latent_dimension,
             args.optimizer, args.learning_rate, args.loss, args.epochs, args.batch_size, args.random_seed)
 
 
@@ -189,7 +191,7 @@ def build_autoencoder():
         outact = 'tanh'
     # kernel initializer - customizable
     # limited tests showed he_normal performs well
-    init = 'he_normal'
+    init = KIS[KI]
     # base number of filters
     nf = 32
     # number of convolutions necessary to get down to size length 4
@@ -223,8 +225,13 @@ def build_autoencoder():
     shape = K.int_shape(c)
     d0 = Flatten()(c)
     # dense layer connected to flattened convolution output
-    # d0 = Dense(np.int32(np.sqrt(np.prod(shape[1:]))), kernel_initializer=init)(d0)
-    # d0 = PReLU()(d0)
+    d0 = Dense(nc*32, kernel_initializer=init)(d0)
+    d0 = BatchNormalization(epsilon=1e-4)(d0)
+    if PRELU:
+        # like leaky relu, but with trainable layer to tune alphas
+        d0 = PReLU(alpha_initializer=init)(d0)
+    else:
+        d0 = LeakyReLU(alpha=alpha_hid)(d0)
     # gaussian parameters as dense layers
     if PRIOR == 'gaussian':
         z_mean = Dense(LD, name='z_mean', kernel_initializer=init)(d0)
@@ -384,8 +391,8 @@ def inlier_selection(dmp, dat, intrvl, ns):
 if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
-     N, SNI, SNS,
-     SCLR, BACKEND, PRIOR, PRELU, LD,
+     N, SNI, SNS, SCLR,
+     BACKEND, PRIOR, KI, PRELU, LD,
      OPT, LR, LSS, EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
     EPS = 0.025
@@ -419,8 +426,10 @@ if __name__ == '__main__':
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation)
     from keras.losses import binary_crossentropy, mean_squared_error, mean_absolute_error, logcosh
-    from keras.activations import relu, sigmoid, linear
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
+    from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
+                                    TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
+                                    lecun_uniform, lecun_normal, he_uniform, he_normal)
     from keras.activations import relu, tanh, sigmoid, linear
     from keras.layers.advanced_activations import LeakyReLU, PReLU
     from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
@@ -458,12 +467,12 @@ if __name__ == '__main__':
     write_specs()
 
     # feature range
-    FRNG = (0.0, 1.0)
+    FMN, FMX = (0.0, 1.0)
     # scaler dictionary
-    SCLRS = {'minmax':MinMaxScaler(feature_range=FRNG),
+    SCLRS = {'minmax':MinMaxScaler(feature_range=(FMN, FMX)),
              'standard':StandardScaler(),
              'robust':RobustScaler(),
-             'tanh':TanhScaler(feature_range=FRNG)}
+             'tanh':TanhScaler(feature_range=(FMN, FMX))}
 
     # external fields and temperatures
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
@@ -545,17 +554,35 @@ if __name__ == '__main__':
     # magnetic susceptibilities
     SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
 
-    # reconstruction losses
-    RCLS = {'bc': lambda a, b: binary_crossentropy(a, b),
-            'mse': lambda a, b: mean_squared_error(a, b),
-            'mea': lambda a, b: mean_absolute_error(a, b),
-            'logcosh': lambda a, b: logcosh(a, b)}
+    # kernel
+    SMN, SMX = 0.05*SCDMP.min(), 0.05*SCDMP.max()
+    SM, SS = np.mean(SCDMP), 0.05*np.std(SCDMP)
+    KIS = {'zeros': Zeros(),
+           'ones': Ones(),
+           'const': Constant(SMN+0.5*(SMX-SMN)),
+           'uniform': RandomUniform(SMN, SMX, SEED),
+           'glorot_uniform': glorot_uniform(SEED),
+           'lecun_uniform': lecun_uniform(SEED),
+           'he_uniform': he_uniform(SEED),
+           'normal': RandomNormal(SM, SS, SEED),
+           'truncated': TruncatedNormal(SM, SS, SEED),
+           'varscale': VarianceScaling(seed=SEED),
+           'glorot_normal': glorot_normal(SEED),
+           'lecun_normal': lecun_normal(SEED),
+           'he_normal': he_normal(SEED)}
+
 
     # optmizers
     OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
             'adam': Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True),
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
+
+    # reconstruction losses
+    RCLS = {'bc': lambda a, b: binary_crossentropy(a, b),
+            'mse': lambda a, b: mean_squared_error(a, b),
+            'mea': lambda a, b: mean_absolute_error(a, b),
+            'logcosh': lambda a, b: logcosh(a, b)}
 
     # autencoder networks
     ENC, DEC, AE = build_autoencoder()
