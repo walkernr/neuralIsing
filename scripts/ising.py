@@ -262,8 +262,9 @@ def extract(config, h):
     # loop through lattice
     for i in range(N):
         for j in range(N):
-            ener -= J*config[i, j]*(config[(i+1)%N, j]+config[i,(j+1)%N]+
-                                    config[(i-1)%N, j]+config[i,(j-1)%N])
+            s = config[i, j]
+            nn = config[(i+1)%N, j]+config[i,(j+1)%N]+config[(i-1)%N, j]+config[i,(j-1)%N]
+            ener -= J*s*nn
     # correction factor
     ener = 0.25*ener
     # add in magnetic contribution to energy
@@ -324,7 +325,8 @@ def spin_flip_mc(config, h, t, nts, nas):
     # nener, _ = extract(config, h)
     # de = nener-ener
     s = config[u, v]
-    de = 2*s*(J*(config[(u+1)%N, v]+config[u, (v+1)%N]+config[(u-1)%N, v]+config[u, (v-1)%N])+h)
+    nn = config[(u+1)%N, v]+config[u, (v+1)%N]+config[(u-1)%N, v]+config[u, (v-1)%N]
+    de = 2*s*(J*nn+h)
     if de < 0 or np.random.rand() < np.exp(-de/t):
         # update acceptations
         nas += 1
