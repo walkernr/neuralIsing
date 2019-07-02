@@ -872,7 +872,7 @@ if __name__ == '__main__':
         PZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
 
         # plot latent variable diagrams
-        for i in range(1):
+        for i in range(2):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
@@ -896,7 +896,7 @@ if __name__ == '__main__':
                     plt.close()
 
         # plot pca latent variable diagrams
-        for i in range(1):
+        for i in range(2):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
