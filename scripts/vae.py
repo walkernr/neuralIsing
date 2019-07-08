@@ -36,40 +36,50 @@ def parse_args():
     parser.add_argument('-n', '--name', help='simulation name',
                         type=str, default='ising_init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size (side length)',
-                        type=int, default=8)
+                        type=int, default=16)
     parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (variational autoencoder)',
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
-                        type=int, default=1024)
+                        type=int, default=256)
     parser.add_argument('-sc', '--scaler', help='feature scaling method (none, global, minmax, robust, standard, tanh)',
                         type=str, default='global')
-    parser.add_argument('-bk', '--backend', help='keras backend',
-                        type=str, default='tensorflow')
     parser.add_argument('-pd', '--prior_distribution', help='prior distribution for autoencoder',
                         type=str, default='gaussian')
     parser.add_argument('-ki', '--kernel_initializer', help='kernel initialization function',
                         type=str, default='he_normal')
     parser.add_argument('-pr', '--prelu', help='PReLU activation function (replaces leaky ReLU and linear activations)',
                         action='store_true')
+    parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers',
+                        action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
-                        type=int, default=8)
+                        type=int, default=4)
     parser.add_argument('-opt', '--optimizer', help='neural network weight optimization function',
                         type=str, default='nadam')
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural networ optimizer',
-                        type=float, default=1e-3)
+                        type=float, default=2e-3)
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='mse')
+    parser.add_argument('-reg', '--regularizer', help='regularizer for latent dimension',
+                        type=str, default='tc')
+    parser.add_argument('-a', '--alpha', help='alpha parameter for regularizer (mi term)',
+                        type=float, default=1.0)
+    parser.add_argument('-b', '--beta', help='beta parameter for regularizer (kld term or tc term)',
+                        type=float, default=1.0)
+    parser.add_argument('-l', '--lmbda', help='lambda parameter for regularizer (info term or dim-kld term)',
+                        type=float, default=1.0)
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=32)
+                        type=int, default=4)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
                         type=int, default=32)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
-                        type=int, default=256)
+                        type=int, default=512)
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.scaler,
-            args.backend, args.prior_distribution, args.kernel_initializer, args.prelu, args.latent_dimension,
-            args.optimizer, args.learning_rate, args.loss, args.epochs, args.batch_size, args.random_seed)
+            args.prior_distribution, args.kernel_initializer, args.prelu,
+            args.batch_normalization, args.latent_dimension, args.optimizer, args.learning_rate,
+            args.loss, args.regularizer, args.alpha, args.beta, args.lmbda,
+            args.epochs, args.batch_size, args.random_seed)
 
 
 def write_specs():
@@ -87,13 +97,17 @@ def write_specs():
         print('super interval:            %d' % SNI)
         print('super samples:             %d' % SNS)
         print('scaler:                    %s' % SCLR)
-        print('backend:                   %s' % BACKEND)
         print('prior distribution:        %s' % PRIOR)
         print('prelu:                     %d' % PRELU)
+        print('batch normalization:       %d' % BN)
         print('latent dimension:          %d' % LD)
         print('optimizer:                 %s' % OPT)
         print('learning rate:             %.2e' % LR)
         print('loss function:             %s' % LSS)
+        print('regularizer:               %s' % REG)
+        print('alpha:                     %.2e' % ALPHA)
+        print('beta:                      %.2e' % BETA)
+        print('lambda:                    %.2e' % LMBDA)
         print('batch size:                %d' % BS)
         print('epochs:                    %d' % EP)
         print('random seed:               %d' % SEED)
@@ -111,13 +125,17 @@ def write_specs():
         out.write('super interval:            %d\n' % SNI)
         out.write('super samples:             %d\n' % SNS)
         out.write('scaler:                    %s\n' % SCLR)
-        out.write('backend:                   %s\n' % BACKEND)
         out.write('prior distribution:        %s\n' % PRIOR)
         out.write('prelu:                     %d\n' % PRELU)
+        out.write('batch_normalization:       %d\n' % BN)
         out.write('latent dimension:          %d\n' % LD)
         out.write('optimizer:                 %s\n' % OPT)
         out.write('learning rate:             %.2e\n' % LR)
         out.write('loss function:             %s\n' % LSS)
+        out.write('regularizer:               %s\n' % REG)
+        out.write('alpha:                     %.2e\n' % ALPHA)
+        out.write('beta:                      %.2e\n' % BETA)
+        out.write('lambda:                    %.2e\n' % LMBDA)
         out.write('batch size:                %d\n' % BS)
         out.write('epochs:                    %d\n' % EP)
         out.write('random seed:               %d\n' % SEED)
@@ -159,13 +177,102 @@ def odr_fit(func, dom, mrng, srng, pg):
     return popt, perr, fdom, fval
 
 
-def gauss_sampling(beta):
+def gauss_sampling(beta, batch_size=None):
     ''' samples a point in a multivariate gaussian distribution '''
+    if batch_size is None:
+        batch_size = BS
     z_mean, z_log_var = beta
-    batch = K.shape(z_mean)[0]
-    dim = K.int_shape(z_mean)[1]
-    epsilon = K.random_normal(shape=(batch, dim))
+    epsilon = K.random_normal(shape=(batch_size, LD))
     return z_mean+K.exp(0.5*z_log_var)*epsilon
+
+
+def bernoulli_sampling(p, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    epsilon = K.random_uniform(shape=(batch_size, N, N, NCH))
+    return K.sigmoid(2*(p-epsilon)/EPS)
+
+
+def bernoulli_crossentropy(x, y, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    return binary_crossentropy(K.flatten(x), K.flatten(bernoulli_sampling(y, batch_size=batch_size)))
+
+
+def gauss_log_prob(z, beta=None, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    if beta is None:
+        # mu = 0, stdv = 1 => log(var) = 0
+        z_mean, z_log_var = K.zeros((batch_size, LD)), K.zeros((batch_size, LD))
+    else:
+        z_mean, z_log_var = beta
+    norm = K.log(2*np.pi)
+    zsc = (z-z_mean)*K.exp(-0.5*z_log_var)
+    return -0.5*(zsc**2+z_log_var+norm)
+
+
+def kld(beta):
+    z_mean, z_log_var = beta
+    return 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
+
+
+def kernel_computation(x, y, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    tiled_x = K.tile(K.reshape(x, (batch_size, 1, LD)), (1, batch_size, 1))
+    tiled_y = K.tile(K.reshape(y, (1, batch_size, LD)), (batch_size, 1, 1))
+    return K.exp(-K.mean(K.square(tiled_x-tiled_y), axis=2)/K.cast(LD, 'float32'))
+
+
+def mmd(x, y, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    x_kernel = kernel_computation(x, x, batch_size)
+    y_kernel = kernel_computation(y, y, batch_size)
+    xy_kernel = kernel_computation(x, y, batch_size)
+    return x_kernel+y_kernel-2*xy_kernel
+
+
+def sw(x, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    nrp = batch_size**2
+    theta = K.random_normal(shape=(nrp, LD))
+    theta = theta/K.sqrt(K.sum(K.square(theta), axis=1, keepdims=True))
+    y = K.random_uniform(shape=(batch_size, LD), minval=-0.5, maxval=0.5)
+    px = K.dot(x, K.transpose(theta))
+    py = K.dot(y, K.transpose(theta))
+    w2 = (tf.nn.top_k(tf.transpose(px), k=batch_size).values-
+          tf.nn.top_k(tf.transpose(py), k=batch_size).values)**2
+    return w2
+
+
+def log_sum_exp(x):
+    m = K.max(x, axis=1, keepdims=True)
+    u = x-m
+    m = K.squeeze(m, 1)
+    return m+K.log(K.sum(K.exp(u), axis=1, keepdims=False))
+
+
+def tc(z, beta, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    z_mean, z_log_var = beta
+    # beta controls total correlation
+    # lambda controls dimension-wise KL
+    # log p(z)
+    logpz = K.sum(K.reshape(gauss_log_prob(z), (batch_size, -1)), 1)
+    # log q(z|x)
+    logqz_x = K.sum(K.reshape(gauss_log_prob(z, (z_mean, z_log_var)), (batch_size, -1)), 1)
+    # log q(z) ~ log (1/MN) sum_m q(z|x_m) = -log(MN)+log(sum_m(exp(q(z|x_m))))
+    _logqz = gauss_log_prob(K.reshape(z, (batch_size, 1, LD)),
+                            (K.reshape(z_mean, (1, batch_size, LD)),
+                             K.reshape(z_log_var, (1, batch_size, LD))))
+    logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*SNH*SNT*SNS, 'float32')), 1)
+    logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*SNH*SNT*SNS, 'float32'))
+    melbo = ALPHA*(logqz_x-logqz)+BETA*(logqz-logqz_prodmarginals)+LMBDA*(logqz_prodmarginals-logpz)
+    return melbo
 
 
 def build_autoencoder():
@@ -184,7 +291,8 @@ def build_autoencoder():
     elif PRIOR == 'none':
         alpha_z = 1.0
     if SCLR in ['minmax', 'tanh', 'global']:
-        alpha_hid = 0.0
+        alpha_enc = 0.2
+        alpha_dec = 0.0
         outact = 'sigmoid'
     else:
         alpha_hid = 1.0
@@ -214,28 +322,31 @@ def build_autoencoder():
             c = Conv2D(filters=2**i*nf, kernel_size=(3, 3), kernel_initializer=init,
                        padding='same', strides=2)(c)
         # batch normalization to scale activations
-        c = BatchNormalization(epsilon=1e-4)(c)
+        if BN:
+            c = BatchNormalization(epsilon=1e-4)(c)
         # activations
         if PRELU:
             # like leaky relu, but with trainable layer to tune alphas
             c = PReLU(alpha_initializer=init)(c)
         else:
-            c = LeakyReLU(alpha=alpha_hid)(c)
+            c = LeakyReLU(alpha=alpha_enc)(c)
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten()(c)
     # dense layer connected to flattened convolution output
     d0 = Dense(nc*32, kernel_initializer=init)(d0)
-    d0 = BatchNormalization(epsilon=1e-4)(d0)
+    if BN:
+        d0 = BatchNormalization(epsilon=1e-4)(d0)
     if PRELU:
         # like leaky relu, but with trainable layer to tune alphas
         d0 = PReLU(alpha_initializer=init)(d0)
     else:
-        d0 = LeakyReLU(alpha=alpha_hid)(d0)
-    # gaussian parameters as dense layers
+        d0 = LeakyReLU(alpha=alpha_enc)(d0)
     if PRIOR == 'gaussian':
+        # gaussian parameters as dense layers
         z_mean = Dense(LD, name='z_mean', kernel_initializer=init)(d0)
         # activations
+        # z_mean = Activation('tanh')(z_mean)
         if PRELU:
             # like leaky relu, but with trainable layer to tune alphas
             z_mean = PReLU(alpha_initializer=init)(z_mean)
@@ -244,6 +355,7 @@ def build_autoencoder():
         # more numerically stable to use log(var_z)
         z_log_var = Dense(LD, name='z_log_std', kernel_initializer=init)(d0)
         # activations
+        # z_log_var = Activation('tanh')(z_log_var)
         if PRELU:
             # like leaky relu, but with trainable layer to tune alphas
             z_log_var = PReLU(alpha_initializer=init)(z_log_var)
@@ -256,6 +368,7 @@ def build_autoencoder():
     elif PRIOR == 'none':
         # encoding
         z = Dense(LD, name='z_encoding', kernel_initializer=init)(d0)
+        # z = Activation('tanh')(z)
         if PRELU:
             # like leaky relu, but with trainable layer to tune alphas
             z = PReLU(alpha_initializer=init)(z)
@@ -278,13 +391,14 @@ def build_autoencoder():
     # reshape to convolution shape
     d1 = Reshape(shape[1:])(d1)
     # batch renormalization to scale activations
-    d1 = BatchNormalization(epsilon=1e-4)(d1)
+    if BN:
+        d1 = BatchNormalization(epsilon=1e-4)(d1)
     # activations
     if PRELU:
         # like leaky relu, but with trainable layer to tune alphas
         d1 = PReLU(alpha_initializer=init)(d1)
     else:
-        d1 = LeakyReLU(alpha=alpha_hid)(d1)
+        d1 = LeakyReLU(alpha=alpha_dec)(d1)
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
         if i == nc-1:
@@ -296,13 +410,14 @@ def build_autoencoder():
             ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
                                  padding='same', strides=2)(ct)
         # batch normalization to scale activations
-        ct = BatchNormalization(epsilon=1e-4)(ct)
+        if BN:
+            ct = BatchNormalization(epsilon=1e-4)(ct)
         # activations
         if PRELU:
             # like leaky relu, but with trainable layer to tune alphas
             ct = PReLU(alpha_initializer=init)(ct)
         else:
-            ct = LeakyReLU(alpha=alpha_hid)(ct)
+            ct = LeakyReLU(alpha=alpha_dec)(ct)
     # output convolution transpose layer
     output = Conv2DTranspose(filters=NCH, kernel_size=3, kernel_initializer=init,
                              padding='same', name='decoder_output')(ct)
@@ -315,30 +430,45 @@ def build_autoencoder():
         print(100*'-')
         decoder.summary()
         print(100*'-')
-    # -------------
-    # construct vae
-    # -------------
+    # ------------
+    # construct ae
+    # ------------
     # combine encoder and decoder
     if PRIOR == 'gaussian':
         output = decoder(encoder(input)[2])
     elif PRIOR == 'none':
         output = decoder(encoder(input))
-    vae = Model(input, output, name='vae_mlp')
-    # vae loss
-    # scale by number of features in sample
-    reconstruction = N*N*RCLS[LSS](K.flatten(input), K.flatten(output))
+    ae = Model(input, output, name='ae_mlp')
+    # ae loss
     if PRIOR == 'gaussian':
-        # kullback-liebler divergence for gaussian distribution to regularize latent space
-        kl = 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
-    elif PRIOR == 'none':
-        kl = 0.0
+        # distribution divergence to regularize latent space
+        if REG == 'kld':
+            rcsc = N*N
+            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
+            dd = BETA*K.mean(REGS[REG]((z_mean, z_log_var)))
+        elif REG == 'mmd':
+            rcsc = N*N
+            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
+            dd = BETA*K.mean(REGS['kld']((z_mean, z_log_var)))+\
+                 LMBDA*K.mean(REGS['mmd'](K.random_normal(shape=(BS, LD)), z))
+        elif REG == 'sw':
+            rcsc = N*N
+            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
+            dd = BETA*K.mean(REGS['kld']((z_mean, z_log_var)))+\
+                 LMBDA*K.mean(REGS['sw'](z))
+        elif REG == 'tc':
+            rcsc = N*N
+            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
+            dd = K.mean(tc(z, (z_mean, z_log_var)))
+    elif PRIOR == 'none' or REG == 'none':
+        dd = 0.0
     # combine losses
-    vae_loss = K.mean(reconstruction+kl)
-    vae.add_loss(vae_loss)
-    # compile vae
-    vae.compile(optimizer=OPTS[OPT])
-    # return vae networks
-    return encoder, decoder, vae
+    ae_loss = K.mean(reconstruction+dd)
+    ae.add_loss(ae_loss)
+    # compile ae
+    ae.compile(optimizer=OPTS[OPT])
+    # return ae networks
+    return encoder, decoder, ae
 
 
 def random_selection(dmp, dat, intrvl, ns):
@@ -392,25 +522,25 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, SCLR,
-     BACKEND, PRIOR, KI, PRELU, LD,
-     OPT, LR, LSS, EP, BS, SEED) = parse_args()
+     PRIOR, KI, PRELU, BN, LD,
+     OPT, LR, LSS, REG, ALPHA, BETA, LMBDA,
+     EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
-    EPS = 0.025
+    EPS = 1e-8
     # number of phases
     NPH = 3
     # number of embedding dimensions
     if PRIOR == 'gaussian':
         ED = 2
-    else:
+    elif PRIOR == 'none':
         ED = 1
 
     np.random.seed(SEED)
     # environment variables
-    os.environ['KERAS_BACKEND'] = BACKEND
-    if BACKEND == 'tensorflow':
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-        from tensorflow import set_random_seed
-        set_random_seed(SEED)
+    os.environ['KERAS_BACKEND'] = 'tensorflow'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    from tensorflow import set_random_seed
+    set_random_seed(SEED)
     if PARALLEL:
         if not GPU:
             os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -422,10 +552,12 @@ if __name__ == '__main__':
         THREADS = 1
     if GPU:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    import tensorflow as tf
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation)
-    from keras.losses import binary_crossentropy, mean_squared_error, mean_absolute_error, logcosh
+    from keras.losses import (mean_squared_error, mean_absolute_error, logcosh,
+                              binary_crossentropy, kullback_leibler_divergence, poisson)
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
@@ -460,9 +592,9 @@ if __name__ == '__main__':
         CM = plt.get_cmap('plasma')
 
     # run parameter tuple
-    PRM = (NAME, N, SNI, SNS, SCLR, PRIOR, PRELU, LD, OPT, LR, LSS, EP, BS, SEED)
+    PRM = (NAME, N, SNI, SNS, SCLR, PRIOR, PRELU, BN, LD, OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, EP, BS, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%s.%.0e.%s.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
@@ -491,6 +623,7 @@ if __name__ == '__main__':
     SHP5 = (SNH*SNT*SNS, ED*LD)
 
     # scaled data dump prefix
+    CPREF = CWD+'/%s.%d.%d.%d.%d' % (NAME, N, SNI, SNS, SEED)
     SCPREF = CWD+'/%s.%d.%d.%d.%s.%d' % (NAME, N, SNI, SNS, SCLR, SEED)
 
     try:
@@ -503,8 +636,8 @@ if __name__ == '__main__':
     except:
         try:
             # check if random data subset has already been selected
-            CDMP = np.load(SCPREF+'.dmp.c.npy')
-            CDAT = np.load(SCPREF+'.dat.c.npy')
+            CDMP = np.load(CPREF+'.dmp.c.npy')
+            CDAT = np.load(CPREF+'.dat.c.npy')
             if VERBOSE:
                 # print(100*'-')
                 print('selected classification samples loaded from file')
@@ -519,8 +652,8 @@ if __name__ == '__main__':
                 print(100*'-')
             CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
             del DAT, DMP
-            np.save(SCPREF+'.dmp.c.npy', CDMP)
-            np.save(SCPREF+'.dat.c.npy', CDAT)
+            np.save(CPREF+'.dmp.c.npy', CDMP)
+            np.save(CPREF+'.dat.c.npy', CDAT)
             if VERBOSE:
                 print('selected classification samples generated')
                 print(100*'-')
@@ -571,7 +704,6 @@ if __name__ == '__main__':
            'lecun_normal': lecun_normal(SEED),
            'he_normal': he_normal(SEED)}
 
-
     # optmizers
     OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
@@ -579,10 +711,18 @@ if __name__ == '__main__':
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
 
     # reconstruction losses
-    RCLS = {'bc': lambda a, b: binary_crossentropy(a, b),
-            'mse': lambda a, b: mean_squared_error(a, b),
-            'mea': lambda a, b: mean_absolute_error(a, b),
-            'logcosh': lambda a, b: logcosh(a, b)}
+    RCLS = {'mse': lambda a, b: mean_squared_error(a, b),
+            'mae': lambda a, b: mean_absolute_error(a, b),
+            'logcosh': lambda a, b: logcosh(a, b),
+            'bc': lambda a, b: binary_crossentropy(a, b),
+            'kld': lambda a, b: kullback_leibler_divergence(a, b),
+            'poisson': lambda a, b: poisson(a, b),
+            'bbc': lambda a, b: bernoulli_crossentropy(a, b)}
+
+    # regularizers
+    REGS = {'kld': lambda beta: kld(beta),
+            'mmd': lambda a, b: mmd(a, b),
+            'sw': lambda a: sw(a)}
 
     # autencoder networks
     ENC, DEC, AE = build_autoencoder()
@@ -591,7 +731,7 @@ if __name__ == '__main__':
         # check if model already trained
         AE.load_weights(OUTPREF+'.ae.wt.h5', by_name=True)
         TLOSS = np.load(OUTPREF+'.ae.loss.trn.npy')
-        VLOSS = np.load(OUTPREF+'.ae.loss.val.npy')
+        # VLOSS = np.load(OUTPREF+'.ae.loss.val.npy')
         if VERBOSE:
             print('autoencoder trained weights loaded from file')
             print(100*'-')
@@ -602,19 +742,22 @@ if __name__ == '__main__':
         # output log
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
-        LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
+        # LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
         # split data into training and validation
-        TRN, VAL = train_test_split(SCDMP, test_size=0.125, shuffle=True)
-        # fit model
-        AE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=BS,
-                shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
-        # remove split data
-        del TRN, VAL
+        # TRN, VAL = train_test_split(SCDMP, test_size=0.125, shuffle=True)
+        # # fit model
+        # AE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=BS,
+        #        shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+        # # remove split data
+        # del TRN, VAL
+        LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
+        AE.fit(x=SCDMP, y=None, epochs=EP, batch_size=BS, shuffle=True,
+               verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
-        VLOSS = AE.history.history['val_loss']
+        # VLOSS = AE.history.history['val_loss']
         AE.save_weights(OUTPREF+'.ae.wt.h5')
         np.save(OUTPREF+'.ae.loss.trn.npy', TLOSS)
-        np.save(OUTPREF+'.ae.loss.val.npy', VLOSS)
+        # np.save(OUTPREF+'.ae.loss.val.npy', VLOSS)
         if VERBOSE:
             print(100*'-')
             print('autoencoder weights trained')
@@ -623,34 +766,39 @@ if __name__ == '__main__':
     if VERBOSE:
         print('autoencoder training history information')
         print(100*'-')
-        print('| epoch | training loss | validation loss |')
+        # print('| epoch | training loss | validation loss |')
+        print('| epoch | training loss |')
         print(100*'-')
         for i in range(EP):
-            print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
+            # print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
+            print('%02d %.2f' % (i, TLOSS[i]))
         print(100*'-')
 
     with open(OUTPREF+'.out', 'a') as out:
         out.write('variational autoencoder training history information\n')
         out.write(100*'-' + '\n')
-        out.write('| epoch | training loss | validation loss |\n')
+        # out.write('| epoch | training loss | validation loss |\n')
+        out.write('| epoch | training loss |\n')
         out.write(100*'-' + '\n')
         for i in range(EP):
-            out.write('%02d %.2f %.2f\n' % (i, TLOSS[i], VLOSS[i]))
+            # out.write('%02d %.2f %.2f\n' % (i, TLOSS[i], VLOSS[i]))
+            out.write('%02d %.2f\n' % (i, TLOSS[i]))
         out.write(100*'-' + '\n')
 
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
+        ZDEC = np.load(OUTPREF+'.zdec.npy').reshape(*SHP1)
         ERR = np.load(OUTPREF+'.zerr.npy')
         MERR = np.load(OUTPREF+'.zerr.mean.npy')
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
         MNERR = np.load(OUTPREF+'.zerr.min.npy')
         if PRIOR == 'gaussian':
-            KLD = np.load(OUTPREF+'.zerr.kld.npy')
-            MKLD = np.load(OUTPREF+'.zerr.kld.mean.npy')
-            SKLD = np.load(OUTPREF+'.zerr.kld.stdv.npy')
-            MXKLD = np.load(OUTPREF+'.zerr.kld.max.npy')
-            MNKLD = np.load(OUTPREF+'.zerr.kld.min.npy')
+            DD = np.load(OUTPREF+'.zerr.dd.npy')
+            MDD = np.load(OUTPREF+'.zerr.dd.mean.npy')
+            SDD = np.load(OUTPREF+'.zerr.dd.stdv.npy')
+            MXDD = np.load(OUTPREF+'.zerr.dd.max.npy')
+            MNDD = np.load(OUTPREF+'.zerr.dd.min.npy')
         if VERBOSE:
             print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -658,50 +806,47 @@ if __name__ == '__main__':
         if VERBOSE:
             print('predicting latent encodings of scaled selected classification samples')
             print(100*'-')
-        ZENC = np.array(ENC.predict(SCDMP, verbose=VERBOSE))
+        ZENC = np.array(ENC.predict(SCDMP, batch_size=BS, verbose=VERBOSE))
         if PRIOR == 'gaussian':
-            ZDEC = np.array(DEC.predict(ZENC[2, :, :], verbose=VERBOSE))
+            DD = K.eval(kld((ZENC[0, :, :], ZENC[1, :, :])))
+            ZDEC = np.array(DEC.predict(ZENC[2, :, :], batch_size=BS, verbose=VERBOSE))
             # swap latent space axes
             ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
             # convert log variance to standard deviation
             ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
+            np.save(OUTPREF+'.zerr.dd.npy', DD.reshape(SNH, SNT, SNS))
         elif PRIOR == 'none':
             ZDEC = np.array(DEC.predict(ZENC, verbose=VERBOSE))
             ZENC = ZENC[:, np.newaxis, :]
         # reconstruction error (signed)
         ERR = SCDMP-ZDEC
-        if PRIOR == 'gaussian':
-            # kullback-liebler divergence
-            KLD = 0.5*np.sum(np.square(ZENC[:, 1, :])+np.square(ZENC[:, 0, :])-np.log(np.square(ZENC[:, 1, :]))-1, axis=1)
         # dump results
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
         np.save(OUTPREF+'.zerr.npy', ERR.reshape(*SHP0))
-        if PRIOR == 'gaussian':
-            np.save(OUTPREF+'.zerr.kld.npy', KLD.reshape(SNH, SNT, SNS))
         # means and standard deviation of error
-        MERR = np.mean(ERR)
+        MERR = np.sqrt(np.mean(np.square(ERR)))
         SERR = np.std(ERR)
         # minimum and maximum error
         MXERR = np.max(ERR)
         MNERR = np.min(ERR)
         if PRIOR  == 'gaussian':
             # mean and standard deviation kullback-liebler divergence
-            MKLD = np.mean(KLD)
-            SKLD = np.std(KLD)
+            MDD = np.mean(DD)
+            SDD = np.std(DD)
             # minimum and maximum kullback-liebler divergence
-            MXKLD = np.max(KLD)
-            MNKLD = np.min(KLD)
+            MXDD = np.max(DD)
+            MNDD = np.min(DD)
         # dump results
         np.save(OUTPREF+'.zerr.mean.npy', MERR)
         np.save(OUTPREF+'.zerr.stdv.npy', SERR)
         np.save(OUTPREF+'.zerr.max.npy', MXERR)
         np.save(OUTPREF+'.zerr.min.npy', MNERR)
         if PRIOR == 'gaussian':
-            np.save(OUTPREF+'.zerr.kld.mean.npy', MKLD)
-            np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
-            np.save(OUTPREF+'.zerr.kld.max.npy', MXKLD)
-            np.save(OUTPREF+'.zerr.kld.min.npy', MNKLD)
+            np.save(OUTPREF+'.zerr.dd.mean.npy', MDD)
+            np.save(OUTPREF+'.zerr.dd.stdv.npy', SDD)
+            np.save(OUTPREF+'.zerr.dd.max.npy', MXDD)
+            np.save(OUTPREF+'.zerr.dd.min.npy', MNDD)
 
     if VERBOSE:
         print(100*'-')
@@ -716,10 +861,10 @@ if __name__ == '__main__':
         print('max error:       %f' % MXERR)
         print('min error:       %f' % MNERR)
         if PRIOR == 'gaussian':
-            print('mean kl div:     %f' % MKLD)
-            print('stdv kl div:     %f' % SKLD)
-            print('max kl div:      %f' % MXKLD)
-            print('min kl div:      %f' % MNKLD)
+            print('mean dd:     %f' % MDD)
+            print('stdv dd:     %f' % SDD)
+            print('max dd:      %f' % MXDD)
+            print('min dd:      %f' % MNDD)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
@@ -733,10 +878,10 @@ if __name__ == '__main__':
         out.write('max error:       %f\n' % MXERR)
         out.write('min error:       %f\n' % MNERR)
         if PRIOR == 'gaussian':
-            out.write('mean kl div:     %f\n' % MKLD)
-            out.write('stdv kl div:     %f\n' % SKLD)
-            out.write('max kl div:      %f\n' % MXKLD)
-            out.write('min kl div:      %f\n' % MNKLD)
+            out.write('mean dd:     %f\n' % MDD)
+            out.write('stdv dd:     %f\n' % SDD)
+            out.write('max dd:      %f\n' % MXDD)
+            out.write('min dd:      %f\n' % MNDD)
         out.write(100*'-'+'\n')
 
     try:
@@ -803,7 +948,7 @@ if __name__ == '__main__':
             out.write(LD*'%f ' % tuple(VZENC[i, :]) + '\n')
             out.write(100*'-'+'\n')
 
-    def vae_plots():
+    def ae_plots():
 
         # plot signed reconstruction error distribution
         fig = plt.figure()
@@ -824,7 +969,7 @@ if __name__ == '__main__':
         plt.yticks(ey)
         plt.xlabel('ERROR')
         plt.ylabel('DENSITY')
-        fig.savefig(OUTPREF+'.vae.err.png')
+        fig.savefig(OUTPREF+'.ae.err.png')
         plt.close()
 
         if PRIOR == 'gaussian':
@@ -835,19 +980,19 @@ if __name__ == '__main__':
             ax.spines['top'].set_visible(False)
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
-            ex = np.linspace(0.0, np.ceil(KLD.max()), 33)
-            er = np.histogram(KLD, ex)[0]/(SNH*SNT*SNS)
+            ex = np.linspace(0.0, np.ceil(DD.max()), 33)
+            er = np.histogram(DD, ex)[0]/(SNH*SNT*SNS)
             dex = ex[1]-ex[0]
             ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
             ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-            ax.set_xticks(np.linspace(0.0, np.ceil(KLD.max()), 5), minor=True)
+            ax.set_xticks(np.linspace(0.0, np.ceil(DD.max()), 5), minor=True)
             ax.set_yticks(ey, minor=True)
-            plt.xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
+            plt.xticks(np.linspace(0.0, np.ceil(DD.max()), 5))
             plt.yticks(ey)
-            plt.xlabel('KLD')
+            plt.xlabel('DD')
             plt.ylabel('DENSITY')
-            fig.savefig(OUTPREF+'.vae.kld.png')
+            fig.savefig(OUTPREF+'.ae.dd.png')
             plt.close()
 
         shp0 = (SNH, SNT, SNS, ED*LD)
@@ -872,7 +1017,7 @@ if __name__ == '__main__':
         PZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
 
         # plot latent variable diagrams
-        for i in range(2):
+        for i in range(1):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
@@ -892,11 +1037,11 @@ if __name__ == '__main__':
                     plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
                     plt.xlabel('T')
                     plt.ylabel('H')
-                    fig.savefig(OUTPREF+'.vae.diag.ld.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.%d.png' % (i, j, k))
                     plt.close()
 
         # plot pca latent variable diagrams
-        for i in range(2):
+        for i in range(1):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
@@ -916,7 +1061,7 @@ if __name__ == '__main__':
                     plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
                     plt.xlabel('T')
                     plt.ylabel('H')
-                    fig.savefig(OUTPREF+'.vae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
         # plot physical measurement diagrams
         for i in range(2):
@@ -938,9 +1083,9 @@ if __name__ == '__main__':
                 plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
                 plt.xlabel('T')
                 plt.ylabel('H')
-                fig.savefig(OUTPREF+'.vae.diag.mv.%d.%d.png' % (i, j))
+                fig.savefig(OUTPREF+'.ae.diag.mv.%d.%d.png' % (i, j))
                 plt.close()
 
     if PLOT:
         # plot results
-        vae_plots()
+        ae_plots()
