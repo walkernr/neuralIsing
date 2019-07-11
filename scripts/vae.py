@@ -67,6 +67,8 @@ def parse_args():
                         type=float, default=1.0)
     parser.add_argument('-l', '--lmbda', help='lambda parameter for regularizer (info term or dim-kld term)',
                         type=float, default=1.0)
+    parser.add_argument('-mss', '--minibatch_stratified_sampling', help='minibatch stratified sampling mode',
+                        action='store_true')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
                         type=int, default=4)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
@@ -78,7 +80,7 @@ def parse_args():
             args.lattice_size, args.super_interval, args.super_samples, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.prelu,
             args.batch_normalization, args.latent_dimension, args.optimizer, args.learning_rate,
-            args.loss, args.regularizer, args.alpha, args.beta, args.lmbda,
+            args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.batch_size, args.random_seed)
 
 
@@ -108,6 +110,7 @@ def write_specs():
         print('alpha:                     %.2e' % ALPHA)
         print('beta:                      %.2e' % BETA)
         print('lambda:                    %.2e' % LMBDA)
+        print('mss:                       %d' % MSS)
         print('batch size:                %d' % BS)
         print('epochs:                    %d' % EP)
         print('random seed:               %d' % SEED)
@@ -136,6 +139,7 @@ def write_specs():
         out.write('alpha:                     %.2e\n' % ALPHA)
         out.write('beta:                      %.2e\n' % BETA)
         out.write('lambda:                    %.2e\n' % LMBDA)
+        out.write('mss:                       %d\n' % MSS)
         out.write('batch size:                %d\n' % BS)
         out.write('epochs:                    %d\n' % EP)
         out.write('random seed:               %d\n' % SEED)
@@ -186,19 +190,6 @@ def gauss_sampling(beta, batch_size=None):
     return z_mean+K.exp(0.5*z_log_var)*epsilon
 
 
-def bernoulli_sampling(p, batch_size=None):
-    if batch_size is None:
-        batch_size = BS
-    epsilon = K.random_uniform(shape=(batch_size, N, N, NCH))
-    return K.sigmoid(2*(p-epsilon)/EPS)
-
-
-def bernoulli_crossentropy(x, y, batch_size=None):
-    if batch_size is None:
-        batch_size = BS
-    return binary_crossentropy(K.flatten(x), K.flatten(bernoulli_sampling(y, batch_size=batch_size)))
-
-
 def gauss_log_prob(z, beta=None, batch_size=None):
     if batch_size is None:
         batch_size = BS
@@ -210,6 +201,19 @@ def gauss_log_prob(z, beta=None, batch_size=None):
     norm = K.log(2*np.pi)
     zsc = (z-z_mean)*K.exp(-0.5*z_log_var)
     return -0.5*(zsc**2+z_log_var+norm)
+
+
+def bernoulli_sampling(p, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    epsilon = K.random_uniform(shape=(batch_size, N, N, NCH))
+    return K.sigmoid(2*(p-epsilon)/EPS)
+
+
+def bernoulli_crossentropy(x, y, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    return binary_crossentropy(K.flatten(x), K.flatten(bernoulli_sampling(y, batch_size=batch_size)))
 
 
 def kld(beta):
@@ -255,12 +259,24 @@ def log_sum_exp(x):
     return m+K.log(K.sum(K.exp(u), axis=1, keepdims=False))
 
 
+def log_importance_weight(batch_size=None, dataset_size=None):
+    if batch_size is None:
+        batch_size = BS
+    if dataset_size is None:
+        dataset_size = SNH*SNT*SNS
+    n, m = dataset_size, batch_size-1
+    strw = (n-m)/(n*m)
+    w = np.ones((batch_size,batch_size))/m
+    w.reshape(-1)[::(m+1)] = 1/n
+    w.reshape(-1)[1::(m+1)] = strw
+    w[m-1, 0] = strw
+    return K.log(K.cast(w, 'float32'))
+
+
 def tc(z, beta, batch_size=None):
     if batch_size is None:
         batch_size = BS
     z_mean, z_log_var = beta
-    # beta controls total correlation
-    # lambda controls dimension-wise KL
     # log p(z)
     logpz = K.sum(K.reshape(gauss_log_prob(z), (batch_size, -1)), 1)
     # log q(z|x)
@@ -269,8 +285,16 @@ def tc(z, beta, batch_size=None):
     _logqz = gauss_log_prob(K.reshape(z, (batch_size, 1, LD)),
                             (K.reshape(z_mean, (1, batch_size, LD)),
                              K.reshape(z_log_var, (1, batch_size, LD))))
-    logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*SNH*SNT*SNS, 'float32')), 1)
-    logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*SNH*SNT*SNS, 'float32'))
+    if MSS:
+        log_iw = log_importance_weight()
+        logqz_prodmarginals = K.sum(log_sum_exp(K.reshape(log_iw, (batch_size, batch_size, 1))+_logqz), 1)
+        logqz = log_sum_exp(log_iw+K.sum(_logqz, axis=2))
+    else:
+        logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*SNH*SNT*SNS, 'float32')), 1)
+        logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*SNH*SNT*SNS, 'float32'))
+    # alpha controls mutual information
+    # beta controls total correlation
+    # lambda controls dimension-wise kld
     melbo = ALPHA*(logqz_x-logqz)+BETA*(logqz-logqz_prodmarginals)+LMBDA*(logqz_prodmarginals-logpz)
     return melbo
 
@@ -285,17 +309,17 @@ def build_autoencoder():
     # output layer activation
     # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
     # caused by scaling
-    if PRIOR == 'gaussian':
-        alpha_zm = 1.0
-        alpha_zlg = 1.0
-    elif PRIOR == 'none':
-        alpha_z = 1.0
-    if SCLR in ['minmax', 'tanh', 'global']:
+    if not PRELU:
         alpha_enc = 0.2
         alpha_dec = 0.0
+        if PRIOR == 'gaussian':
+            alpha_zm = 1.0
+            alpha_zlg = 1.0
+        elif PRIOR == 'none':
+            alpha_z = 1.0
+    if SCLR in ['minmax', 'tanh', 'global']:
         outact = 'sigmoid'
     else:
-        alpha_hid = 1.0
         outact = 'tanh'
     # kernel initializer - customizable
     # limited tests showed he_normal performs well
@@ -523,7 +547,7 @@ if __name__ == '__main__':
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, SCLR,
      PRIOR, KI, PRELU, BN, LD,
-     OPT, LR, LSS, REG, ALPHA, BETA, LMBDA,
+     OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
     EPS = 1e-8
@@ -534,6 +558,10 @@ if __name__ == '__main__':
         ED = 2
     elif PRIOR == 'none':
         ED = 1
+    if REG != 'tc':
+        ALPHA = 0
+    if REG == 'kld':
+        LMBDA = 0
 
     np.random.seed(SEED)
     # environment variables
@@ -592,9 +620,9 @@ if __name__ == '__main__':
         CM = plt.get_cmap('plasma')
 
     # run parameter tuple
-    PRM = (NAME, N, SNI, SNS, SCLR, PRIOR, PRELU, BN, LD, OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, EP, BS, SEED)
+    PRM = (NAME, N, SNI, SNS, SCLR, PRIOR, PRELU, BN, LD, OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS, EP, BS, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
@@ -788,17 +816,17 @@ if __name__ == '__main__':
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
         ZDEC = np.load(OUTPREF+'.zdec.npy').reshape(*SHP1)
-        ERR = np.load(OUTPREF+'.zerr.npy')
+        ERR = np.load(OUTPREF+'.zerr.npy').reshape(*SHP0)
         MERR = np.load(OUTPREF+'.zerr.mean.npy')
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
         MNERR = np.load(OUTPREF+'.zerr.min.npy')
         if PRIOR == 'gaussian':
-            DD = np.load(OUTPREF+'.zerr.dd.npy')
-            MDD = np.load(OUTPREF+'.zerr.dd.mean.npy')
-            SDD = np.load(OUTPREF+'.zerr.dd.stdv.npy')
-            MXDD = np.load(OUTPREF+'.zerr.dd.max.npy')
-            MNDD = np.load(OUTPREF+'.zerr.dd.min.npy')
+            KLD = np.load(OUTPREF+'.zerr.kld.npy')
+            MKLD = np.load(OUTPREF+'.zerr.kld.mean.npy')
+            SKLD = np.load(OUTPREF+'.zerr.kld.stdv.npy')
+            MXKLD = np.load(OUTPREF+'.zerr.kld.max.npy')
+            MNKLD = np.load(OUTPREF+'.zerr.kld.min.npy')
         if VERBOSE:
             print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -808,22 +836,22 @@ if __name__ == '__main__':
             print(100*'-')
         ZENC = np.array(ENC.predict(SCDMP, batch_size=BS, verbose=VERBOSE))
         if PRIOR == 'gaussian':
-            DD = K.eval(kld((ZENC[0, :, :], ZENC[1, :, :])))
+            KLD = K.eval(kld((ZENC[0, :, :], ZENC[1, :, :]))).reshape(SNH, SNT, SNS)
             ZDEC = np.array(DEC.predict(ZENC[2, :, :], batch_size=BS, verbose=VERBOSE))
             # swap latent space axes
             ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
             # convert log variance to standard deviation
             ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
-            np.save(OUTPREF+'.zerr.dd.npy', DD.reshape(SNH, SNT, SNS))
+            np.save(OUTPREF+'.zerr.kld.npy', KLD)
         elif PRIOR == 'none':
             ZDEC = np.array(DEC.predict(ZENC, verbose=VERBOSE))
             ZENC = ZENC[:, np.newaxis, :]
         # reconstruction error (signed)
-        ERR = SCDMP-ZDEC
+        ERR = (SCDMP-ZDEC).reshape(*SHP0)
         # dump results
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
-        np.save(OUTPREF+'.zerr.npy', ERR.reshape(*SHP0))
+        np.save(OUTPREF+'.zerr.npy', ERR)
         # means and standard deviation of error
         MERR = np.sqrt(np.mean(np.square(ERR)))
         SERR = np.std(ERR)
@@ -832,21 +860,21 @@ if __name__ == '__main__':
         MNERR = np.min(ERR)
         if PRIOR  == 'gaussian':
             # mean and standard deviation kullback-liebler divergence
-            MDD = np.mean(DD)
-            SDD = np.std(DD)
+            MKLD = np.mean(KLD)
+            SKLD = np.std(KLD)
             # minimum and maximum kullback-liebler divergence
-            MXDD = np.max(DD)
-            MNDD = np.min(DD)
+            MXKLD = np.max(KLD)
+            MNKLD = np.min(KLD)
         # dump results
         np.save(OUTPREF+'.zerr.mean.npy', MERR)
         np.save(OUTPREF+'.zerr.stdv.npy', SERR)
         np.save(OUTPREF+'.zerr.max.npy', MXERR)
         np.save(OUTPREF+'.zerr.min.npy', MNERR)
         if PRIOR == 'gaussian':
-            np.save(OUTPREF+'.zerr.dd.mean.npy', MDD)
-            np.save(OUTPREF+'.zerr.dd.stdv.npy', SDD)
-            np.save(OUTPREF+'.zerr.dd.max.npy', MXDD)
-            np.save(OUTPREF+'.zerr.dd.min.npy', MNDD)
+            np.save(OUTPREF+'.zerr.kld.mean.npy', MKLD)
+            np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
+            np.save(OUTPREF+'.zerr.kld.max.npy', MXKLD)
+            np.save(OUTPREF+'.zerr.kld.min.npy', MNKLD)
 
     if VERBOSE:
         print(100*'-')
@@ -861,10 +889,10 @@ if __name__ == '__main__':
         print('max error:       %f' % MXERR)
         print('min error:       %f' % MNERR)
         if PRIOR == 'gaussian':
-            print('mean dd:     %f' % MDD)
-            print('stdv dd:     %f' % SDD)
-            print('max dd:      %f' % MXDD)
-            print('min dd:      %f' % MNDD)
+            print('mean dd:     %f' % MKLD)
+            print('stdv dd:     %f' % SKLD)
+            print('max dd:      %f' % MXKLD)
+            print('min dd:      %f' % MNKLD)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
@@ -878,10 +906,10 @@ if __name__ == '__main__':
         out.write('max error:       %f\n' % MXERR)
         out.write('min error:       %f\n' % MNERR)
         if PRIOR == 'gaussian':
-            out.write('mean dd:     %f\n' % MDD)
-            out.write('stdv dd:     %f\n' % SDD)
-            out.write('max dd:      %f\n' % MXDD)
-            out.write('min dd:      %f\n' % MNDD)
+            out.write('mean dd:     %f\n' % MKLD)
+            out.write('stdv dd:     %f\n' % SKLD)
+            out.write('max dd:      %f\n' % MXKLD)
+            out.write('min dd:      %f\n' % MNKLD)
         out.write(100*'-'+'\n')
 
     try:
@@ -968,8 +996,25 @@ if __name__ == '__main__':
         plt.xticks(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5))
         plt.yticks(ey)
         plt.xlabel('ERROR')
-        plt.ylabel('DENSITY')
-        fig.savefig(OUTPREF+'.ae.err.png')
+        plt.ylabel('HISTOGRAM')
+        fig.savefig(OUTPREF+'.ae.dist.err.png')
+        plt.close()
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+        ax.imshow(np.mean(ERR, (2, 3, 4, 5)), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+        ax.set_xticks(np.arange(CT.size), minor=True)
+        ax.set_yticks(np.arange(CH.size), minor=True)
+        plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+        plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
+        plt.xlabel('T')
+        plt.ylabel('H')
+        fig.savefig(OUTPREF+'.ae.diag.err.png')
         plt.close()
 
         if PRIOR == 'gaussian':
@@ -980,19 +1025,36 @@ if __name__ == '__main__':
             ax.spines['top'].set_visible(False)
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
-            ex = np.linspace(0.0, np.ceil(DD.max()), 33)
-            er = np.histogram(DD, ex)[0]/(SNH*SNT*SNS)
+            ex = np.linspace(0.0, np.ceil(KLD.max()), 33)
+            er = np.histogram(KLD, ex)[0]/(SNH*SNT*SNS)
             dex = ex[1]-ex[0]
             ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
             ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-            ax.set_xticks(np.linspace(0.0, np.ceil(DD.max()), 5), minor=True)
+            ax.set_xticks(np.linspace(0.0, np.ceil(KLD.max()), 5), minor=True)
             ax.set_yticks(ey, minor=True)
-            plt.xticks(np.linspace(0.0, np.ceil(DD.max()), 5))
+            plt.xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
             plt.yticks(ey)
-            plt.xlabel('DD')
-            plt.ylabel('DENSITY')
-            fig.savefig(OUTPREF+'.ae.dd.png')
+            plt.xlabel('KLD')
+            plt.ylabel('HISTOGRAM')
+            fig.savefig(OUTPREF+'.ae.dist.kld.png')
+            plt.close()
+
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.xaxis.set_ticks_position('bottom')
+            ax.yaxis.set_ticks_position('left')
+            ax.imshow(np.mean(KLD, axis=-1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.arange(CT.size), minor=True)
+            ax.set_yticks(np.arange(CH.size), minor=True)
+            plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
+            plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
+            plt.xlabel('T')
+            plt.ylabel('H')
+            fig.savefig(OUTPREF+'.ae.diag.kld.png')
             plt.close()
 
         shp0 = (SNH, SNT, SNS, ED*LD)
@@ -1017,7 +1079,7 @@ if __name__ == '__main__':
         PZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
 
         # plot latent variable diagrams
-        for i in range(1):
+        for i in range(2):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
@@ -1041,7 +1103,7 @@ if __name__ == '__main__':
                     plt.close()
 
         # plot pca latent variable diagrams
-        for i in range(1):
+        for i in range(2):
             for j in range(ED):
                 for k in range(LD):
                     fig = plt.figure()
