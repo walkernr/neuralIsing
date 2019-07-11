@@ -266,11 +266,15 @@ def log_importance_weight(batch_size=None, dataset_size=None):
         dataset_size = SNH*SNT*SNS
     n, m = dataset_size, batch_size-1
     strw = (n-m)/(n*m)
-    w = np.ones((batch_size,batch_size))/m
-    w.reshape(-1)[::(m+1)] = 1/n
-    w.reshape(-1)[1::(m+1)] = strw
-    w[m-1, 0] = strw
-    return K.log(K.cast(w, 'float32'))
+    w = K.concatenate((1/n*K.ones((batch_size, 1)),
+                       strw*K.ones((batch_size, 1)),
+                       1/m*K.ones((batch_size, batch_size-2))), axis=1)
+    return K.log(w)
+    # w = np.ones((batch_size,batch_size))/m
+    # w.reshape(-1)[::(m+1)] = 1/n
+    # w.reshape(-1)[1::(m+1)] = strw
+    # w[m-1, 0] = strw
+    # return K.log(K.cast(w, 'float32'))
 
 
 def tc(z, beta, batch_size=None):
