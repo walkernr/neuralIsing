@@ -602,7 +602,7 @@ if __name__ == '__main__':
         import matplotlib as mpl
         mpl.use('Agg')
         import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import ImageGrid
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
         plt.rc('font', family='sans-serif')
         FTSZ = 28
         FIGW = 16
@@ -661,7 +661,7 @@ if __name__ == '__main__':
     try:
         # check is scaled data has already been computed
         SCDMP = np.load(SCPREF+'.dmp.sc.npy').reshape(*SHP1)
-        CDAT = np.load(SCPREF+'.dat.c.npy')
+        CDAT = np.load(CPREF+'.dat.c.npy')
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
             print(100*'-')
@@ -1025,37 +1025,47 @@ if __name__ == '__main__':
         fig.savefig(OUTPREF+'.ae.dist.err.mae.png')
         plt.close()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
+        div = make_axes_locatable(ax)
+        cax = div.append_axes('top', size='5%', pad=0.8)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ax.imshow(np.sqrt(np.mean(np.square(ERR), (2, 3, 4, 5))), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        dat = np.sqrt(np.mean(np.square(ERR), (2, 3, 4, 5)))
+        im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
         ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
         ax.set_xticks(np.arange(CT.size), minor=True)
         ax.set_yticks(np.arange(CH.size), minor=True)
-        plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
+        ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+        ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+        ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+        ax.set_yticklabels(np.round(CH, 2)[::4])
+        ax.set_xlabel('T')
+        ax.set_ylabel('H')
+        fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
         fig.savefig(OUTPREF+'.ae.diag.err.rms.png')
         plt.close()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
+        div = make_axes_locatable(ax)
+        cax = div.append_axes('top', size='5%', pad=0.8)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ax.imshow(np.mean(ERR, (2, 3, 4, 5)), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        dat = np.mean(ERR, (2, 3, 4, 5))
+        im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
         ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
         ax.set_xticks(np.arange(CT.size), minor=True)
         ax.set_yticks(np.arange(CH.size), minor=True)
-        plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-        plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-        plt.xlabel('T')
-        plt.ylabel('H')
+        ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+        ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+        ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+        ax.set_yticklabels(np.round(CH, 2)[::4])
+        ax.set_xlabel('T')
+        ax.set_ylabel('H')
+        fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
         fig.savefig(OUTPREF+'.ae.diag.err.me.png')
         plt.close()
 
@@ -1082,20 +1092,25 @@ if __name__ == '__main__':
             fig.savefig(OUTPREF+'.ae.dist.kld.png')
             plt.close()
 
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
+            div = make_axes_locatable(ax)
+            cax = div.append_axes('top', size='5%', pad=0.8)
             ax.spines['right'].set_visible(False)
             ax.spines['top'].set_visible(False)
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
-            ax.imshow(np.mean(KLD, axis=-1), aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            dat = np.mean(KLD, axis=-1)
+            im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(CT.size), minor=True)
             ax.set_yticks(np.arange(CH.size), minor=True)
-            plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-            plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-            plt.xlabel('T')
-            plt.ylabel('H')
+            ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+            ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+            ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+            ax.set_yticklabels(np.round(CH, 2)[::4])
+            ax.set_xlabel('T')
+            ax.set_ylabel('H')
+            fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
             fig.savefig(OUTPREF+'.ae.diag.kld.png')
             plt.close()
 
@@ -1105,42 +1120,55 @@ if __name__ == '__main__':
         ct = CT[np.newaxis, :, np.newaxis, np.newaxis]
 
         # diagrams for physical measurements
-        MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
-        MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+        # MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+        # MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
+        # # diagrams for latent variables
+        # ZMDIAG = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(*shp0), 2).reshape(*shp2)).reshape(*shp1)
+        # ZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
+        # # diagrams for pca embeddings of latent variables
+        # PZMDIAG = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(*shp0), 2).reshape(*shp2)).reshape(*shp1)
+        # for i in range(LD):
+        #     if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
+        #         PZMDIAG[:, :, 0, i] = 1-PZMDIAG[:, :, 0, i]
+        #     if PRIOR == 'gaussian':
+        #         if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
+        #             PZMDIAG[:, :, 1, i] = 1-PZMDIAG[:, :, 1, i]
+        # PZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
+        MEMDIAG = np.stack((MM, EM), axis=-1).reshape(SNH, SNT, 2)
+        MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
         # diagrams for latent variables
-        ZMDIAG = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(*shp0), 2).reshape(*shp2)).reshape(*shp1)
-        ZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
+        ZMDIAG = np.mean(ZENC.reshape(*shp0), 2).reshape(*shp1)
+        ZVDIAG = np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp1)
         # diagrams for pca embeddings of latent variables
-        PZMDIAG = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(*shp0), 2).reshape(*shp2)).reshape(*shp1)
-        for i in range(LD):
-            if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
-                PZMDIAG[:, :, 0, i] = 1-PZMDIAG[:, :, 0, i]
-            if PRIOR == 'gaussian':
-                if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
-                    PZMDIAG[:, :, 1, i] = 1-PZMDIAG[:, :, 1, i]
-        PZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
+        PZMDIAG = np.mean(PZENC.reshape(*shp0), 2).reshape(*shp1)
+        PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
 
         # plot latent variable diagrams
         for i in range(2):
             for j in range(ED):
                 for k in range(LD):
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
+                    fig, ax = plt.subplots()
+                    div = make_axes_locatable(ax)
+                    cax = div.append_axes('top', size='5%', pad=0.8)
                     ax.spines['right'].set_visible(False)
                     ax.spines['top'].set_visible(False)
                     ax.xaxis.set_ticks_position('bottom')
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
-                        ax.imshow(ZMDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        dat = ZMDIAG[:, :, j, k]
                     if i == 1:
-                        ax.imshow(ZVDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        dat = ZVDIAG[:, :, j, k]
+                    im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
                     ax.set_yticks(np.arange(CH.size), minor=True)
-                    plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-                    plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-                    plt.xlabel('T')
-                    plt.ylabel('H')
+                    ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                    ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                    ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                    ax.set_yticklabels(np.round(CH, 2)[::4])
+                    ax.set_xlabel('T')
+                    ax.set_ylabel('H')
+                    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                     fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.%d.png' % (i, j, k))
                     plt.close()
 
@@ -1148,45 +1176,55 @@ if __name__ == '__main__':
         for i in range(2):
             for j in range(ED):
                 for k in range(LD):
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
+                    fig, ax = plt.subplots()
+                    div = make_axes_locatable(ax)
+                    cax = div.append_axes('top', size='5%', pad=0.8)
                     ax.spines['right'].set_visible(False)
                     ax.spines['top'].set_visible(False)
                     ax.xaxis.set_ticks_position('bottom')
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
-                        ax.imshow(PZMDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        dat = PZMDIAG[:, :, j, k]
                     if i == 1:
-                        ax.imshow(PZVDIAG[:, :, j, k], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                        dat = PZVDIAG[:, :, j, k]
+                    im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
                     ax.set_yticks(np.arange(CH.size), minor=True)
-                    plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-                    plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-                    plt.xlabel('T')
-                    plt.ylabel('H')
+                    ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                    ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                    ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                    ax.set_yticklabels(np.round(CH, 2)[::4])
+                    ax.set_xlabel('T')
+                    ax.set_ylabel('H')
+                    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                     fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
         # plot physical measurement diagrams
         for i in range(2):
             for j in range(2):
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
+                fig, ax = plt.subplots()
+                div = make_axes_locatable(ax)
+                cax = div.append_axes('top', size='5%', pad=0.8)
                 ax.spines['right'].set_visible(False)
                 ax.spines['top'].set_visible(False)
                 ax.xaxis.set_ticks_position('bottom')
                 ax.yaxis.set_ticks_position('left')
                 if i == 0:
-                    ax.imshow(MEMDIAG[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    dat = MEMDIAG[:, :, j]
                 if i == 1:
-                    ax.imshow(MEVDIAG[:, :, j], aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    dat = MEVDIAG[:, :, j]
+                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                 ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                 ax.set_xticks(np.arange(CT.size), minor=True)
                 ax.set_yticks(np.arange(CH.size), minor=True)
-                plt.xticks(np.arange(CT.size)[::4], np.round(CT, 2)[::4], rotation=-60)
-                plt.yticks(np.arange(CH.size)[::4], np.round(CH, 2)[::4])
-                plt.xlabel('T')
-                plt.ylabel('H')
+                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                ax.set_yticklabels(np.round(CH, 2)[::4])
+                ax.set_xlabel('T')
+                ax.set_ylabel('H')
+                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                 fig.savefig(OUTPREF+'.ae.diag.mv.%d.%d.png' % (i, j))
                 plt.close()
 
