@@ -1220,7 +1220,7 @@ if __name__ == '__main__':
                         dat = PZMDIAG[:, :, j, k]
                     if i == 1:
                         dat = PZMDIAG[:, :, j, k]
-                    dat = logistic((4/(dat.max()-dat.min()), dat.mean()), dat)
+                    dat = logistic((2/(dat.max()-dat.min()), dat.mean()), dat)
                     im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
