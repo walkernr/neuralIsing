@@ -893,10 +893,10 @@ if __name__ == '__main__':
         print('max error:       %f' % MXERR)
         print('min error:       %f' % MNERR)
         if PRIOR == 'gaussian':
-            print('mean dd:     %f' % MKLD)
-            print('stdv dd:     %f' % SKLD)
-            print('max dd:      %f' % MXKLD)
-            print('min dd:      %f' % MNKLD)
+            print('mean kld:        %f' % MKLD)
+            print('stdv kld:        %f' % SKLD)
+            print('max kld:         %f' % MXKLD)
+            print('min kld:         %f' % MNKLD)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
@@ -910,10 +910,10 @@ if __name__ == '__main__':
         out.write('max error:       %f\n' % MXERR)
         out.write('min error:       %f\n' % MNERR)
         if PRIOR == 'gaussian':
-            out.write('mean dd:     %f\n' % MKLD)
-            out.write('stdv dd:     %f\n' % SKLD)
-            out.write('max dd:      %f\n' % MXKLD)
-            out.write('min dd:      %f\n' % MNKLD)
+            out.write('mean kld:        %f\n' % MKLD)
+            out.write('stdv kld:        %f\n' % SKLD)
+            out.write('max kld:         %f\n' % MXKLD)
+            out.write('min kld:         %f\n' % MNKLD)
         out.write(100*'-'+'\n')
 
     try:
@@ -955,7 +955,7 @@ if __name__ == '__main__':
             print('components')
             print(100*'-')
             for j in range(LD):
-                print(LD*'%f ' % tuple(CZENC[i, j, :]))
+                print(LD*'%+f ' % tuple(CZENC[i, j, :]))
             print(100*'-')
             print('explained variances')
             print(100*'-')
@@ -973,7 +973,7 @@ if __name__ == '__main__':
             out.write('principal components\n')
             out.write(100*'-'+'\n')
             for j in range(LD):
-                out.write(LD*'%f ' % tuple(CZENC[i, j, :]) + '\n')
+                out.write(LD*'%+f ' % tuple(CZENC[i, j, :]) + '\n')
             out.write(100*'-'+'\n')
             out.write('explained variances\n')
             out.write(100*'-'+'\n')
@@ -994,13 +994,13 @@ if __name__ == '__main__':
         dex = ex[1]-ex[0]
         ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
         ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5), minor=True)
-        ax.set_yticks(ey, minor=True)
-        plt.xticks(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5))
-        plt.yticks(ey)
-        plt.xlabel('ERROR')
-        plt.ylabel('HISTOGRAM')
+        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+        ax.set_xticks(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5))
+        ax.set_yticks(ey)
+        ax.set_xticklabels(np.linspace(np.floor(ERR.min()), np.ceil(ERR.max()), 5))
+        ax.set_yticklabels(ey)
+        ax.set_xlabel('ERROR')
+        ax.set_ylabel('HISTOGRAM')
         fig.savefig(OUTPREF+'.ae.dist.err.me.png')
         plt.close()
 
@@ -1015,13 +1015,13 @@ if __name__ == '__main__':
         dex = ex[1]-ex[0]
         ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
         ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 5), minor=True)
-        ax.set_yticks(ey, minor=True)
-        plt.xticks(np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 5))
-        plt.yticks(ey)
-        plt.xlabel('ERROR')
-        plt.ylabel('HISTOGRAM')
+        ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+        ax.set_xticks(np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 5))
+        ax.set_yticks(ey)
+        ax.set_xticklabels(np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 5))
+        ax.set_yticklabels(ey)
+        ax.set_xlabel('ERROR')
+        ax.set_ylabel('HISTOGRAM')
         fig.savefig(OUTPREF+'.ae.dist.err.mae.png')
         plt.close()
 
@@ -1082,13 +1082,13 @@ if __name__ == '__main__':
             dex = ex[1]-ex[0]
             ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
             ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
-            ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-            ax.set_xticks(np.linspace(0.0, np.ceil(KLD.max()), 5), minor=True)
-            ax.set_yticks(ey, minor=True)
-            plt.xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
-            plt.yticks(ey)
-            plt.xlabel('KLD')
-            plt.ylabel('HISTOGRAM')
+            ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
+            ax.set_yticks(ey)
+            ax.set_xticklabels(np.linspace(0.0, np.ceil(KLD.max()), 5))
+            ax.set_yticklabels(ey)
+            ax.set_xlabel('KLD')
+            ax.set_ylabel('HISTOGRAM')
             fig.savefig(OUTPREF+'.ae.dist.kld.png')
             plt.close()
 
@@ -1141,6 +1141,12 @@ if __name__ == '__main__':
         ZVDIAG = np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp1)
         # diagrams for pca embeddings of latent variables
         PZMDIAG = np.mean(PZENC.reshape(*shp0), 2).reshape(*shp1)
+        for i in range(LD):
+            if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
+                PZMDIAG[:, :, 0, i] = -PZMDIAG[:, :, 0, i]
+            if PRIOR == 'gaussian':
+                if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
+                    PZMDIAG[:, :, 1, i] = -PZMDIAG[:, :, 1, i]
         PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
 
         # plot latent variable diagrams
@@ -1199,6 +1205,34 @@ if __name__ == '__main__':
                     ax.set_ylabel('H')
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                     fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    plt.close()
+        for i in range(2):
+            for j in range(ED):
+                for k in range(LD):
+                    fig, ax = plt.subplots()
+                    div = make_axes_locatable(ax)
+                    cax = div.append_axes('top', size='5%', pad=0.8)
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['top'].set_visible(False)
+                    ax.xaxis.set_ticks_position('bottom')
+                    ax.yaxis.set_ticks_position('left')
+                    if i == 0:
+                        dat = PZMDIAG[:, :, j, k]
+                    if i == 1:
+                        dat = PZMDIAG[:, :, j, k]
+                    dat = logistic((4/(dat.max()-dat.min()), dat.mean()), dat)
+                    im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                    ax.set_xticks(np.arange(CT.size), minor=True)
+                    ax.set_yticks(np.arange(CH.size), minor=True)
+                    ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                    ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                    ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                    ax.set_yticklabels(np.round(CH, 2)[::4])
+                    ax.set_xlabel('T')
+                    ax.set_ylabel('H')
+                    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.tanh.%d.%d.%d.png' % (i, j, k))
                     plt.close()
         # plot physical measurement diagrams
         for i in range(2):
