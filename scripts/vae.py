@@ -1141,8 +1141,8 @@ if __name__ == '__main__':
                 for k in range(LD):
                     dat = PZENC.reshape(SNH, SNT, SNS, ED, LD)[:, :, :, j, k]
                     bdat = np.divide(dat, CT[np.newaxis, :, np.newaxis])
-                    lmdat = logistic((16/dat.var(), dat.mean()), dat)
-                    lvdat = logistic((16/bdat.var(), bdat.mean()), bdat)
+                    lmdat = logistic((4/dat.var(), dat.mean()), dat)
+                    lvdat = logistic((4/bdat.var(), bdat.mean()), bdat)
                     if i == 0:
                         LPZMDIAG[:, :, j, k] = np.mean(lmdat, 2)
                     if i == 1:
