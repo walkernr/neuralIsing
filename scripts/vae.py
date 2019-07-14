@@ -1120,20 +1120,6 @@ if __name__ == '__main__':
         ct = CT[np.newaxis, :, np.newaxis, np.newaxis]
 
         # diagrams for physical measurements
-        # MEMDIAG = SCLRS['minmax'].fit_transform(np.stack((MM, EM), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
-        # MEVDIAG = SCLRS['minmax'].fit_transform(np.stack((SU, SP), axis=-1).reshape(SNH*SNT, 2)).reshape(SNH, SNT, 2)
-        # # diagrams for latent variables
-        # ZMDIAG = SCLRS['minmax'].fit_transform(np.mean(ZENC.reshape(*shp0), 2).reshape(*shp2)).reshape(*shp1)
-        # ZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
-        # # diagrams for pca embeddings of latent variables
-        # PZMDIAG = SCLRS['minmax'].fit_transform(np.mean(PZENC.reshape(*shp0), 2).reshape(*shp2)).reshape(*shp1)
-        # for i in range(LD):
-        #     if PZMDIAG[0, 0, 0, i] > PZMDIAG[-1, 0, 0, i]:
-        #         PZMDIAG[:, :, 0, i] = 1-PZMDIAG[:, :, 0, i]
-        #     if PRIOR == 'gaussian':
-        #         if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
-        #             PZMDIAG[:, :, 1, i] = 1-PZMDIAG[:, :, 1, i]
-        # PZVDIAG = SCLRS['minmax'].fit_transform(np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp2)).reshape(*shp1)
         MEMDIAG = np.stack((MM, EM), axis=-1).reshape(SNH, SNT, 2)
         MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
         # diagrams for latent variables
@@ -1155,8 +1141,8 @@ if __name__ == '__main__':
                 for k in range(LD):
                     dat = PZENC.reshape(SNH, SNT, SNS, ED, LD)[:, :, :, j, k]
                     bdat = np.divide(dat, CT[np.newaxis, :, np.newaxis])
-                    lmdat = logistic((4/dat.var(), dat.mean()), dat)
-                    lvdat = logistic((4/bdat.var(), bdat.mean()), bdat)
+                    lmdat = logistic((16/dat.var(), dat.mean()), dat)
+                    lvdat = logistic((16/bdat.var(), bdat.mean()), bdat)
                     if i == 0:
                         LPZMDIAG[:, :, j, k] = np.mean(lmdat, 2)
                     if i == 1:
