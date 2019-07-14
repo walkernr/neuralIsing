@@ -1148,7 +1148,25 @@ if __name__ == '__main__':
                 if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
                     PZMDIAG[:, :, 1, i] = -PZMDIAG[:, :, 1, i]
         PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
-
+        LPZMDIAG = np.zeros(PZMDIAG.shape)
+        LPZVDIAG = np.zeros(PZVDIAG.shape)
+        for i in range(2):
+            for j in range(ED):
+                for k in range(LD):
+                    dat = PZENC.reshape(SNH, SNT, SNS, ED, LD)[:, :, :, j, k]
+                    bdat = np.divide(dat, CT[np.newaxis, :, np.newaxis])
+                    lmdat = logistic((4/dat.var(), dat.mean()), dat)
+                    lvdat = logistic((4/bdat.var(), bdat.mean()), bdat)
+                    if i == 0:
+                        LPZMDIAG[:, :, j, k] = np.mean(lmdat, 2)
+                    if i == 1:
+                        LPZVDIAG[:, :, j, k] = np.var(lvdat, 2)
+        for i in range(LD):
+            if LPZMDIAG[0, 0, 0, i] > LPZMDIAG[-1, 0, 0, i]:
+                LPZMDIAG[:, :, 0, i] = -LPZMDIAG[:, :, 0, i]
+            if PRIOR == 'gaussian':
+                if LPZMDIAG[0, 0, 1, i] > LPZMDIAG[0, -1, 1, i]:
+                    LPZMDIAG[:, :, 1, i] = -LPZMDIAG[:, :, 1, i]
         # plot latent variable diagrams
         for i in range(2):
             for j in range(ED):
@@ -1217,10 +1235,9 @@ if __name__ == '__main__':
                     ax.xaxis.set_ticks_position('bottom')
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
-                        dat = PZMDIAG[:, :, j, k]
+                        dat = LPZMDIAG[:, :, j, k]
                     if i == 1:
-                        dat = PZMDIAG[:, :, j, k]
-                    dat = logistic((2/(dat.max()-dat.min()), dat.mean()), dat)
+                        dat = LPZVDIAG[:, :, j, k]
                     im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
