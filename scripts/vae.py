@@ -1232,7 +1232,7 @@ if __name__ == '__main__':
                     ax.set_xlabel('T')
                     ax.set_ylabel('H')
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.tanh.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.logistic.%d.%d.%d.png' % (i, j, k))
                     plt.close()
         # plot physical measurement diagrams
         for i in range(2):
