@@ -203,17 +203,22 @@ def gauss_log_prob(z, beta=None, batch_size=None):
     return -0.5*(zsc**2+z_log_var+norm)
 
 
-def bernoulli_sampling(p, batch_size=None):
+def mse(x, y, batch_size=None):
     if batch_size is None:
         batch_size = BS
-    epsilon = K.random_uniform(shape=(batch_size, N, N, NCH))
-    return K.sigmoid(2*(p-epsilon)/EPS)
+    return K.sum(K.reshape(K.square(x-y), (batch_size, -1)), 1)
 
 
-def bernoulli_crossentropy(x, y, batch_size=None):
+def mae(x, y, batch_size=None):
     if batch_size is None:
         batch_size = BS
-    return binary_crossentropy(K.flatten(x), K.flatten(bernoulli_sampling(y, batch_size=batch_size)))
+    return K.sum(K.reshape(K.abs(x-y), (batch_size, -1)), 1)
+
+
+def bc(x, y, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    return -K.sum(K.reshape(x*K.log(y+EPS)+(1-x)*K.log(1-y+EPS), (batch_size, -1)), 1)
 
 
 def kld(beta):
@@ -252,13 +257,6 @@ def sw(x, batch_size=None):
     return w2
 
 
-def log_sum_exp(x):
-    m = K.max(x, axis=1, keepdims=True)
-    u = x-m
-    m = K.squeeze(m, 1)
-    return m+K.log(K.sum(K.exp(u), axis=1, keepdims=False))
-
-
 def log_importance_weight(batch_size=None, dataset_size=None):
     if batch_size is None:
         batch_size = BS
@@ -266,15 +264,17 @@ def log_importance_weight(batch_size=None, dataset_size=None):
         dataset_size = SNH*SNT*SNS
     n, m = dataset_size, batch_size-1
     strw = (n-m)/(n*m)
-    w = K.concatenate((1/n*K.ones((batch_size, 1)),
+    w = K.concatenate((K.concatenate((1/n*K.ones((batch_size-2, 1)), strw*K.ones((1, 1)), 1/n*K.ones((1, 1))), axis=0),
                        strw*K.ones((batch_size, 1)),
                        1/m*K.ones((batch_size, batch_size-2))), axis=1)
     return K.log(w)
-    # w = np.ones((batch_size,batch_size))/m
-    # w.reshape(-1)[::(m+1)] = 1/n
-    # w.reshape(-1)[1::(m+1)] = strw
-    # w[m-1, 0] = strw
-    # return K.log(K.cast(w, 'float32'))
+
+
+def log_sum_exp(x):
+    m = K.max(x, axis=1, keepdims=True)
+    u = x-m
+    m = K.squeeze(m, 1)
+    return m+K.log(K.sum(K.exp(u), axis=1, keepdims=False))
 
 
 def tc(z, beta, batch_size=None):
@@ -299,8 +299,8 @@ def tc(z, beta, batch_size=None):
     # alpha controls mutual information
     # beta controls total correlation
     # lambda controls dimension-wise kld
-    melbo = ALPHA*(logqz_x-logqz)+BETA*(logqz-logqz_prodmarginals)+LMBDA*(logqz_prodmarginals-logpz)
-    return melbo
+    melbo = -ALPHA*(logqz_x-logqz)-BETA*(logqz-logqz_prodmarginals)-LMBDA*(logqz_prodmarginals-logpz)
+    return -melbo
 
 
 def build_autoencoder():
@@ -329,7 +329,7 @@ def build_autoencoder():
     # limited tests showed he_normal performs well
     init = KIS[KI]
     # base number of filters
-    nf = 32
+    nf = 64
     # number of convolutions necessary to get down to size length 4
     # should use base 2 exponential side lengths
     nc = np.int32(np.log2(N/4.))
@@ -362,14 +362,14 @@ def build_autoencoder():
     shape = K.int_shape(c)
     d0 = Flatten()(c)
     # dense layer connected to flattened convolution output
-    d0 = Dense(nc*32, kernel_initializer=init)(d0)
-    if BN:
-        d0 = BatchNormalization(epsilon=1e-4)(d0)
-    if PRELU:
-        # like leaky relu, but with trainable layer to tune alphas
-        d0 = PReLU(alpha_initializer=init)(d0)
-    else:
-        d0 = LeakyReLU(alpha=alpha_enc)(d0)
+    # d0 = Dense(nc*32, kernel_initializer=init)(d0)
+    # if BN:
+    #     d0 = BatchNormalization(epsilon=1e-4)(d0)
+    # if PRELU:
+    #     # like leaky relu, but with trainable layer to tune alphas
+    #     d0 = PReLU(alpha_initializer=init)(d0)
+    # else:
+    #     d0 = LeakyReLU(alpha=alpha_enc)(d0)
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
         z_mean = Dense(LD, name='z_mean', kernel_initializer=init)(d0)
@@ -428,8 +428,8 @@ def build_autoencoder():
     else:
         d1 = LeakyReLU(alpha=alpha_dec)(d1)
     # loop through convolution transposes
-    for i in range(nc-1, -1, -1):
-        if i == nc-1:
+    for i in range(nc-2, -1, -1):
+        if i == nc-2:
             # (nc-1)th convoltution transpose takes reshaped dense layer
             ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
                                  padding='same', strides=2)(d1)
@@ -448,7 +448,7 @@ def build_autoencoder():
             ct = LeakyReLU(alpha=alpha_dec)(ct)
     # output convolution transpose layer
     output = Conv2DTranspose(filters=NCH, kernel_size=3, kernel_initializer=init,
-                             padding='same', name='decoder_output')(ct)
+                             padding='same', strides=2, name='decoder_output')(ct)
     # output layer activation
     output = Activation(outact)(output)
     # construct decoder
@@ -468,26 +468,20 @@ def build_autoencoder():
         output = decoder(encoder(input))
     ae = Model(input, output, name='ae_mlp')
     # ae loss
+    # reconstruction loss
+    reconstruction = K.mean(RCLS[LSS](input, output))
     if PRIOR == 'gaussian':
         # distribution divergence to regularize latent space
         if REG == 'kld':
-            rcsc = N*N
-            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
             dd = BETA*K.mean(REGS[REG]((z_mean, z_log_var)))
         elif REG == 'mmd':
-            rcsc = N*N
-            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
             dd = BETA*K.mean(REGS['kld']((z_mean, z_log_var)))+\
                  LMBDA*K.mean(REGS['mmd'](K.random_normal(shape=(BS, LD)), z))
         elif REG == 'sw':
-            rcsc = N*N
-            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
             dd = BETA*K.mean(REGS['kld']((z_mean, z_log_var)))+\
                  LMBDA*K.mean(REGS['sw'](z))
         elif REG == 'tc':
-            rcsc = N*N
-            reconstruction = rcsc*RCLS[LSS](K.flatten(input), K.flatten(output))
-            dd = K.mean(tc(z, (z_mean, z_log_var)))
+            dd = K.mean(REGS['tc'](z, (z_mean, z_log_var)))
     elif PRIOR == 'none' or REG == 'none':
         dd = 0.0
     # combine losses
@@ -588,8 +582,6 @@ if __name__ == '__main__':
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation)
-    from keras.losses import (mean_squared_error, mean_absolute_error, logcosh,
-                              binary_crossentropy, kullback_leibler_divergence, poisson)
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
@@ -743,18 +735,15 @@ if __name__ == '__main__':
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
 
     # reconstruction losses
-    RCLS = {'mse': lambda a, b: mean_squared_error(a, b),
-            'mae': lambda a, b: mean_absolute_error(a, b),
-            'logcosh': lambda a, b: logcosh(a, b),
-            'bc': lambda a, b: binary_crossentropy(a, b),
-            'kld': lambda a, b: kullback_leibler_divergence(a, b),
-            'poisson': lambda a, b: poisson(a, b),
-            'bbc': lambda a, b: bernoulli_crossentropy(a, b)}
+    RCLS = {'mse': lambda a, b: mse(a, b),
+            'mae': lambda a, b: mae(a, b),
+            'bc': lambda a, b: bc(a, b)}
 
     # regularizers
-    REGS = {'kld': lambda beta: kld(beta),
+    REGS = {'kld': lambda a: kld(a),
             'mmd': lambda a, b: mmd(a, b),
-            'sw': lambda a: sw(a)}
+            'sw': lambda a: sw(a),
+            'tc': lambda a, b: tc(a, b)}
 
     # autencoder networks
     ENC, DEC, AE = build_autoencoder()
@@ -1117,8 +1106,23 @@ if __name__ == '__main__':
         shp0 = (SNH, SNT, SNS, ED*LD)
         shp1 = (SNH, SNT, ED, LD)
         shp2 = (SNH*SNT, ED*LD)
+        shp3 = (SNH, SNT, SNS, ED, LD)
         ct = CT[np.newaxis, :, np.newaxis, np.newaxis]
 
+        def mean_and_std(x):
+            return x.mean(2), x.std(2)
+
+        def pca_mean_and_std(x):
+            p = PCA(n_components=LD)
+            y = p.fit_transform(x.reshape(SNH*SNT*SNS, LD)).reshape(SNH, SNT, SNS, LD)
+            return mean_and_std(y)
+
+        def rpmas(x):
+            a, b = mean_and_std(x)
+            c, d = pca_mean_and_std(x)
+            return a, b, c, d
+
+        ZSMDIAG, ZSVDIAG, PZSMDIAG, PZSVDIAG = rpmas(np.random.normal(loc=ZENC.reshape(*shp3)[:, :, :, 0, :], scale=ZENC.reshape(*shp3)[:, :, :, 1, :]))
         # diagrams for physical measurements
         MEMDIAG = np.stack((MM, EM), axis=-1).reshape(SNH, SNT, 2)
         MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
@@ -1134,25 +1138,78 @@ if __name__ == '__main__':
                 if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
                     PZMDIAG[:, :, 1, i] = -PZMDIAG[:, :, 1, i]
         PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
-        LPZMDIAG = np.zeros(PZMDIAG.shape)
-        LPZVDIAG = np.zeros(PZVDIAG.shape)
+        # LPZMDIAG = np.zeros(PZMDIAG.shape)
+        # LPZVDIAG = np.zeros(PZVDIAG.shape)
+        # for i in range(2):
+        #     for j in range(ED):
+        #         for k in range(LD):
+        #             dat = PZENC.reshape(SNH, SNT, SNS, ED, LD)[:, :, :, j, k]
+        #             bdat = np.divide(dat, CT[np.newaxis, :, np.newaxis])
+        #             lmdat = logistic((4/dat.var(), dat.mean()), dat)
+        #             lvdat = logistic((4/bdat.var(), bdat.mean()), bdat)
+        #             if i == 0:
+        #                 LPZMDIAG[:, :, j, k] = np.mean(lmdat, 2)
+        #             if i == 1:
+        #                 LPZVDIAG[:, :, j, k] = np.var(lvdat, 2)
+        # for i in range(LD):
+        #     if LPZMDIAG[0, 0, 0, i] > LPZMDIAG[-1, 0, 0, i]:
+        #         LPZMDIAG[:, :, 0, i] = -LPZMDIAG[:, :, 0, i]
+        #     if PRIOR == 'gaussian':
+        #         if LPZMDIAG[0, 0, 1, i] > LPZMDIAG[0, -1, 1, i]:
+        #             LPZMDIAG[:, :, 1, i] = -LPZMDIAG[:, :, 1, i]
+        # plot z sample diagrams
         for i in range(2):
-            for j in range(ED):
-                for k in range(LD):
-                    dat = PZENC.reshape(SNH, SNT, SNS, ED, LD)[:, :, :, j, k]
-                    bdat = np.divide(dat, CT[np.newaxis, :, np.newaxis])
-                    lmdat = logistic((4/dat.var(), dat.mean()), dat)
-                    lvdat = logistic((4/bdat.var(), bdat.mean()), bdat)
-                    if i == 0:
-                        LPZMDIAG[:, :, j, k] = np.mean(lmdat, 2)
-                    if i == 1:
-                        LPZVDIAG[:, :, j, k] = np.var(lvdat, 2)
-        for i in range(LD):
-            if LPZMDIAG[0, 0, 0, i] > LPZMDIAG[-1, 0, 0, i]:
-                LPZMDIAG[:, :, 0, i] = -LPZMDIAG[:, :, 0, i]
-            if PRIOR == 'gaussian':
-                if LPZMDIAG[0, 0, 1, i] > LPZMDIAG[0, -1, 1, i]:
-                    LPZMDIAG[:, :, 1, i] = -LPZMDIAG[:, :, 1, i]
+            for k in range(LD):
+                fig, ax = plt.subplots()
+                div = make_axes_locatable(ax)
+                cax = div.append_axes('top', size='5%', pad=0.8)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                if i == 0:
+                    dat = ZSMDIAG[:, :, k]
+                if i == 1:
+                    dat = ZSVDIAG[:, :, k]
+                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                ax.set_yticklabels(np.round(CH, 2)[::4])
+                ax.set_xlabel('T')
+                ax.set_ylabel('H')
+                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+                fig.savefig(OUTPREF+'.ae.diag.ld.smpl.%d.%d.png' % (i, k))
+                plt.close()
+        for i in range(2):
+            for k in range(LD):
+                fig, ax = plt.subplots()
+                div = make_axes_locatable(ax)
+                cax = div.append_axes('top', size='5%', pad=0.8)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                if i == 0:
+                    dat = PZSMDIAG[:, :, k]
+                if i == 1:
+                    dat = PZSVDIAG[:, :, k]
+                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                ax.set_yticklabels(np.round(CH, 2)[::4])
+                ax.set_xlabel('T')
+                ax.set_ylabel('H')
+                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+                fig.savefig(OUTPREF+'.ae.diag.ld.smpl.pca.%d.%d.png' % (i, k))
+                plt.close()
         # plot latent variable diagrams
         for i in range(2):
             for j in range(ED):
@@ -1210,33 +1267,33 @@ if __name__ == '__main__':
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                     fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
-        for i in range(2):
-            for j in range(ED):
-                for k in range(LD):
-                    fig, ax = plt.subplots()
-                    div = make_axes_locatable(ax)
-                    cax = div.append_axes('top', size='5%', pad=0.8)
-                    ax.spines['right'].set_visible(False)
-                    ax.spines['top'].set_visible(False)
-                    ax.xaxis.set_ticks_position('bottom')
-                    ax.yaxis.set_ticks_position('left')
-                    if i == 0:
-                        dat = LPZMDIAG[:, :, j, k]
-                    if i == 1:
-                        dat = LPZVDIAG[:, :, j, k]
-                    im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                    ax.set_xticks(np.arange(CT.size), minor=True)
-                    ax.set_yticks(np.arange(CH.size), minor=True)
-                    ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-                    ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-                    ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-                    ax.set_yticklabels(np.round(CH, 2)[::4])
-                    ax.set_xlabel('T')
-                    ax.set_ylabel('H')
-                    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.logistic.%d.%d.%d.png' % (i, j, k))
-                    plt.close()
+        # for i in range(2):
+        #     for j in range(ED):
+        #         for k in range(LD):
+        #             fig, ax = plt.subplots()
+        #             div = make_axes_locatable(ax)
+        #             cax = div.append_axes('top', size='5%', pad=0.8)
+        #             ax.spines['right'].set_visible(False)
+        #             ax.spines['top'].set_visible(False)
+        #             ax.xaxis.set_ticks_position('bottom')
+        #             ax.yaxis.set_ticks_position('left')
+        #             if i == 0:
+        #                 dat = LPZMDIAG[:, :, j, k]
+        #             if i == 1:
+        #                 dat = LPZVDIAG[:, :, j, k]
+        #             im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+        #             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+        #             ax.set_xticks(np.arange(CT.size), minor=True)
+        #             ax.set_yticks(np.arange(CH.size), minor=True)
+        #             ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+        #             ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+        #             ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+        #             ax.set_yticklabels(np.round(CH, 2)[::4])
+        #             ax.set_xlabel('T')
+        #             ax.set_ylabel('H')
+        #             fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+        #             fig.savefig(OUTPREF+'.ae.diag.ld.pca.logistic.%d.%d.%d.png' % (i, j, k))
+        #             plt.close()
         # plot physical measurement diagrams
         for i in range(2):
             for j in range(2):
