@@ -46,9 +46,13 @@ def parse_args():
     parser.add_argument('-pd', '--prior_distribution', help='prior distribution for autoencoder',
                         type=str, default='gaussian')
     parser.add_argument('-ki', '--kernel_initializer', help='kernel initialization function',
-                        type=str, default='he_normal')
-    parser.add_argument('-pr', '--prelu', help='PReLU activation function (replaces leaky ReLU and linear activations)',
-                        action='store_true')
+                        type=str, default='he_uniform')
+    parser.add_argument('-cd', '--convdepth', help='convolutional layer depth (final side length, power of 2)',
+                        type=int, default=4)
+    parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
+                        type=int, default=64)
+    parser.add_argument('-an', '--activation', help='hidden layer activations',
+                        type=str, default='selu')
     parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers',
                         action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
@@ -78,7 +82,7 @@ def parse_args():
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.scaler,
-            args.prior_distribution, args.kernel_initializer, args.prelu,
+            args.prior_distribution, args.kernel_initializer, args.convdepth, args.filters, args.activation,
             args.batch_normalization, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.batch_size, args.random_seed)
@@ -100,7 +104,9 @@ def write_specs():
         print('super samples:             %d' % SNS)
         print('scaler:                    %s' % SCLR)
         print('prior distribution:        %s' % PRIOR)
-        print('prelu:                     %d' % PRELU)
+        print('convolution depth:         %d' % CD)
+        print('filters:                   %d' % NF)
+        print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
         print('latent dimension:          %d' % LD)
         print('optimizer:                 %s' % OPT)
@@ -129,7 +135,9 @@ def write_specs():
         out.write('super samples:             %d\n' % SNS)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('prior distribution:        %s\n' % PRIOR)
-        out.write('prelu:                     %d\n' % PRELU)
+        out.write('convolutional depth:       %d\n' % CD)
+        out.write('filters:                   %d\n' % NF)
+        out.write('activation:                %s\n' % ACT)
         out.write('batch_normalization:       %d\n' % BN)
         out.write('latent dimension:          %d\n' % LD)
         out.write('optimizer:                 %s\n' % OPT)
@@ -155,6 +163,7 @@ def logistic(beta, t):
 
 
 def absolute(beta, t):
+    ''' returns a*|t-b|^c+d with beta = (a, b, c, d)'''
     a, b, c, d = beta
     return a*np.power(np.abs(t-b), c)+d
 
@@ -185,48 +194,55 @@ def gauss_sampling(beta, batch_size=None):
     ''' samples a point in a multivariate gaussian distribution '''
     if batch_size is None:
         batch_size = BS
-    z_mean, z_log_var = beta
+    mu, logvar = beta
     epsilon = K.random_normal(shape=(batch_size, LD))
-    return z_mean+K.exp(0.5*z_log_var)*epsilon
+    return mu+K.exp(0.5*logvar)*epsilon
 
 
 def gauss_log_prob(z, beta=None, batch_size=None):
+    ''' logarithmic probability for multivariate gaussian distribution given samples z and parameters beta = (mu, log(var)) '''
     if batch_size is None:
         batch_size = BS
     if beta is None:
         # mu = 0, stdv = 1 => log(var) = 0
-        z_mean, z_log_var = K.zeros((batch_size, LD)), K.zeros((batch_size, LD))
+        mu, logvar = K.zeros((batch_size, LD)), K.zeros((batch_size, LD))
     else:
-        z_mean, z_log_var = beta
+        mu, logvar = beta
     norm = K.log(2*np.pi)
-    zsc = (z-z_mean)*K.exp(-0.5*z_log_var)
-    return -0.5*(zsc**2+z_log_var+norm)
+    zsc = (z-mu)*K.exp(-0.5*logvar)
+    return -0.5*(zsc**2+logvar+norm)
 
 
-def mse(x, y, batch_size=None):
+def se(x, y, batch_size=None):
+    ''' squared error between samples x and predictions y '''
     if batch_size is None:
         batch_size = BS
     return K.sum(K.reshape(K.square(x-y), (batch_size, -1)), 1)
 
 
-def mae(x, y, batch_size=None):
+def ae(x, y, batch_size=None):
+    ''' absolute error between samples x and predictions y '''
     if batch_size is None:
         batch_size = BS
     return K.sum(K.reshape(K.abs(x-y), (batch_size, -1)), 1)
 
 
 def bc(x, y, batch_size=None):
+    ''' binary crossentropy between samples x and predictions y '''
     if batch_size is None:
         batch_size = BS
-    return -K.sum(K.reshape(x*K.log(y+EPS)+(1-x)*K.log(1-y+EPS), (batch_size, -1)), 1)
+    return -K.sum(K.reshape(x*K.log(y+EPS)+(1-x)*K.log(1-y+EPS),
+                            (batch_size, -1)), 1)
 
 
 def kld(beta):
-    z_mean, z_log_var = beta
-    return 0.5*K.sum(K.exp(z_log_var)+K.square(z_mean)-z_log_var-1, axis=-1)
+    ''' kullback-leibler divergence for gaussian parameters beta = (mu, log(var)) '''
+    mu, logvar = beta
+    return 0.5*K.sum(K.exp(logvar)+K.square(mu)-logvar-1, axis=-1)
 
 
 def kernel_computation(x, y, batch_size=None):
+    ''' kernel trick computation for maximum mean discrepancy ccalculation '''
     if batch_size is None:
         batch_size = BS
     tiled_x = K.tile(K.reshape(x, (batch_size, 1, LD)), (1, batch_size, 1))
@@ -235,6 +251,7 @@ def kernel_computation(x, y, batch_size=None):
 
 
 def mmd(x, y, batch_size=None):
+    ''' maximum mean discrepancy for samples x and predictions y '''
     if batch_size is None:
         batch_size = BS
     x_kernel = kernel_computation(x, x, batch_size)
@@ -243,14 +260,15 @@ def mmd(x, y, batch_size=None):
     return x_kernel+y_kernel-2*xy_kernel
 
 
-def sw(x, batch_size=None):
+def sw(z, batch_size=None):
+    ''' sliced wasserstein calculation for gaussian samples z'''
     if batch_size is None:
         batch_size = BS
     nrp = batch_size**2
     theta = K.random_normal(shape=(nrp, LD))
     theta = theta/K.sqrt(K.sum(K.square(theta), axis=1, keepdims=True))
     y = K.random_uniform(shape=(batch_size, LD), minval=-0.5, maxval=0.5)
-    px = K.dot(x, K.transpose(theta))
+    px = K.dot(z, K.transpose(theta))
     py = K.dot(y, K.transpose(theta))
     w2 = (tf.nn.top_k(tf.transpose(px), k=batch_size).values-
           tf.nn.top_k(tf.transpose(py), k=batch_size).values)**2
@@ -258,19 +276,23 @@ def sw(x, batch_size=None):
 
 
 def log_importance_weight(batch_size=None, dataset_size=None):
+    ''' logarithmic importance weights for minibatch stratified sampling '''
     if batch_size is None:
         batch_size = BS
     if dataset_size is None:
         dataset_size = SNH*SNT*SNS
     n, m = dataset_size, batch_size-1
     strw = (n-m)/(n*m)
-    w = K.concatenate((K.concatenate((1/n*K.ones((batch_size-2, 1)), strw*K.ones((1, 1)), 1/n*K.ones((1, 1))), axis=0),
+    w = K.concatenate((K.concatenate((1/n*K.ones((batch_size-2, 1)),
+                                      strw*K.ones((1, 1)),
+                                      1/n*K.ones((1, 1))), axis=0),
                        strw*K.ones((batch_size, 1)),
                        1/m*K.ones((batch_size, batch_size-2))), axis=1)
     return K.log(w)
 
 
 def log_sum_exp(x):
+    ''' numerically stable logarithmic sum of exponentials '''
     m = K.max(x, axis=1, keepdims=True)
     u = x-m
     m = K.squeeze(m, 1)
@@ -278,17 +300,18 @@ def log_sum_exp(x):
 
 
 def tc(z, beta, batch_size=None):
+    ''' modified elbo objective using tc decomposition given gaussian samples z and parameters beta = (mu, log(var)) '''
     if batch_size is None:
         batch_size = BS
-    z_mean, z_log_var = beta
+    mu, logvar = beta
     # log p(z)
     logpz = K.sum(K.reshape(gauss_log_prob(z), (batch_size, -1)), 1)
     # log q(z|x)
-    logqz_x = K.sum(K.reshape(gauss_log_prob(z, (z_mean, z_log_var)), (batch_size, -1)), 1)
+    logqz_x = K.sum(K.reshape(gauss_log_prob(z, (mu, logvar)), (batch_size, -1)), 1)
     # log q(z) ~ log (1/MN) sum_m q(z|x_m) = -log(MN)+log(sum_m(exp(q(z|x_m))))
     _logqz = gauss_log_prob(K.reshape(z, (batch_size, 1, LD)),
-                            (K.reshape(z_mean, (1, batch_size, LD)),
-                             K.reshape(z_log_var, (1, batch_size, LD))))
+                            (K.reshape(mu, (1, batch_size, LD)),
+                             K.reshape(logvar, (1, batch_size, LD))))
     if MSS:
         log_iw = log_importance_weight()
         logqz_prodmarginals = K.sum(log_sum_exp(K.reshape(log_iw, (batch_size, batch_size, 1))+_logqz), 1)
@@ -296,7 +319,7 @@ def tc(z, beta, batch_size=None):
     else:
         logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*SNH*SNT*SNS, 'float32')), 1)
         logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*SNH*SNT*SNS, 'float32'))
-    # alpha controls mutual information
+    # alpha controls incdex-code mutual information
     # beta controls total correlation
     # lambda controls dimension-wise kld
     melbo = -ALPHA*(logqz_x-logqz)-BETA*(logqz-logqz_prodmarginals)-LMBDA*(logqz_prodmarginals-logpz)
@@ -313,26 +336,23 @@ def build_autoencoder():
     # output layer activation
     # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
     # caused by scaling
-    if not PRELU:
+    if ACT == 'lrelu':
         alpha_enc = 0.2
         alpha_dec = 0.0
-        if PRIOR == 'gaussian':
-            alpha_zm = 1.0
-            alpha_zlg = 1.0
-        elif PRIOR == 'none':
-            alpha_z = 1.0
+    if PRIOR == 'gaussian':
+        alpha_mu = 1.0
+        alpha_logsigma = 1.0
+    alpha_z = 1.0
     if SCLR in ['minmax', 'tanh', 'global']:
-        outact = 'sigmoid'
+        decact = 'sigmoid'
     else:
-        outact = 'tanh'
+        decact = 'tanh'
     # kernel initializer - customizable
     # limited tests showed he_normal performs well
     init = KIS[KI]
-    # base number of filters
-    nf = 64
     # number of convolutions necessary to get down to size length 4
     # should use base 2 exponential side lengths
-    nc = np.int32(np.log2(N/4.))
+    nc = np.int32(np.log2(N/CD))
     # --------------
     # encoder layers
     # --------------
@@ -343,65 +363,37 @@ def build_autoencoder():
     for i in range(nc):
         if i == 0:
             # 0th convoluton takes input layer
-            c = Conv2D(filters=2**i*nf, kernel_size=(3, 3), kernel_initializer=init,
-                       padding='same', strides=2)(input)
+            c = Conv2D(filters=2**i*NF, kernel_size=(3, 3), kernel_initializer=init,
+                       padding='same', strides=2, name='conv_%d' % i)(input)
         else:
             # (i!=0)th convolution takes prior convolution
-            c = Conv2D(filters=2**i*nf, kernel_size=(3, 3), kernel_initializer=init,
-                       padding='same', strides=2)(c)
+            c = Conv2D(filters=2**i*NF, kernel_size=(3, 3), kernel_initializer=init,
+                       padding='same', strides=2, name='conv_%d' % i)(c)
+        # activations
+        if ACT == 'prelu':
+            c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % i)(c)
+        elif ACT == 'lrelu':
+            c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % i)(c)
+        elif ACT == 'selu':
+            c = Activation('selu', name='selu_conv_%d' % i)(c)
         # batch normalization to scale activations
         if BN:
-            c = BatchNormalization(epsilon=1e-4)(c)
-        # activations
-        if PRELU:
-            # like leaky relu, but with trainable layer to tune alphas
-            c = PReLU(alpha_initializer=init)(c)
-        else:
-            c = LeakyReLU(alpha=alpha_enc)(c)
+            c = BatchNormalization(name='batch_norm_conv_%d' % i)(c)
     # flatten convolutional output
     shape = K.int_shape(c)
-    d0 = Flatten()(c)
-    # dense layer connected to flattened convolution output
-    # d0 = Dense(nc*32, kernel_initializer=init)(d0)
-    # if BN:
-    #     d0 = BatchNormalization(epsilon=1e-4)(d0)
-    # if PRELU:
-    #     # like leaky relu, but with trainable layer to tune alphas
-    #     d0 = PReLU(alpha_initializer=init)(d0)
-    # else:
-    #     d0 = LeakyReLU(alpha=alpha_enc)(d0)
+    d0 = Flatten(name='flatten')(c)
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
-        z_mean = Dense(LD, name='z_mean', kernel_initializer=init)(d0)
-        # activations
-        # z_mean = Activation('tanh')(z_mean)
-        if PRELU:
-            # like leaky relu, but with trainable layer to tune alphas
-            z_mean = PReLU(alpha_initializer=init)(z_mean)
-        else:
-            z_mean = LeakyReLU(alpha=alpha_zm)(z_mean)
+        mu = Dense(LD, name='mu', kernel_initializer=init)(d0)
         # more numerically stable to use log(var_z)
-        z_log_var = Dense(LD, name='z_log_std', kernel_initializer=init)(d0)
-        # activations
-        # z_log_var = Activation('tanh')(z_log_var)
-        if PRELU:
-            # like leaky relu, but with trainable layer to tune alphas
-            z_log_var = PReLU(alpha_initializer=init)(z_log_var)
-        else:
-            z_log_var = LeakyReLU(alpha=alpha_zlg)(z_log_var)
-        # samples from the gaussians
-        z = Lambda(gauss_sampling, output_shape=(LD,), name='z')([z_mean, z_log_var])
+        logvar = Dense(LD, name='log_var', kernel_initializer=init)(d0)
+        # sample from gaussian
+        z = Lambda(gauss_sampling, output_shape=(LD,), name='latent_encoding')([mu, logvar])
         # construct encoder
-        encoder = Model(input, [z_mean, z_log_var, z], name='encoder')
+        encoder = Model(input, [mu, logvar, z], name='encoder')
     elif PRIOR == 'none':
         # encoding
-        z = Dense(LD, name='z_encoding', kernel_initializer=init)(d0)
-        # z = Activation('tanh')(z)
-        if PRELU:
-            # like leaky relu, but with trainable layer to tune alphas
-            z = PReLU(alpha_initializer=init)(z)
-        else:
-            z = LeakyReLU(alpha=alpha_z)(z)
+        z = Dense(LD, name='latent_encoding', kernel_initializer=init)(d0)
         # construct encoder
         encoder = Model(input, z, name='encoder')
     if VERBOSE:
@@ -413,44 +405,49 @@ def build_autoencoder():
     # decoder layers
     # --------------
     # input layer (latent variables z)
-    latent_input = Input(shape=(LD,), name='z_sampling')
+    latent_input = Input(shape=(LD,), name='latent_encoding')
     # dense network of same size as convolution output from encoder
-    d1 = Dense(np.prod(shape[1:]), kernel_initializer=init)(latent_input)
+    d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
     # reshape to convolution shape
-    d1 = Reshape(shape[1:])(d1)
+    d1 = Reshape(shape[1:], name='reshape_latexp')(d1)
+    # activations
+    if ACT == 'prelu':
+        # like leaky relu, but with trainable layer to tune alphas
+        d1 = PReLU(alpha_initializer=init, name='prelu_latexp')(d1)
+    elif ACT == 'lrelu':
+        d1 = LeakyReLU(alpha=alpha_dec, name='lrelu_latexp')(d1)
+    elif ACT == 'selu':
+        d1 = Activation('selu', name='selu_latexp')(d1)
     # batch renormalization to scale activations
     if BN:
-        d1 = BatchNormalization(epsilon=1e-4)(d1)
-    # activations
-    if PRELU:
-        # like leaky relu, but with trainable layer to tune alphas
-        d1 = PReLU(alpha_initializer=init)(d1)
-    else:
-        d1 = LeakyReLU(alpha=alpha_dec)(d1)
+        d1 = BatchNormalization(name='batch_norm_latexp')(d1)
     # loop through convolution transposes
     for i in range(nc-2, -1, -1):
+        j = (nc-2)-i
         if i == nc-2:
             # (nc-1)th convoltution transpose takes reshaped dense layer
-            ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
-                                 padding='same', strides=2)(d1)
+            ct = Conv2DTranspose(filters=2**i*NF, kernel_size=3, kernel_initializer=init,
+                                 padding='same', strides=2, name='convt_%d' % j)(d1)
         else:
             # (i!=(nc-1))th convolution transpose takes prior convolution transpose
-            ct = Conv2DTranspose(filters=2**i*nf, kernel_size=3, kernel_initializer=init,
-                                 padding='same', strides=2)(ct)
+            ct = Conv2DTranspose(filters=2**i*NF, kernel_size=3, kernel_initializer=init,
+                                 padding='same', strides=2, name='convt_%d' % j)(ct)
+        # activations
+        if ACT == 'prelu':
+            # like leaky relu, but with trainable layer to tune alphas
+            ct = PReLU(alpha_initializer=init, name='prelu_convt_%d' % j)(ct)
+        elif ACT == 'lrelu':
+            ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % j)(ct)
+        elif ACT == 'selu':
+            ct = Activation('selu', name='selu_convt_%d' % j)(ct)
         # batch normalization to scale activations
         if BN:
-            ct = BatchNormalization(epsilon=1e-4)(ct)
-        # activations
-        if PRELU:
-            # like leaky relu, but with trainable layer to tune alphas
-            ct = PReLU(alpha_initializer=init)(ct)
-        else:
-            ct = LeakyReLU(alpha=alpha_dec)(ct)
+            ct = BatchNormalization(name='batch_norm_convt_%d' % j)(ct)
     # output convolution transpose layer
     output = Conv2DTranspose(filters=NCH, kernel_size=3, kernel_initializer=init,
-                             padding='same', strides=2, name='decoder_output')(ct)
+                             padding='same', strides=2, name='reconst')(ct)
     # output layer activation
-    output = Activation(outact)(output)
+    output = Activation(decact, name='activated_reconst')(output)
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
@@ -466,26 +463,26 @@ def build_autoencoder():
         output = decoder(encoder(input)[2])
     elif PRIOR == 'none':
         output = decoder(encoder(input))
-    ae = Model(input, output, name='ae_mlp')
+    ae = Model(input, output, name='autoencoder')
     # ae loss
     # reconstruction loss
-    reconstruction = K.mean(RCLS[LSS](input, output))
+    rc = RCLS[LSS](input, output)
     if PRIOR == 'gaussian':
         # distribution divergence to regularize latent space
         if REG == 'kld':
-            dd = BETA*K.mean(REGS[REG]((z_mean, z_log_var)))
+            rg = BETA*REGS[REG]((mu, logvar))
         elif REG == 'mmd':
-            dd = BETA*K.mean(REGS['kld']((z_mean, z_log_var)))+\
-                 LMBDA*K.mean(REGS['mmd'](K.random_normal(shape=(BS, LD)), z))
+            rg = BETA*REGS['kld']((mu, logvar))+\
+                 LMBDA*REGS['mmd'](K.random_normal(shape=(BS, LD)), z)
         elif REG == 'sw':
-            dd = BETA*K.mean(REGS['kld']((z_mean, z_log_var)))+\
-                 LMBDA*K.mean(REGS['sw'](z))
+            rg = BETA*REGS['kld']((mu, logvar))+\
+                 LMBDA*REGS['sw'](z)
         elif REG == 'tc':
-            dd = K.mean(REGS['tc'](z, (z_mean, z_log_var)))
+            rg = REGS['tc'](z, (mu, logvar))
     elif PRIOR == 'none' or REG == 'none':
-        dd = 0.0
+        rg = 0.0
     # combine losses
-    ae_loss = K.mean(reconstruction+dd)
+    ae_loss = K.mean(rc+rg)
     ae.add_loss(ae_loss)
     # compile ae
     ae.compile(optimizer=OPTS[OPT])
@@ -544,7 +541,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, SCLR,
-     PRIOR, KI, PRELU, BN, LD,
+     PRIOR, KI, CD, NF, ACT, BN, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -590,6 +587,7 @@ if __name__ == '__main__':
     from keras.layers.advanced_activations import LeakyReLU, PReLU
     from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
     from keras import backend as K
+    from keras.utils import plot_model
     if PLOT:
         import matplotlib as mpl
         mpl.use('Agg')
@@ -616,9 +614,12 @@ if __name__ == '__main__':
         CM = plt.get_cmap('plasma')
 
     # run parameter tuple
-    PRM = (NAME, N, SNI, SNS, SCLR, PRIOR, PRELU, BN, LD, OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS, EP, BS, SEED)
+    PRM = (NAME, N, SNI, SNS, SCLR,
+           PRIOR, CD, NF, ACT, BN, LD, OPT, LR,
+           LSS, REG, ALPHA, BETA, LMBDA, MSS,
+           EP, BS, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%s.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
@@ -763,14 +764,6 @@ if __name__ == '__main__':
         # output log
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
-        # LR_DECAY = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=8, verbose=VERBOSE)
-        # split data into training and validation
-        # TRN, VAL = train_test_split(SCDMP, test_size=0.125, shuffle=True)
-        # # fit model
-        # AE.fit(x=TRN, y=None, validation_data=(VAL, None), epochs=EP, batch_size=BS,
-        #        shuffle=True, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
-        # # remove split data
-        # del TRN, VAL
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
         AE.fit(x=SCDMP, y=None, epochs=EP, batch_size=BS, shuffle=True,
                verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
@@ -971,6 +964,10 @@ if __name__ == '__main__':
 
     def ae_plots():
 
+        plot_model(AE, to_file=OUTPREF+'.model.ae.png')
+        plot_model(ENC, to_file=OUTPREF+'.model.enc.png')
+        plot_model(DEC, to_file=OUTPREF+'.model.dec.png')
+
         # plot signed reconstruction error distribution
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1109,20 +1106,6 @@ if __name__ == '__main__':
         shp3 = (SNH, SNT, SNS, ED, LD)
         ct = CT[np.newaxis, :, np.newaxis, np.newaxis]
 
-        def mean_and_std(x):
-            return x.mean(2), x.std(2)
-
-        def pca_mean_and_std(x):
-            p = PCA(n_components=LD)
-            y = p.fit_transform(x.reshape(SNH*SNT*SNS, LD)).reshape(SNH, SNT, SNS, LD)
-            return mean_and_std(y)
-
-        def rpmas(x):
-            a, b = mean_and_std(x)
-            c, d = pca_mean_and_std(x)
-            return a, b, c, d
-
-        ZSMDIAG, ZSVDIAG, PZSMDIAG, PZSVDIAG = rpmas(np.random.normal(loc=ZENC.reshape(*shp3)[:, :, :, 0, :], scale=ZENC.reshape(*shp3)[:, :, :, 1, :]))
         # diagrams for physical measurements
         MEMDIAG = np.stack((MM, EM), axis=-1).reshape(SNH, SNT, 2)
         MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
@@ -1138,78 +1121,6 @@ if __name__ == '__main__':
                 if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
                     PZMDIAG[:, :, 1, i] = -PZMDIAG[:, :, 1, i]
         PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
-        # LPZMDIAG = np.zeros(PZMDIAG.shape)
-        # LPZVDIAG = np.zeros(PZVDIAG.shape)
-        # for i in range(2):
-        #     for j in range(ED):
-        #         for k in range(LD):
-        #             dat = PZENC.reshape(SNH, SNT, SNS, ED, LD)[:, :, :, j, k]
-        #             bdat = np.divide(dat, CT[np.newaxis, :, np.newaxis])
-        #             lmdat = logistic((4/dat.var(), dat.mean()), dat)
-        #             lvdat = logistic((4/bdat.var(), bdat.mean()), bdat)
-        #             if i == 0:
-        #                 LPZMDIAG[:, :, j, k] = np.mean(lmdat, 2)
-        #             if i == 1:
-        #                 LPZVDIAG[:, :, j, k] = np.var(lvdat, 2)
-        # for i in range(LD):
-        #     if LPZMDIAG[0, 0, 0, i] > LPZMDIAG[-1, 0, 0, i]:
-        #         LPZMDIAG[:, :, 0, i] = -LPZMDIAG[:, :, 0, i]
-        #     if PRIOR == 'gaussian':
-        #         if LPZMDIAG[0, 0, 1, i] > LPZMDIAG[0, -1, 1, i]:
-        #             LPZMDIAG[:, :, 1, i] = -LPZMDIAG[:, :, 1, i]
-        # plot z sample diagrams
-        for i in range(2):
-            for k in range(LD):
-                fig, ax = plt.subplots()
-                div = make_axes_locatable(ax)
-                cax = div.append_axes('top', size='5%', pad=0.8)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    dat = ZSMDIAG[:, :, k]
-                if i == 1:
-                    dat = ZSVDIAG[:, :, k]
-                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(CT.size), minor=True)
-                ax.set_yticks(np.arange(CH.size), minor=True)
-                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-                ax.set_yticklabels(np.round(CH, 2)[::4])
-                ax.set_xlabel('T')
-                ax.set_ylabel('H')
-                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                fig.savefig(OUTPREF+'.ae.diag.ld.smpl.%d.%d.png' % (i, k))
-                plt.close()
-        for i in range(2):
-            for k in range(LD):
-                fig, ax = plt.subplots()
-                div = make_axes_locatable(ax)
-                cax = div.append_axes('top', size='5%', pad=0.8)
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.xaxis.set_ticks_position('bottom')
-                ax.yaxis.set_ticks_position('left')
-                if i == 0:
-                    dat = PZSMDIAG[:, :, k]
-                if i == 1:
-                    dat = PZSVDIAG[:, :, k]
-                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                ax.set_xticks(np.arange(CT.size), minor=True)
-                ax.set_yticks(np.arange(CH.size), minor=True)
-                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-                ax.set_yticklabels(np.round(CH, 2)[::4])
-                ax.set_xlabel('T')
-                ax.set_ylabel('H')
-                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                fig.savefig(OUTPREF+'.ae.diag.ld.smpl.pca.%d.%d.png' % (i, k))
-                plt.close()
         # plot latent variable diagrams
         for i in range(2):
             for j in range(ED):
@@ -1238,7 +1149,6 @@ if __name__ == '__main__':
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                     fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.%d.png' % (i, j, k))
                     plt.close()
-
         # plot pca latent variable diagrams
         for i in range(2):
             for j in range(ED):
@@ -1267,33 +1177,6 @@ if __name__ == '__main__':
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                     fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
                     plt.close()
-        # for i in range(2):
-        #     for j in range(ED):
-        #         for k in range(LD):
-        #             fig, ax = plt.subplots()
-        #             div = make_axes_locatable(ax)
-        #             cax = div.append_axes('top', size='5%', pad=0.8)
-        #             ax.spines['right'].set_visible(False)
-        #             ax.spines['top'].set_visible(False)
-        #             ax.xaxis.set_ticks_position('bottom')
-        #             ax.yaxis.set_ticks_position('left')
-        #             if i == 0:
-        #                 dat = LPZMDIAG[:, :, j, k]
-        #             if i == 1:
-        #                 dat = LPZVDIAG[:, :, j, k]
-        #             im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        #             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        #             ax.set_xticks(np.arange(CT.size), minor=True)
-        #             ax.set_yticks(np.arange(CH.size), minor=True)
-        #             ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-        #             ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-        #             ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-        #             ax.set_yticklabels(np.round(CH, 2)[::4])
-        #             ax.set_xlabel('T')
-        #             ax.set_ylabel('H')
-        #             fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-        #             fig.savefig(OUTPREF+'.ae.diag.ld.pca.logistic.%d.%d.%d.png' % (i, j, k))
-        #             plt.close()
         # plot physical measurement diagrams
         for i in range(2):
             for j in range(2):
