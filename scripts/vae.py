@@ -352,7 +352,7 @@ def build_autoencoder():
     # limited tests showed he_normal performs well
     init = KIS[KI]
     # number of convolutions necessary to get down to size length 4
-    # should use base 2 exponential side lengths
+    # should use base 2 exponential (integer) side lengths
     nc = np.int32(np.log2(N/CD))
     # --------------
     # encoder layers
@@ -713,18 +713,10 @@ if __name__ == '__main__':
     # magnetic susceptibilities
     SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
 
-    # kernel
-    SMN, SMX = 0.05*SCDMP.min(), 0.05*SCDMP.max()
-    SM, SS = np.mean(SCDMP), 0.05*np.std(SCDMP)
-    KIS = {'zeros': Zeros(),
-           'ones': Ones(),
-           'const': Constant(SMN+0.5*(SMX-SMN)),
-           'uniform': RandomUniform(SMN, SMX, SEED),
-           'glorot_uniform': glorot_uniform(SEED),
+    # kernel initializers
+    KIS = {'glorot_uniform': glorot_uniform(SEED),
            'lecun_uniform': lecun_uniform(SEED),
            'he_uniform': he_uniform(SEED),
-           'normal': RandomNormal(SM, SS, SEED),
-           'truncated': TruncatedNormal(SM, SS, SEED),
            'varscale': VarianceScaling(seed=SEED),
            'glorot_normal': glorot_normal(SEED),
            'lecun_normal': lecun_normal(SEED),
