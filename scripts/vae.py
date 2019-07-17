@@ -737,8 +737,8 @@ if __name__ == '__main__':
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
 
     # reconstruction losses
-    RCLS = {'mse': lambda a, b: mse(a, b),
-            'mae': lambda a, b: mae(a, b),
+    RCLS = {'mse': lambda a, b: se(a, b),
+            'mae': lambda a, b: ae(a, b),
             'bc': lambda a, b: bc(a, b)}
 
     # regularizers
