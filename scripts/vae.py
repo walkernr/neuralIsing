@@ -190,6 +190,22 @@ def odr_fit(func, dom, mrng, srng, pg):
     return popt, perr, fdom, fval
 
 
+def periodic_pad(x, p=2):
+    tl = x[:, -p:, -p:, :]
+    tc = x[:, -p:, :, :]
+    tr = x[:, -p:, :p, :]
+    ml = x[:, :, -p:, :]
+    mc = x
+    mr = x[:, :, :p, :]
+    bl = x[:, :p, -p:, :]
+    bc = x[:, :p, :, :]
+    br = x[:, :p, :p, :]
+    top = K.concatenate((tl, tc, tr), axis=2)
+    middle = K.concatenate((ml, mc, mr), axis=2)
+    bottom = K.concatenate((bl, bc, br), axis=2)
+    return K.concatenate((top, middle, bottom), axis=1)
+
+
 def gauss_sampling(beta, batch_size=None):
     ''' samples a point in a multivariate gaussian distribution '''
     if batch_size is None:
@@ -359,17 +375,12 @@ def build_autoencoder():
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
+    c = Lambda(periodic_pad, output_shape=(N+1, N+1, NCH), name='periodic_pad_0')(input)
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
-        if i == 0:
-            # 0th convoluton takes input layer
-            c = Conv2D(filters=2**i*NF, kernel_size=(3, 3), kernel_initializer=init,
-                       padding='same', strides=2, name='conv_%d' % i)(input)
-        else:
-            # (i!=0)th convolution takes prior convolution
-            c = Conv2D(filters=2**i*NF, kernel_size=(3, 3), kernel_initializer=init,
-                       padding='same', strides=2, name='conv_%d' % i)(c)
+        c = Conv2D(filters=2**i*NF, kernel_size=(3, 3), kernel_initializer=init,
+                    padding='valid', strides=2, name='conv_%d' % i)(c)
         # activations
         if ACT == 'prelu':
             c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % i)(c)
@@ -380,6 +391,8 @@ def build_autoencoder():
         # batch normalization to scale activations
         if BN:
             c = BatchNormalization(name='batch_norm_conv_%d' % i)(c)
+        if i < (nc-1):
+            c = Lambda(periodic_pad, output_shape=(N+1, N+1, NCH), name='periodic_pad_%d' % (i+1))(c)
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten(name='flatten')(c)
@@ -474,10 +487,10 @@ def build_autoencoder():
             rg = BETA*REGS[REG]((mu, logvar))
         elif REG == 'mmd':
             rg = BETA*REGS['kld']((mu, logvar))+\
-                 LMBDA*REGS['mmd'](K.random_normal(shape=(BS, LD)), z)
+                 LMBDA*REGS[REG](K.random_normal(shape=(BS, LD)), z)
         elif REG == 'sw':
             rg = BETA*REGS['kld']((mu, logvar))+\
-                 LMBDA*REGS['sw'](z)
+                 LMBDA*REGS[REG](z)
         elif REG == 'tc':
             rg = REGS['tc'](z, (mu, logvar))
     elif PRIOR == 'none' or REG == 'none':
@@ -957,9 +970,9 @@ if __name__ == '__main__':
 
     def ae_plots():
 
-        plot_model(AE, to_file=OUTPREF+'.model.ae.png')
-        plot_model(ENC, to_file=OUTPREF+'.model.enc.png')
-        plot_model(DEC, to_file=OUTPREF+'.model.dec.png')
+        # plot_model(AE, to_file=OUTPREF+'.model.ae.png')
+        # plot_model(ENC, to_file=OUTPREF+'.model.enc.png')
+        # plot_model(DEC, to_file=OUTPREF+'.model.dec.png')
 
         # plot signed reconstruction error distribution
         fig = plt.figure()
