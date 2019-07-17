@@ -313,7 +313,7 @@ def tc(z, beta, batch_size=None):
                             (K.reshape(mu, (1, batch_size, LD)),
                              K.reshape(logvar, (1, batch_size, LD))))
     if MSS:
-        log_iw = log_importance_weight()
+        log_iw = log_importance_weight(batch_size=batch_size)
         logqz_prodmarginals = K.sum(log_sum_exp(K.reshape(log_iw, (batch_size, batch_size, 1))+_logqz), 1)
         logqz = log_sum_exp(log_iw+K.sum(_logqz, axis=2))
     else:
@@ -327,6 +327,7 @@ def tc(z, beta, batch_size=None):
 
 
 def build_autoencoder():
+    ''' builds autoencoder network '''
     if VERBOSE:
         print('building variational autoencoder network')
         print(100*'-')
