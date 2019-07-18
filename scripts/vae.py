@@ -190,7 +190,7 @@ def odr_fit(func, dom, mrng, srng, pg):
     return popt, perr, fdom, fval
 
 
-def periodic_pad(x, p=2):
+def periodic_pad(x, p=1):
     tl = x[:, -p:, -p:, :]
     tc = x[:, -p:, :, :]
     tr = x[:, -p:, :p, :]
@@ -375,12 +375,17 @@ def build_autoencoder():
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    c = Lambda(periodic_pad, output_shape=(N+1, N+1, NCH), name='periodic_pad_0')(input)
+    c = Lambda(periodic_pad, name='periodic_pad_0')(input)
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
-        c = Conv2D(filters=2**i*NF, kernel_size=(3, 3), kernel_initializer=init,
-                    padding='valid', strides=2, name='conv_%d' % i)(c)
+        if i == 0:
+            p = 'valid'
+        else:
+            p = 'same'
+        nf = 2**i*NF
+        c = Conv2D(filters=nf, kernel_size=3, kernel_initializer=init,
+                   padding=p, strides=2, name='conv_%d' % i)(c)
         # activations
         if ACT == 'prelu':
             c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % i)(c)
@@ -391,8 +396,8 @@ def build_autoencoder():
         # batch normalization to scale activations
         if BN:
             c = BatchNormalization(name='batch_norm_conv_%d' % i)(c)
-        if i < (nc-1):
-            c = Lambda(periodic_pad, output_shape=(N+1, N+1, NCH), name='periodic_pad_%d' % (i+1))(c)
+        # if i < (nc-1):
+        #     c = Lambda(periodic_pad, name='periodic_pad_%d' % (i+1))(c)
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten(name='flatten')(c)
@@ -423,29 +428,24 @@ def build_autoencoder():
     # dense network of same size as convolution output from encoder
     d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
     # reshape to convolution shape
-    d1 = Reshape(shape[1:], name='reshape_latexp')(d1)
+    ct = Reshape(shape[1:], name='reshape_latexp')(d1)
     # activations
     if ACT == 'prelu':
         # like leaky relu, but with trainable layer to tune alphas
-        d1 = PReLU(alpha_initializer=init, name='prelu_latexp')(d1)
+        ct = PReLU(alpha_initializer=init, name='prelu_latexp')(ct)
     elif ACT == 'lrelu':
-        d1 = LeakyReLU(alpha=alpha_dec, name='lrelu_latexp')(d1)
+        ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latexp')(ct)
     elif ACT == 'selu':
-        d1 = Activation('selu', name='selu_latexp')(d1)
+        ct = Activation('selu', name='selu_latexp')(ct)
     # batch renormalization to scale activations
     if BN:
-        d1 = BatchNormalization(name='batch_norm_latexp')(d1)
+        ct = BatchNormalization(name='batch_norm_latexp')(ct)
     # loop through convolution transposes
     for i in range(nc-2, -1, -1):
         j = (nc-2)-i
-        if i == nc-2:
-            # (nc-1)th convoltution transpose takes reshaped dense layer
-            ct = Conv2DTranspose(filters=2**i*NF, kernel_size=3, kernel_initializer=init,
-                                 padding='same', strides=2, name='convt_%d' % j)(d1)
-        else:
-            # (i!=(nc-1))th convolution transpose takes prior convolution transpose
-            ct = Conv2DTranspose(filters=2**i*NF, kernel_size=3, kernel_initializer=init,
-                                 padding='same', strides=2, name='convt_%d' % j)(ct)
+        nf = 2**i*NF
+        ct = Conv2DTranspose(filters=nf, kernel_size=3, kernel_initializer=init,
+                             padding='same', strides=2, name='convt_%d' % j)(ct)
         # activations
         if ACT == 'prelu':
             # like leaky relu, but with trainable layer to tune alphas
@@ -458,8 +458,8 @@ def build_autoencoder():
         if BN:
             ct = BatchNormalization(name='batch_norm_convt_%d' % j)(ct)
     # output convolution transpose layer
-    output = Conv2DTranspose(filters=NCH, kernel_size=3, kernel_initializer=init,
-                             padding='same', strides=2, name='reconst')(ct)
+    output = Conv2DTranspose(filters=NCH, kernel_size=2, kernel_initializer=init,
+                             padding='valid', strides=2, name='reconst')(ct)
     # output layer activation
     output = Activation(decact, name='activated_reconst')(output)
     # construct decoder
@@ -567,8 +567,14 @@ if __name__ == '__main__':
         ED = 2
     elif PRIOR == 'none':
         ED = 1
+        ALPHA = 0
+        BETA = 0
+        LMBDA = 0
+        MSS = 0
+        REG = 'none'
     if REG != 'tc':
         ALPHA = 0
+        MSS = 0
     if REG == 'kld':
         LMBDA = 0
 
