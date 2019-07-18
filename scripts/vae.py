@@ -383,6 +383,7 @@ def build_autoencoder():
             p = 'valid'
         else:
             p = 'same'
+        # p = 'valid'
         nf = 2**i*NF
         c = Conv2D(filters=nf, kernel_size=3, kernel_initializer=init,
                    padding=p, strides=2, name='conv_%d' % i)(c)
