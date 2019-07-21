@@ -190,7 +190,8 @@ def odr_fit(func, dom, mrng, srng, pg):
     return popt, perr, fdom, fval
 
 
-def periodic_pad(x, p=1):
+def periodic_pad_input(x):
+    p = 1
     tl = x[:, -p:, -p:, :]
     tc = x[:, -p:, :, :]
     tr = x[:, -p:, :p, :]
@@ -206,12 +207,34 @@ def periodic_pad(x, p=1):
     return K.concatenate((top, middle, bottom), axis=1)
 
 
+def periodic_pad_conv(x):
+    p = 1
+    tl = x[:, -p:, -p:, :]
+    tc = x[:, -p:, :, :]
+    ml = x[:, :, -p:, :]
+    mc = x
+    top = K.concatenate((tl, tc), axis=2)
+    middle = K.concatenate((ml, mc), axis=2)
+    return K.concatenate((top, middle), axis=1)
+
+
+def trim_convt(x):
+    p = K.int_shape(x)[1]//2
+    tl = x[:, :p, :p, :]
+    tr = x[:, :p, -p:, :]
+    bl = x[:, -p:, :p, :]
+    br = x[:, -p:, -p:, :]
+    top = K.concatenate((tl, tr), axis=2)
+    bottom = K.concatenate((bl, br), axis=2)
+    return K.concatenate((top, bottom), axis=1)
+
+
 def gauss_sampling(beta, batch_size=None):
     ''' samples a point in a multivariate gaussian distribution '''
     if batch_size is None:
         batch_size = BS
     mu, logvar = beta
-    epsilon = K.random_normal(shape=(batch_size, LD))
+    epsilon = K.random_normal(shape=(batch_size, LD), seed=SEED)
     return mu+K.exp(0.5*logvar)*epsilon
 
 
@@ -241,6 +264,12 @@ def ae(x, y, batch_size=None):
     if batch_size is None:
         batch_size = BS
     return K.sum(K.reshape(K.abs(x-y), (batch_size, -1)), 1)
+
+
+def rse(x, y, batch_size=None):
+    if batch_size is None:
+        batch_size = BS
+    return K.sqrt(K.sum(K.reshape(K.square(x-y), (batch_size, -1)), 1))
 
 
 def bc(x, y, batch_size=None):
@@ -283,7 +312,7 @@ def sw(z, batch_size=None):
     nrp = batch_size**2
     theta = K.random_normal(shape=(nrp, LD))
     theta = theta/K.sqrt(K.sum(K.square(theta), axis=1, keepdims=True))
-    y = K.random_uniform(shape=(batch_size, LD), minval=-0.5, maxval=0.5)
+    y = K.random_uniform(shape=(batch_size, LD), minval=-0.5, maxval=0.5, seed=SEED)
     px = K.dot(z, K.transpose(theta))
     py = K.dot(y, K.transpose(theta))
     w2 = (tf.nn.top_k(tf.transpose(px), k=batch_size).values-
@@ -335,7 +364,7 @@ def tc(z, beta, batch_size=None):
     else:
         logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*SNH*SNT*SNS, 'float32')), 1)
         logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*SNH*SNT*SNS, 'float32'))
-    # alpha controls incdex-code mutual information
+    # alpha controls index-code mutual information
     # beta controls total correlation
     # lambda controls dimension-wise kld
     melbo = -ALPHA*(logqz_x-logqz)-BETA*(logqz-logqz_prodmarginals)-LMBDA*(logqz_prodmarginals-logpz)
@@ -369,24 +398,29 @@ def build_autoencoder():
     init = KIS[KI]
     # number of convolutions necessary to get down to size length 4
     # should use base 2 exponential (integer) side lengths
-    nc = np.int32(np.log2(N/CD))
+    nc = np.int32(np.log2(N/CD))+1
     # --------------
     # encoder layers
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    c = Lambda(periodic_pad, name='periodic_pad_0')(input)
+    # c = Lambda(periodic_pad_input, name='periodic_pad_input')(input)
+    c = input
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
+        k = 3
         if i == 0:
-            p = 'valid'
+            s = 1
+            # p = 'valid'
+            p = 'same'
         else:
+            s = 2
             p = 'same'
         # p = 'valid'
-        nf = 2**i*NF
-        c = Conv2D(filters=nf, kernel_size=3, kernel_initializer=init,
-                   padding=p, strides=2, name='conv_%d' % i)(c)
+        nf = 4**i*NF
+        c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
+                   padding=p, strides=s, name='conv_%d' % i)(c)
         # activations
         if ACT == 'prelu':
             c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % i)(c)
@@ -397,16 +431,18 @@ def build_autoencoder():
         # batch normalization to scale activations
         if BN:
             c = BatchNormalization(name='batch_norm_conv_%d' % i)(c)
-        # if i < (nc-1):
-        #     c = Lambda(periodic_pad, name='periodic_pad_%d' % (i+1))(c)
+        # if i < nc-1:
+        #     c = Lambda(periodic_pad_conv, name='periodic_pad_conv_%d' % (i+1))(c)
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten(name='flatten')(c)
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
         mu = Dense(LD, name='mu', kernel_initializer=init)(d0)
+        mu = Activation('linear', name='linear_mu')(mu)
         # more numerically stable to use log(var_z)
         logvar = Dense(LD, name='log_var', kernel_initializer=init)(d0)
+        logvar = Activation('linear', name='linear_log_var')(logvar)
         # sample from gaussian
         z = Lambda(gauss_sampling, output_shape=(LD,), name='latent_encoding')([mu, logvar])
         # construct encoder
@@ -429,24 +465,31 @@ def build_autoencoder():
     # dense network of same size as convolution output from encoder
     d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
     # reshape to convolution shape
-    ct = Reshape(shape[1:], name='reshape_latexp')(d1)
+    ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
     # activations
     if ACT == 'prelu':
         # like leaky relu, but with trainable layer to tune alphas
-        ct = PReLU(alpha_initializer=init, name='prelu_latexp')(ct)
+        ct = PReLU(alpha_initializer=init, name='prelu_latent_expansion')(ct)
     elif ACT == 'lrelu':
-        ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latexp')(ct)
+        ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
     elif ACT == 'selu':
-        ct = Activation('selu', name='selu_latexp')(ct)
+        ct = Activation('selu', name='selu_latent_expansion')(ct)
     # batch renormalization to scale activations
     if BN:
-        ct = BatchNormalization(name='batch_norm_latexp')(ct)
+        ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
+    # ct = Lambda(periodic_pad_conv, name='periodic_pad_latent_expansion')(ct)
     # loop through convolution transposes
     for i in range(nc-2, -1, -1):
+        k = 3
+        # k = 2
+        s = 2
+        p = 'same'
+        # p = 'valid'
         j = (nc-2)-i
-        nf = 2**i*NF
-        ct = Conv2DTranspose(filters=nf, kernel_size=3, kernel_initializer=init,
-                             padding='same', strides=2, name='convt_%d' % j)(ct)
+        nf = 4**i*NF
+        ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
+                             padding=p, strides=s, name='convt_%d' % j)(ct)
+        # ct = Lambda(trim_convt, name='trim_convt_%d' % j)(ct)
         # activations
         if ACT == 'prelu':
             # like leaky relu, but with trainable layer to tune alphas
@@ -459,8 +502,12 @@ def build_autoencoder():
         if BN:
             ct = BatchNormalization(name='batch_norm_convt_%d' % j)(ct)
     # output convolution transpose layer
-    output = Conv2DTranspose(filters=NCH, kernel_size=2, kernel_initializer=init,
-                             padding='valid', strides=2, name='reconst')(ct)
+    k = 3
+    s = 1
+    p = 'same'
+    # p = 'valid'
+    output = Conv2DTranspose(filters=NCH, kernel_size=k, kernel_initializer=init,
+                             padding=p, strides=s, name='reconst')(ct)
     # output layer activation
     output = Activation(decact, name='activated_reconst')(output)
     # construct decoder
@@ -596,6 +643,7 @@ if __name__ == '__main__':
         THREADS = 1
     if GPU:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    # imports
     import tensorflow as tf
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
@@ -634,6 +682,15 @@ if __name__ == '__main__':
         SCALE = lambda a, b: (a-np.min(b))/(np.max(b)-np.min(b))
         CM = plt.get_cmap('plasma')
 
+    # external fields and temperatures
+    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
+    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
+    # external field and temperature counts
+    SNH, SNT = CH.size, CT.size
+    # number of data channels
+    NCH = 1
+    BS = SNH*SNT
+
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR,
            PRIOR, CD, NF, ACT, BN, LD, OPT, LR,
@@ -651,14 +708,6 @@ if __name__ == '__main__':
              'standard':StandardScaler(),
              'robust':RobustScaler(),
              'tanh':TanhScaler(feature_range=(FMN, FMX))}
-
-    # external fields and temperatures
-    CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
-    CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
-    # external field and temperature counts
-    SNH, SNT = CH.size, CT.size
-    # number of data channels
-    NCH = 1
 
     # array shapes
     SHP0 = (SNH, SNT, SNS, N, N, NCH)
@@ -751,6 +800,7 @@ if __name__ == '__main__':
     # reconstruction losses
     RCLS = {'mse': lambda a, b: se(a, b),
             'mae': lambda a, b: ae(a, b),
+            'rmse': lambda a, b: rse(a, b),
             'bc': lambda a, b: bc(a, b)}
 
     # regularizers
@@ -778,7 +828,7 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
-        AE.fit(x=SCDMP, y=None, epochs=EP, batch_size=BS, shuffle=True,
+        AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1), y=None, epochs=EP, batch_size=BS, shuffle=False,
                verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
         # VLOSS = AE.history.history['val_loss']
@@ -820,6 +870,9 @@ if __name__ == '__main__':
         SERR = np.load(OUTPREF+'.zerr.stdv.npy')
         MXERR = np.load(OUTPREF+'.zerr.max.npy')
         MNERR = np.load(OUTPREF+'.zerr.min.npy')
+        MAEERR = np.load(OUTPREF+'.zerr.mae.npy')
+        RMSERR = np.load(OUTPREF+'.zerr.rms.npy')
+        R2SCERR = np.load(OUTPREF+'.zerr.r2sc.npy')
         if PRIOR == 'gaussian':
             KLD = np.load(OUTPREF+'.zerr.kld.npy')
             MKLD = np.load(OUTPREF+'.zerr.kld.mean.npy')
@@ -851,12 +904,15 @@ if __name__ == '__main__':
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
         np.save(OUTPREF+'.zerr.npy', ERR)
-        # means and standard deviation of error
-        MERR = np.sqrt(np.mean(np.square(ERR)))
+        # mean and standard deviation of error
+        MERR = np.mean(ERR)
         SERR = np.std(ERR)
         # minimum and maximum error
         MXERR = np.max(ERR)
         MNERR = np.min(ERR)
+        MAEERR = np.mean(np.abs(ERR))
+        RMSERR = np.sqrt(np.mean(np.square(ERR)))
+        R2SCERR = 1-np.square(RMSERR)/0.25
         if PRIOR  == 'gaussian':
             # mean and standard deviation kullback-liebler divergence
             MKLD = np.mean(KLD)
@@ -869,6 +925,9 @@ if __name__ == '__main__':
         np.save(OUTPREF+'.zerr.stdv.npy', SERR)
         np.save(OUTPREF+'.zerr.max.npy', MXERR)
         np.save(OUTPREF+'.zerr.min.npy', MNERR)
+        np.save(OUTPREF+'.zerr.mae.npy', MAEERR)
+        np.save(OUTPREF+'.zerr.rms.npy', RMSERR)
+        np.save(OUTPREF+'.zerr.r2sc.npy', R2SCERR)
         if PRIOR == 'gaussian':
             np.save(OUTPREF+'.zerr.kld.mean.npy', MKLD)
             np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
@@ -887,6 +946,9 @@ if __name__ == '__main__':
         print('stdv error:      %f' % SERR)
         print('max error:       %f' % MXERR)
         print('min error:       %f' % MNERR)
+        print('mae error:       %f' % MAEERR)
+        print('rms error:       %f' % RMSERR)
+        print('r2 score:        %f' % R2SCERR)
         if PRIOR == 'gaussian':
             print('mean kld:        %f' % MKLD)
             print('stdv kld:        %f' % SKLD)
@@ -904,6 +966,9 @@ if __name__ == '__main__':
         out.write('stdv error:      %f\n' % SERR)
         out.write('max error:       %f\n' % MXERR)
         out.write('min error:       %f\n' % MNERR)
+        out.write('mae error:       %f\n' % MAEERR)
+        out.write('rms error:       %f\n' % RMSERR)
+        out.write('r2 score:        %f\n' % R2SCERR)
         if PRIOR == 'gaussian':
             out.write('mean kld:        %f\n' % MKLD)
             out.write('stdv kld:        %f\n' % SKLD)
