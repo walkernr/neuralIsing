@@ -398,41 +398,36 @@ def build_autoencoder():
     init = KIS[KI]
     # number of convolutions necessary to get down to size length 4
     # should use base 2 exponential (integer) side lengths
-    nc = np.int32(np.log2(N/CD))+1
+    nc = np.int32(np.log2(N/CD))
     # --------------
     # encoder layers
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    # c = Lambda(periodic_pad_input, name='periodic_pad_input')(input)
     c = input
+    u = 0
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
-        k = 3
-        if i == 0:
-            s = 1
-            # p = 'valid'
+        for j in range(2):
+            k = 3
+            s = j+1
             p = 'same'
-        else:
-            s = 2
-            p = 'same'
-        # p = 'valid'
-        nf = 4**i*NF
-        c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
-                   padding=p, strides=s, name='conv_%d' % i)(c)
-        # activations
-        if ACT == 'prelu':
-            c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % i)(c)
-        elif ACT == 'lrelu':
-            c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % i)(c)
-        elif ACT == 'selu':
-            c = Activation('selu', name='selu_conv_%d' % i)(c)
-        # batch normalization to scale activations
-        if BN:
-            c = BatchNormalization(name='batch_norm_conv_%d' % i)(c)
-        # if i < nc-1:
-        #     c = Lambda(periodic_pad_conv, name='periodic_pad_conv_%d' % (i+1))(c)
+            nf = 2**i*NF
+            # convolution
+            c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
+                       padding=p, strides=s, name='conv_%d' % u)(c)
+            # activations
+            if ACT == 'prelu':
+                c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % u)(c)
+            elif ACT == 'lrelu':
+                c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % u)(c)
+            elif ACT == 'selu':
+                c = Activation('selu', name='selu_conv_%d' % u)(c)
+            # batch normalization to scale activations
+            if BN:
+                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
+            u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten(name='flatten')(c)
@@ -468,7 +463,6 @@ def build_autoencoder():
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
     # activations
     if ACT == 'prelu':
-        # like leaky relu, but with trainable layer to tune alphas
         ct = PReLU(alpha_initializer=init, name='prelu_latent_expansion')(ct)
     elif ACT == 'lrelu':
         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
@@ -477,35 +471,36 @@ def build_autoencoder():
     # batch renormalization to scale activations
     if BN:
         ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
-    # ct = Lambda(periodic_pad_conv, name='periodic_pad_latent_expansion')(ct)
+    u = 0
     # loop through convolution transposes
-    for i in range(nc-2, -1, -1):
-        k = 3
-        # k = 2
-        s = 2
-        p = 'same'
-        # p = 'valid'
-        j = (nc-2)-i
-        nf = 4**i*NF
-        ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
-                             padding=p, strides=s, name='convt_%d' % j)(ct)
-        # ct = Lambda(trim_convt, name='trim_convt_%d' % j)(ct)
-        # activations
-        if ACT == 'prelu':
-            # like leaky relu, but with trainable layer to tune alphas
-            ct = PReLU(alpha_initializer=init, name='prelu_convt_%d' % j)(ct)
-        elif ACT == 'lrelu':
-            ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % j)(ct)
-        elif ACT == 'selu':
-            ct = Activation('selu', name='selu_convt_%d' % j)(ct)
-        # batch normalization to scale activations
-        if BN:
-            ct = BatchNormalization(name='batch_norm_convt_%d' % j)(ct)
+    for i in range(nc-1, -1, -1):
+        if i == 0:
+            jr = 0
+        else:
+            jr = -1
+        for j in range(1, jr, -1):
+            k = 3
+            s = j+1
+            p = 'same'
+            nf = np.int32(2**(j-1)*2**i*NF)
+            # transposed convolution
+            ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
+                                padding=p, strides=s, name='convt_%d' % u)(ct)
+            # activations
+            if ACT == 'prelu':
+                ct = PReLU(alpha_initializer=init, name='prelu_convt_%d' % u)(ct)
+            elif ACT == 'lrelu':
+                ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % u)(ct)
+            elif ACT == 'selu':
+                ct = Activation('selu', name='selu_convt_%d' % u)(ct)
+            # batch normalization to scale activations
+            if BN:
+                ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
+            u += 1
     # output convolution transpose layer
     k = 3
     s = 1
     p = 'same'
-    # p = 'valid'
     output = Conv2DTranspose(filters=NCH, kernel_size=k, kernel_initializer=init,
                              padding=p, strides=s, name='reconst')(ct)
     # output layer activation
@@ -542,6 +537,7 @@ def build_autoencoder():
         elif REG == 'tc':
             rg = REGS['tc'](z, (mu, logvar))
     elif PRIOR == 'none' or REG == 'none':
+        # no regularization
         rg = 0.0
     # combine losses
     ae_loss = K.mean(rc+rg)
