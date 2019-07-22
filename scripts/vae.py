@@ -417,6 +417,9 @@ def build_autoencoder():
             # convolution
             c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
+            # batch normalization to scale activations
+            if BN:
+                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
             # activations
             if ACT == 'prelu':
                 c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % u)(c)
@@ -424,9 +427,6 @@ def build_autoencoder():
                 c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % u)(c)
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
-            # batch normalization to scale activations
-            if BN:
-                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -461,6 +461,9 @@ def build_autoencoder():
     d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
+    # batch renormalization to scale activations
+    if BN:
+        ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
     # activations
     if ACT == 'prelu':
         ct = PReLU(alpha_initializer=init, name='prelu_latent_expansion')(ct)
@@ -468,9 +471,6 @@ def build_autoencoder():
         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
     elif ACT == 'selu':
         ct = Activation('selu', name='selu_latent_expansion')(ct)
-    # batch renormalization to scale activations
-    if BN:
-        ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -486,6 +486,9 @@ def build_autoencoder():
             # transposed convolution
             ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
                                 padding=p, strides=s, name='convt_%d' % u)(ct)
+            # batch normalization to scale activations
+            if BN:
+                ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
             # activations
             if ACT == 'prelu':
                 ct = PReLU(alpha_initializer=init, name='prelu_convt_%d' % u)(ct)
@@ -493,9 +496,6 @@ def build_autoencoder():
                 ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % u)(ct)
             elif ACT == 'selu':
                 ct = Activation('selu', name='selu_convt_%d' % u)(ct)
-            # batch normalization to scale activations
-            if BN:
-                ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
             u += 1
     # output convolution transpose layer
     k = 3
