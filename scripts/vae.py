@@ -685,7 +685,6 @@ if __name__ == '__main__':
     SNH, SNT = CH.size, CT.size
     # number of data channels
     NCH = 1
-    BS = SNH*SNT
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR,
@@ -824,8 +823,8 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
-        AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1), y=None, epochs=EP, batch_size=BS, shuffle=False,
-               verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+        AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0)[:, np.shuffle(np.arange(SNH)), np.shuffle(np.arange(SNH))].reshape(*SHP1),
+               y=None, epochs=EP, batch_size=BS, shuffle=False, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
         # VLOSS = AE.history.history['val_loss']
         AE.save_weights(OUTPREF+'.ae.wt.h5')
@@ -1070,7 +1069,7 @@ if __name__ == '__main__':
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ex = np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 33)
+        ex = np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 16)
         er = np.histogram(np.abs(ERR), ex)[0]/(SNH*SNT*SNS*N*N)
         dex = ex[1]-ex[0]
         ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
