@@ -428,11 +428,11 @@ def build_autoencoder():
                 c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % u)(c)
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
+            if DO:
+                c = Dropout(0.25, name='dropout_conv_%d' % u)(c)
             # batch normalization to scale activations
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
-            if DO:
-                c = Dropout(0.25, name='dropout_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -474,11 +474,11 @@ def build_autoencoder():
         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
     elif ACT == 'selu':
         ct = Activation('selu', name='selu_latent_expansion')(ct)
+    if DO:
+        ct = Dropout(0.25, name='dropout_latent_expansion')(ct)
     # batch renormalization to scale activations
     if BN:
         ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
-    if DO:
-        ct = Dropout(0.25, name='dropout_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -501,11 +501,11 @@ def build_autoencoder():
                 ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % u)(ct)
             elif ACT == 'selu':
                 ct = Activation('selu', name='selu_convt_%d' % u)(ct)
+            if DO:
+                ct = Dropout(0.25, name='dropout_convt_%d' % u)(ct)
             # batch normalization to scale activations
             if BN:
                 ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
-            if DO:
-                ct = Dropout(0.25, name='dropout_convt_%d' % u)(ct)
             u += 1
     # output convolution transpose layer
     k = 3
