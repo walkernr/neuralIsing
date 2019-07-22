@@ -397,6 +397,7 @@ def build_autoencoder():
         decact = 'sigmoid'
     else:
         decact = 'tanh'
+    dp = 0.5
     # kernel initializer - customizable
     # limited tests showed he_normal performs well
     init = KIS[KI]
@@ -429,7 +430,7 @@ def build_autoencoder():
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
             if DO:
-                c = Dropout(0.25, name='dropout_conv_%d' % u)(c)
+                c = Dropout(rate=dp, name='dropout_conv_%d' % u)(c)
             # batch normalization to scale activations
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
@@ -475,7 +476,7 @@ def build_autoencoder():
     elif ACT == 'selu':
         ct = Activation('selu', name='selu_latent_expansion')(ct)
     if DO:
-        ct = Dropout(0.25, name='dropout_latent_expansion')(ct)
+        ct = Dropout(rate=dp, name='dropout_latent_expansion')(ct)
     # batch renormalization to scale activations
     if BN:
         ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
@@ -502,7 +503,7 @@ def build_autoencoder():
             elif ACT == 'selu':
                 ct = Activation('selu', name='selu_convt_%d' % u)(ct)
             if DO:
-                ct = Dropout(0.25, name='dropout_convt_%d' % u)(ct)
+                ct = Dropout(rate=dp, name='dropout_convt_%d' % u)(ct)
             # batch normalization to scale activations
             if BN:
                 ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
@@ -1081,7 +1082,7 @@ if __name__ == '__main__':
         ax.spines['top'].set_visible(False)
         ax.xaxis.set_ticks_position('bottom')
         ax.yaxis.set_ticks_position('left')
-        ex = np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 16)
+        ex = np.linspace(np.floor(np.abs(ERR).min()), np.ceil(np.abs(ERR).max()), 17)
         er = np.histogram(np.abs(ERR), ex)[0]/(SNH*SNT*SNS*N*N)
         dex = ex[1]-ex[0]
         ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
