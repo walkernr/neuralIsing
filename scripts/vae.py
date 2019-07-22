@@ -53,7 +53,9 @@ def parse_args():
                         type=int, default=64)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
-    parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers',
+    parser.add_argument('-bn', '--batch_normalization', help='include batch normalization layers',
+                        action='store_true')
+    parser.add_argument('-do', '--dropout', help='include dropout layers',
                         action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
                         type=int, default=4)
@@ -83,7 +85,7 @@ def parse_args():
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.convdepth, args.filters, args.activation,
-            args.batch_normalization, args.latent_dimension, args.optimizer, args.learning_rate,
+            args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.batch_size, args.random_seed)
 
@@ -108,6 +110,7 @@ def write_specs():
         print('filters:                   %d' % NF)
         print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
+        print('dropout:                   %d' % DO)
         print('latent dimension:          %d' % LD)
         print('optimizer:                 %s' % OPT)
         print('learning rate:             %.2e' % LR)
@@ -139,6 +142,7 @@ def write_specs():
         out.write('filters:                   %d\n' % NF)
         out.write('activation:                %s\n' % ACT)
         out.write('batch_normalization:       %d\n' % BN)
+        out.write('dropout:                   %d\n' % DO)
         out.write('latent dimension:          %d\n' % LD)
         out.write('optimizer:                 %s\n' % OPT)
         out.write('learning rate:             %.2e\n' % LR)
@@ -417,9 +421,6 @@ def build_autoencoder():
             # convolution
             c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
-            # batch normalization to scale activations
-            if BN:
-                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
             # activations
             if ACT == 'prelu':
                 c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % u)(c)
@@ -427,6 +428,11 @@ def build_autoencoder():
                 c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % u)(c)
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
+            # batch normalization to scale activations
+            if BN:
+                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
+            if DO:
+                c = Dropout(0.25, name='dropout_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -461,9 +467,6 @@ def build_autoencoder():
     d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
-    # batch renormalization to scale activations
-    if BN:
-        ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
     # activations
     if ACT == 'prelu':
         ct = PReLU(alpha_initializer=init, name='prelu_latent_expansion')(ct)
@@ -471,6 +474,11 @@ def build_autoencoder():
         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
     elif ACT == 'selu':
         ct = Activation('selu', name='selu_latent_expansion')(ct)
+    # batch renormalization to scale activations
+    if BN:
+        ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
+    if DO:
+        ct = Dropout(0.25, name='dropout_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -486,9 +494,6 @@ def build_autoencoder():
             # transposed convolution
             ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
                                 padding=p, strides=s, name='convt_%d' % u)(ct)
-            # batch normalization to scale activations
-            if BN:
-                ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
             # activations
             if ACT == 'prelu':
                 ct = PReLU(alpha_initializer=init, name='prelu_convt_%d' % u)(ct)
@@ -496,6 +501,11 @@ def build_autoencoder():
                 ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % u)(ct)
             elif ACT == 'selu':
                 ct = Activation('selu', name='selu_convt_%d' % u)(ct)
+            # batch normalization to scale activations
+            if BN:
+                ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
+            if DO:
+                ct = Dropout(0.25, name='dropout_convt_%d' % u)(ct)
             u += 1
     # output convolution transpose layer
     k = 3
@@ -599,7 +609,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, SCLR,
-     PRIOR, KI, CD, NF, ACT, BN, LD,
+     PRIOR, KI, CD, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -643,7 +653,7 @@ if __name__ == '__main__':
     import tensorflow as tf
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
-                              Flatten, Reshape, BatchNormalization, Activation)
+                              Flatten, Reshape, BatchNormalization, Activation, Dropout)
     from keras.optimizers import SGD, Adadelta, Adam, Nadam
     from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
@@ -688,11 +698,11 @@ if __name__ == '__main__':
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR,
-           PRIOR, CD, NF, ACT, BN, LD, OPT, LR,
+           PRIOR, CD, NF, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            EP, BS, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%s.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
