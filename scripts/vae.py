@@ -49,6 +49,8 @@ def parse_args():
                         type=str, default='he_uniform')
     parser.add_argument('-cd', '--convdepth', help='convolutional layer depth (final side length, power of 2)',
                         type=int, default=4)
+    parser.add_argument('-cr', '--convrep', help='convolutional repetition',
+                        action='store_true')
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
                         type=int, default=64)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
@@ -84,7 +86,7 @@ def parse_args():
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.scaler,
-            args.prior_distribution, args.kernel_initializer, args.convdepth, args.filters, args.activation,
+            args.prior_distribution, args.kernel_initializer, args.convdepth, args.convrep, args.filters, args.activation,
             args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.batch_size, args.random_seed)
@@ -107,6 +109,7 @@ def write_specs():
         print('scaler:                    %s' % SCLR)
         print('prior distribution:        %s' % PRIOR)
         print('convolution depth:         %d' % CD)
+        print('convolution repetition:    %d' % CR)
         print('filters:                   %d' % NF)
         print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
@@ -138,7 +141,8 @@ def write_specs():
         out.write('super samples:             %d\n' % SNS)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('prior distribution:        %s\n' % PRIOR)
-        out.write('convolutional depth:       %d\n' % CD)
+        out.write('convolution depth:         %d\n' % CD)
+        out.write('convolution repetition     %d\n' % CR)
         out.write('filters:                   %d\n' % NF)
         out.write('activation:                %s\n' % ACT)
         out.write('batch_normalization:       %d\n' % BN)
@@ -387,8 +391,14 @@ def build_autoencoder():
     # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
     # caused by scaling
     if ACT == 'lrelu':
-        alpha_enc = 0.2
-        alpha_dec = 0.0
+        alpha_enc = 0.25
+        alpha_dec = 0.125
+    if ACT == 'prelu':
+        alpha_enc = Constant(value=0.25)
+        alpha_dec = Constant(value=0.125)
+    elif ACT == 'elu':
+        alpha_enc = 1.0
+        alpha_dec = 0.125
     if PRIOR == 'gaussian':
         alpha_mu = 1.0
         alpha_logsigma = 1.0
@@ -404,6 +414,7 @@ def build_autoencoder():
     # number of convolutions necessary to get down to size length 4
     # should use base 2 exponential (integer) side lengths
     nc = np.int32(np.log2(N/CD))
+    cr = CR+1
     # --------------
     # encoder layers
     # --------------
@@ -414,9 +425,12 @@ def build_autoencoder():
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
-        for j in range(2):
+        for j in range(cr):
             k = 3
-            s = j+1
+            if cr == 1:
+                s = 2
+            elif cr == 2:
+                s = j+1
             p = 'same'
             nf = 2**i*NF
             # convolution
@@ -424,9 +438,11 @@ def build_autoencoder():
                        padding=p, strides=s, name='conv_%d' % u)(c)
             # activations
             if ACT == 'prelu':
-                c = PReLU(alpha_initializer=init, name='prelu_conv_%d' % u)(c)
+                c = PReLU(alpha_initializer=alpha_enc, name='prelu_conv_%d' % u)(c)
             elif ACT == 'lrelu':
                 c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % u)(c)
+            elif ACT == 'elu':
+                c = ELU(alpha=alpha_enc)(c)
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
             if DO:
@@ -470,9 +486,11 @@ def build_autoencoder():
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
     # activations
     if ACT == 'prelu':
-        ct = PReLU(alpha_initializer=init, name='prelu_latent_expansion')(ct)
+        ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
     elif ACT == 'lrelu':
         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
+    elif ACT == 'elu':
+        ct = ELU(alpha=alpha_dec)(ct)
     elif ACT == 'selu':
         ct = Activation('selu', name='selu_latent_expansion')(ct)
     if DO:
@@ -483,39 +501,44 @@ def build_autoencoder():
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
-        if i == 0:
-            jr = 0
-        else:
-            jr = -1
-        for j in range(1, jr, -1):
+        for j in range(cr-1, -1, -1):
             k = 3
-            s = j+1
             p = 'same'
-            nf = np.int32(2**(j-1)*2**i*NF)
-            # transposed convolution
-            ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
-                                padding=p, strides=s, name='convt_%d' % u)(ct)
-            # activations
-            if ACT == 'prelu':
-                ct = PReLU(alpha_initializer=init, name='prelu_convt_%d' % u)(ct)
-            elif ACT == 'lrelu':
-                ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % u)(ct)
-            elif ACT == 'selu':
-                ct = Activation('selu', name='selu_convt_%d' % u)(ct)
-            if DO:
-                ct = Dropout(rate=dp, name='dropout_convt_%d' % u)(ct)
-            # batch normalization to scale activations
-            if BN:
-                ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
-            u += 1
-    # output convolution transpose layer
-    k = 3
-    s = 1
-    p = 'same'
-    output = Conv2DTranspose(filters=NCH, kernel_size=k, kernel_initializer=init,
-                             padding=p, strides=s, name='reconst')(ct)
-    # output layer activation
-    output = Activation(decact, name='activated_reconst')(output)
+            if i == 0 and j == 0:
+                if cr == 1:
+                    s = 2
+                elif cr == 2:
+                    s = 1
+                nf = NCH
+                # output convolution transpose layer
+                output = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
+                                         padding=p, strides=s, name='reconst')(ct)
+                # output layer activation
+                output = Activation(decact, name='activated_reconst')(output)
+            else:
+                if cr == 1:
+                    s = 2
+                elif cr == 2:
+                    s = j+1
+                nf = np.int32(2**(i+j-1)*NF)
+                # transposed convolution
+                ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
+                                    padding=p, strides=s, name='convt_%d' % u)(ct)
+                # activations
+                if ACT == 'prelu':
+                    ct = PReLU(alpha_initializer=alpha_dec, name='prelu_convt_%d' % u)(ct)
+                elif ACT == 'lrelu':
+                    ct = LeakyReLU(alpha=alpha_dec, name='lrelu_convt_%d' % u)(ct)
+                elif ACT == 'elu':
+                    ct = ELU(alpha=alpha_dec)(ct)
+                elif ACT == 'selu':
+                    ct = Activation('selu', name='selu_convt_%d' % u)(ct)
+                if DO:
+                    ct = Dropout(rate=dp, name='dropout_convt_%d' % u)(ct)
+                # batch normalization to scale activations
+                if BN:
+                    ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
+                u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
     if VERBOSE:
@@ -610,7 +633,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, SCLR,
-     PRIOR, KI, CD, NF, ACT, BN, DO, LD,
+     PRIOR, KI, CD, CR, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -660,7 +683,7 @@ if __name__ == '__main__':
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
                                     lecun_uniform, lecun_normal, he_uniform, he_normal)
     from keras.activations import relu, tanh, sigmoid, linear
-    from keras.layers.advanced_activations import LeakyReLU, PReLU
+    from keras.layers.advanced_activations import LeakyReLU, PReLU, ELU
     from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
     from keras import backend as K
     from keras.utils import plot_model
