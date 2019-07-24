@@ -432,7 +432,7 @@ def build_autoencoder():
             elif cr == 2:
                 s = j+1
             p = 'same'
-            nf = 2**i*NF
+            nf = 4**i*NF
             # convolution
             c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
@@ -520,7 +520,7 @@ def build_autoencoder():
                     s = 2
                 elif cr == 2:
                     s = j+1
-                nf = np.int32(2**(i+j-1)*NF)
+                nf = np.int32(4**(i+j-1)*NF)
                 # transposed convolution
                 ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
                                     padding=p, strides=s, name='convt_%d' % u)(ct)
