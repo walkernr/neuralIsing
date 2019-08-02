@@ -47,23 +47,25 @@ def parse_args():
                         type=str, default='gaussian')
     parser.add_argument('-ki', '--kernel_initializer', help='kernel initialization function',
                         type=str, default='he_uniform')
+    parser.add_argument('-vgg', '--vgg', help='vgg-like structure (instead of infogan)',
+                        action='store_true')
     parser.add_argument('-cd', '--convdepth', help='convolutional layer depth (final side length, power of 2)',
                         type=int, default=4)
-    parser.add_argument('-cr', '--convrep', help='convolutional repetition',
+    parser.add_argument('-cr', '--convrep', help='convolutional repetition switch',
                         action='store_true')
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
                         type=int, default=64)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
-    parser.add_argument('-bn', '--batch_normalization', help='include batch normalization layers',
+    parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers switch',
                         action='store_true')
-    parser.add_argument('-do', '--dropout', help='include dropout layers',
+    parser.add_argument('-do', '--dropout', help='dropout layers switch',
                         action='store_true')
-    parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the variational autoencoder',
+    parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the autoencoder',
                         type=int, default=4)
     parser.add_argument('-opt', '--optimizer', help='neural network weight optimization function',
                         type=str, default='nadam')
-    parser.add_argument('-lr', '--learning_rate', help='learning rate for neural networ optimizer',
+    parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network optimizer',
                         type=float, default=2e-3)
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='mse')
@@ -86,7 +88,7 @@ def parse_args():
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.scaler,
-            args.prior_distribution, args.kernel_initializer, args.convdepth, args.convrep, args.filters, args.activation,
+            args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filters, args.activation,
             args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.batch_size, args.random_seed)
@@ -108,6 +110,7 @@ def write_specs():
         print('super samples:             %d' % SNS)
         print('scaler:                    %s' % SCLR)
         print('prior distribution:        %s' % PRIOR)
+        print('vgg-like structure:        %d' % VGG)
         print('convolution depth:         %d' % CD)
         print('convolution repetition:    %d' % CR)
         print('filters:                   %d' % NF)
@@ -141,6 +144,7 @@ def write_specs():
         out.write('super samples:             %d\n' % SNS)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('prior distribution:        %s\n' % PRIOR)
+        out.write('vgg-like structure:        %d\n' % VGG)
         out.write('convolution depth:         %d\n' % CD)
         out.write('convolution repetition     %d\n' % CR)
         out.write('filters:                   %d\n' % NF)
@@ -432,7 +436,10 @@ def build_autoencoder():
             elif cr == 2:
                 s = j+1
             p = 'same'
-            nf = 4**i*NF
+            if VGG:
+                nf = 2**(j % 2)*NF
+            else:
+                nf = 4**i*NF
             # convolution
             c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
@@ -520,7 +527,10 @@ def build_autoencoder():
                     s = 2
                 elif cr == 2:
                     s = j+1
-                nf = np.int32(4**(i+j-1)*NF)
+                if VGG:
+                    nf = np.int32(2**((j-1) % 2)*NF)
+                else:
+                    nf = np.int32(4**(i+j-1)*NF)
                 # transposed convolution
                 ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
                                     padding=p, strides=s, name='convt_%d' % u)(ct)
@@ -633,7 +643,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, SCLR,
-     PRIOR, KI, CD, CR, NF, ACT, BN, DO, LD,
+     PRIOR, KI, VGG, CD, CR, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -722,11 +732,11 @@ if __name__ == '__main__':
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR,
-           PRIOR, CD, NF, ACT, BN, DO, LD, OPT, LR,
+           PRIOR, VGG, CD, CR, NF, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            EP, BS, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
