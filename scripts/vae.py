@@ -439,7 +439,10 @@ def build_autoencoder():
                 s = 2
             elif cr == 2:
                 s = j+1
-            p = 'same'
+            if i == 0 and j == 0:
+                p = 'valid'
+            else:
+                p = 'same'
             if VGG:
                 nf = 2**(j % 2)*NF
             else:
