@@ -81,6 +81,8 @@ def parse_args():
                         action='store_true')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
                         type=int, default=4)
+    parser.add_argument('-sh', '--shuffle', help='shuffle samples',
+                        action='store_true')
     parser.add_argument('-bs', '--batch_size', help='size of batches',
                         type=int, default=32)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
@@ -91,7 +93,7 @@ def parse_args():
             args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filters, args.activation,
             args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
-            args.epochs, args.batch_size, args.random_seed)
+            args.epochs, args.shuffle, args.batch_size, args.random_seed)
 
 
 def write_specs():
@@ -126,6 +128,7 @@ def write_specs():
         print('beta:                      %.2e' % BETA)
         print('lambda:                    %.2e' % LMBDA)
         print('mss:                       %d' % MSS)
+        print('shuffle samples:           %d' % SH)
         print('batch size:                %d' % BS)
         print('epochs:                    %d' % EP)
         print('random seed:               %d' % SEED)
@@ -160,6 +163,7 @@ def write_specs():
         out.write('beta:                      %.2e\n' % BETA)
         out.write('lambda:                    %.2e\n' % LMBDA)
         out.write('mss:                       %d\n' % MSS)
+        out.write('shuffle samples:           %d\n' % SH)
         out.write('batch size:                %d\n' % BS)
         out.write('epochs:                    %d\n' % EP)
         out.write('random seed:               %d\n' % SEED)
@@ -645,7 +649,7 @@ if __name__ == '__main__':
      N, SNI, SNS, SCLR,
      PRIOR, KI, VGG, CD, CR, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
-     EP, BS, SEED) = parse_args()
+     EP, SH, BS, SEED) = parse_args()
     CWD = os.getcwd()
     EPS = 1e-8
     # number of phases
@@ -734,9 +738,9 @@ if __name__ == '__main__':
     PRM = (NAME, N, SNI, SNS, SCLR,
            PRIOR, VGG, CD, CR, NF, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
-           EP, BS, SEED)
+           EP, SH, BS, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
@@ -870,7 +874,7 @@ if __name__ == '__main__':
         AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0)[np.random.shuffle(np.arange(SNS)),
                                                          np.random.shuffle(np.arange(SNH)),
                                                          np.random.shuffle(np.arange(SNT))].reshape(*SHP1),
-               y=None, epochs=EP, batch_size=BS, shuffle=False, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+               y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
         # VLOSS = AE.history.history['val_loss']
         AE.save_weights(OUTPREF+'.ae.wt.h5')
