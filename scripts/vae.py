@@ -224,14 +224,14 @@ def periodic_pad_input(x):
 
 
 def periodic_pad_conv(x):
-    p = 1
-    tl = x[:, -p:, -p:, :]
-    tc = x[:, -p:, :, :]
-    ml = x[:, :, -p:, :]
+    p = 2
     mc = x
-    top = K.concatenate((tl, tc), axis=2)
-    middle = K.concatenate((ml, mc), axis=2)
-    return K.concatenate((top, middle), axis=1)
+    mr = x[:, :, :p, :]
+    bc = x[:, :p, :, :]
+    br = x[:, :p, :p, :]
+    middle = K.concatenate((mc, mr), axis=2)
+    bottom = K.concatenate((bc, br), axis=2)
+    return K.concatenate((middle, bottom), axis=1)
 
 
 def trim_convt(x):
@@ -428,7 +428,7 @@ def build_autoencoder():
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    c = input
+    c = Lambda(periodic_pad_conv, name='periodic_pad_input')(input)
     u = 0
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
