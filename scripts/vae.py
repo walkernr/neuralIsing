@@ -736,7 +736,7 @@ if __name__ == '__main__':
     PRM = (NAME, N, SNI, SNS, SCLR,
            PRIOR, VGG, CD, CR, NF, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
-           EP, SH, BS, SEED)
+           SH, BS, EP, SEED)
     # output file prefix
     OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
