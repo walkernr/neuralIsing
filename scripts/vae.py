@@ -434,13 +434,13 @@ def build_autoencoder():
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
         for j in range(cr):
-            k = 2
+            k = 4
             if cr == 1:
                 s = 2
             elif cr == 2:
                 s = j+1
-            if i > -1 and j > -1:
-                p = 'valid'
+            if i = 0 and j = 0:
+                p = 'same' # 'valid'
             else:
                 p = 'same'
             if VGG:
@@ -516,8 +516,8 @@ def build_autoencoder():
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
         for j in range(cr-1, -1, -1):
-            k = 2
-            p = 'valid'
+            k = 4
+            p = 'same'
             if i == 0 and j == 0:
                 if cr == 1:
                     s = 2
