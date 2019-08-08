@@ -417,7 +417,8 @@ def build_autoencoder():
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    c = Lambda(periodic_pad_conv, name='periodic_pad_input')(input)
+    # c = Lambda(periodic_pad_conv, name='periodic_pad_input')(input)
+    c = input
     u = 0
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
