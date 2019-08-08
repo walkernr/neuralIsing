@@ -874,9 +874,7 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
-        AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0)[np.random.shuffle(np.arange(SNS)),
-                                                         np.random.shuffle(np.arange(SNH)),
-                                                         np.random.shuffle(np.arange(SNT))].reshape(*SHP1),
+        AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0)[np.random.shuffle(np.arange(SNS)), :, :].reshape(*SHP1),
                y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
         # VLOSS = AE.history.history['val_loss']
