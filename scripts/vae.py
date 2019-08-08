@@ -206,8 +206,8 @@ def odr_fit(func, dom, mrng, srng, pg):
     return popt, perr, fdom, fval
 
 
-def periodic_pad_input(x):
-    p = 1
+def periodic_pad_conv(x):
+    p = P
     tl = x[:, -p:, -p:, :]
     tc = x[:, -p:, :, :]
     tr = x[:, -p:, :p, :]
@@ -223,18 +223,7 @@ def periodic_pad_input(x):
     return K.concatenate((top, middle, bottom), axis=1)
 
 
-def periodic_pad_conv(x):
-    p = 2
-    mc = x
-    mr = x[:, :, :p, :]
-    bc = x[:, :p, :, :]
-    br = x[:, :p, :p, :]
-    middle = K.concatenate((mc, mr), axis=2)
-    bottom = K.concatenate((bc, br), axis=2)
-    return K.concatenate((middle, bottom), axis=1)
-
-
-def trim_convt(x):
+def periodic_trim_convt(x):
     p = K.int_shape(x)[1]//2
     tl = x[:, :p, :p, :]
     tr = x[:, :p, -p:, :]
@@ -428,27 +417,26 @@ def build_autoencoder():
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    c = input # Lambda(periodic_pad_input, name='periodic_pad_input')(input)
+    c = Lambda(periodic_pad_conv, name='periodic_pad_input')(input)
     u = 0
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
     for i in range(nc):
         for j in range(cr):
-            k = 4
             if cr == 1:
                 s = 2
             elif cr == 2:
                 s = j+1
             if i == 0 and j == 0:
-                p = 'same' # 'valid'
+                p = 'valid'
             else:
-                p = 'same'
+                p = 'same'  # 'valid'
             if VGG:
                 nf = 2**(j % 2)*NF
             else:
                 nf = 4**i*NF
             # convolution
-            c = Conv2D(filters=nf, kernel_size=k, kernel_initializer=init,
+            c = Conv2D(filters=nf, kernel_size=F, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
             # activations
             if ACT == 'prelu':
@@ -464,6 +452,8 @@ def build_autoencoder():
             # batch normalization to scale activations
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
+            # if i < (nc-1) and s == 2:
+            #     c = Lambda(periodic_pad_conv, name='periodic_pad_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -516,8 +506,7 @@ def build_autoencoder():
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
         for j in range(cr-1, -1, -1):
-            k = 4
-            p = 'same'
+            p = 'same'  # 'valid'
             if i == 0 and j == 0:
                 if cr == 1:
                     s = 2
@@ -525,10 +514,11 @@ def build_autoencoder():
                     s = 1
                 nf = NCH
                 # output convolution transpose layer
-                output = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
+                output = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=init,
                                          padding=p, strides=s, name='reconst')(ct)
                 # output layer activation
                 output = Activation(decact, name='activated_reconst')(output)
+                output = Lambda(periodic_trim_convt, name='periodic_trim_output')(output)
             else:
                 if cr == 1:
                     s = 2
@@ -539,7 +529,7 @@ def build_autoencoder():
                 else:
                     nf = np.int32(4**(i+j-1)*NF)
                 # transposed convolution
-                ct = Conv2DTranspose(filters=nf, kernel_size=k, kernel_initializer=init,
+                ct = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=init,
                                     padding=p, strides=s, name='convt_%d' % u)(ct)
                 # activations
                 if ACT == 'prelu':
@@ -555,6 +545,7 @@ def build_autoencoder():
                 # batch normalization to scale activations
                 if BN:
                     ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
+                # ct = Lambda(periodic_trim_convt, name='periodic_trim_convt_%d' % u)(ct)
                 u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
@@ -736,6 +727,9 @@ if __name__ == '__main__':
     SNH, SNT = CH.size, CT.size
     # number of data channels
     NCH = 1
+    # filter size
+    F = 3
+    P = int(np.ceil(F-1)/2)
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR,
