@@ -730,7 +730,7 @@ if __name__ == '__main__':
     NCH = 1
     # filter size
     F = 3
-    P = int(np.ceil(F-1)/2)
+    P = int(np.ceil((F-1)/2))
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, SCLR,
