@@ -41,6 +41,7 @@ def parse_args():
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
                         type=int, default=256)
+    parser.add_argument('-rot', '--rotation_augment', help='rotational sample augmentation', action='store_true')
     parser.add_argument('-sc', '--scaler', help='feature scaling method (none, global, minmax, robust, standard, tanh)',
                         type=str, default='global')
     parser.add_argument('-pd', '--prior_distribution', help='prior distribution for autoencoder',
@@ -54,7 +55,7 @@ def parse_args():
     parser.add_argument('-cr', '--convrep', help='convolutional repetition switch',
                         action='store_true')
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
-                        type=int, default=64)
+                        type=int, default=4)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
     parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers switch',
@@ -62,19 +63,19 @@ def parse_args():
     parser.add_argument('-do', '--dropout', help='dropout layers switch',
                         action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the autoencoder',
-                        type=int, default=4)
+                        type=int, default=2)
     parser.add_argument('-opt', '--optimizer', help='neural network weight optimization function',
                         type=str, default='nadam')
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network optimizer',
-                        type=float, default=2e-3)
+                        type=float, default=1e-5)
     parser.add_argument('-lss', '--loss', help='loss function',
-                        type=str, default='mse')
+                        type=str, default='bc')
     parser.add_argument('-reg', '--regularizer', help='regularizer for latent dimension',
                         type=str, default='tc')
     parser.add_argument('-a', '--alpha', help='alpha parameter for regularizer (mi term)',
                         type=float, default=1.0)
     parser.add_argument('-b', '--beta', help='beta parameter for regularizer (kld term or tc term)',
-                        type=float, default=1.0)
+                        type=float, default=8.0)
     parser.add_argument('-l', '--lmbda', help='lambda parameter for regularizer (info term or dim-kld term)',
                         type=float, default=1.0)
     parser.add_argument('-mss', '--minibatch_stratified_sampling', help='minibatch stratified sampling mode',
@@ -89,7 +90,7 @@ def parse_args():
                         type=int, default=512)
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
-            args.lattice_size, args.super_interval, args.super_samples, args.scaler,
+            args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filters, args.activation,
             args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
@@ -110,6 +111,7 @@ def write_specs():
         print('lattice size:              %d' % N)
         print('super interval:            %d' % SNI)
         print('super samples:             %d' % SNS)
+        print('rotation augment:          %d' % ROT)
         print('scaler:                    %s' % SCLR)
         print('prior distribution:        %s' % PRIOR)
         print('vgg-like structure:        %d' % VGG)
@@ -145,6 +147,7 @@ def write_specs():
         out.write('lattice size:              %d\n' % N)
         out.write('super interval:            %d\n' % SNI)
         out.write('super samples:             %d\n' % SNS)
+        out.write('rotation augment:          %d\n' % ROT)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('prior distribution:        %s\n' % PRIOR)
         out.write('vgg-like structure:        %d\n' % VGG)
@@ -638,10 +641,17 @@ def inlier_selection(dmp, dat, intrvl, ns):
     return sldmp, sldat
 
 
+def rotation_augment(dmp, dat):
+    shp1 = (SNH, SNT, 3*SNS, N, N, NCH)
+    dmp = np.concatenate((dmp.reshape(*SHP0), np.flip(dmp.reshape(*SHP0), 3), np.flip(dmp.reshape(*SHP0), 4)), axis=2).reshape(*shp1)
+    dat = np.tile(dat, (1, 1, 3, 1))
+    return dmp, dat
+
+
 if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
-     N, SNI, SNS, SCLR,
+     N, SNI, SNS, ROT, SCLR,
      PRIOR, KI, VGG, CD, CR, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, SH, BS, SEED) = parse_args()
@@ -733,12 +743,12 @@ if __name__ == '__main__':
     P = int(np.ceil((F-1)/2))
 
     # run parameter tuple
-    PRM = (NAME, N, SNI, SNS, SCLR,
+    PRM = (NAME, N, SNI, SNS, ROT, SCLR,
            PRIOR, VGG, CD, CR, NF, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            SH, BS, EP, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
@@ -759,12 +769,21 @@ if __name__ == '__main__':
     SHP5 = (SNH*SNT*SNS, ED*LD)
 
     # scaled data dump prefix
-    CPREF = CWD+'/%s.%d.%d.%d.%d' % (NAME, N, SNI, SNS, SEED)
-    SCPREF = CWD+'/%s.%d.%d.%d.%s.%d' % (NAME, N, SNI, SNS, SCLR, SEED)
+    CPREF = CWD+'/%s.%d.%d.%d.%d.%d' % (NAME, N, SNI, SNS, ROT, SEED)
+    SCPREF = CWD+'/%s.%d.%d.%d.%d.%s.%d' % (NAME, N, SNI, SNS, ROT, SCLR, SEED)
 
     try:
         # check is scaled data has already been computed
-        SCDMP = np.load(SCPREF+'.dmp.sc.npy').reshape(*SHP1)
+        SCDMP = np.load(SCPREF+'.dmp.sc.npy')
+        if ROT:
+            SNS *= 3
+            SHP0 = (SNH, SNT, SNS, N, N, NCH)
+            SHP1 = (SNH*SNT*SNS, N, N, NCH)
+            SHP2 = (SNH*SNT*SNS, N*N*NCH)
+            SHP3 = (SNH, SNT, SNS, ED, LD)
+            SHP4 = (SNH*SNT*SNS, ED, LD)
+            SHP5 = (SNH*SNT*SNS, ED*LD)
+            SCDMP = SCDMP.reshape(*SHP1)
         CDAT = np.load(CPREF+'.dat.c.npy')
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
@@ -774,6 +793,15 @@ if __name__ == '__main__':
             # check if random data subset has already been selected
             CDMP = np.load(CPREF+'.dmp.c.npy')
             CDAT = np.load(CPREF+'.dat.c.npy')
+            if ROT:
+                CDMP, CDAT = rotation_augment(CDMP, CDAT)
+                SNS *= 3
+                SHP0 = (SNH, SNT, SNS, N, N, NCH)
+                SHP1 = (SNH*SNT*SNS, N, N, NCH)
+                SHP2 = (SNH*SNT*SNS, N*N*NCH)
+                SHP3 = (SNH, SNT, SNS, ED, LD)
+                SHP4 = (SNH*SNT*SNS, ED, LD)
+                SHP5 = (SNH*SNT*SNS, ED*LD)
             if VERBOSE:
                 # print(100*'-')
                 print('selected classification samples loaded from file')
@@ -788,6 +816,15 @@ if __name__ == '__main__':
                 print(100*'-')
             CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
             del DAT, DMP
+            if ROT:
+                CDMP, CDAT = rotation_augment(CDMP, CDAT)
+                SNS *= 3
+                SHP0 = (SNH, SNT, SNS, N, N, NCH)
+                SHP1 = (SNH*SNT*SNS, N, N, NCH)
+                SHP2 = (SNH*SNT*SNS, N*N*NCH)
+                SHP3 = (SNH, SNT, SNS, ED, LD)
+                SHP4 = (SNH*SNT*SNS, ED, LD)
+                SHP5 = (SNH*SNT*SNS, ED*LD)
             np.save(CPREF+'.dmp.c.npy', CDMP)
             np.save(CPREF+'.dat.c.npy', CDAT)
             if VERBOSE:
@@ -805,7 +842,6 @@ if __name__ == '__main__':
         else:
             SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(*SHP2)).reshape(*SHP1)
         del CDMP
-        np.save(SCPREF+'.dmp.sc.npy', SCDMP.reshape(*SHP0))
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(100*'-')
