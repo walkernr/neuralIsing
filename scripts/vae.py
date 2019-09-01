@@ -697,7 +697,7 @@ if __name__ == '__main__':
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation, Dropout)
-    from keras.optimizers import SGD, Adadelta, Adam, Nadam
+    from keras.optimizers import SGD, Adadelta, Adam, Adamax, Nadam
     from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
                                     lecun_uniform, lecun_normal, he_uniform, he_normal)
@@ -872,6 +872,7 @@ if __name__ == '__main__':
     OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
             'adam': Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True),
+            'adamax': Adamax(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0),
             'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
 
     # reconstruction losses
