@@ -534,7 +534,7 @@ def build_autoencoder():
                     nf = np.int32(4**(i+j-1)*NF)
                 # transposed convolution
                 ct = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=init,
-                                    padding=p, strides=s, name='convt_%d' % u)(ct)
+                                     padding=p, strides=s, name='convt_%d' % u)(ct)
                 # activations
                 if ACT == 'prelu':
                     ct = PReLU(alpha_initializer=alpha_dec, name='prelu_convt_%d' % u)(ct)
