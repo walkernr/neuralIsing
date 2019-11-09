@@ -409,11 +409,15 @@ def build_autoencoder():
         decact = 'tanh'
     dp = 0.5
     # kernel initializer - customizable
-    # limited tests showed he_normal performs well
+    # use lecun_normal with selu
     init = KIS[KI]
-    # number of convolutions necessary to get down to size length 4
+    # number of convolutions necessary to get down to chosen size length
     # should use base 2 exponential (integer) side lengths
     nc = np.int32(np.log2(N/CD))
+    if nc == 0:
+        dn = 1
+    else:
+        dn = 0
     cr = CR+1
     # --------------
     # encoder layers
@@ -432,7 +436,7 @@ def build_autoencoder():
             elif cr == 2:
                 s = j+1
             if i == 0 and j == 0:
-                p = 'valid'
+                p = 'same'  # 'valid'
             else:
                 p = 'same'  # 'valid'
             if VGG:
@@ -493,19 +497,22 @@ def build_autoencoder():
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
     # activations
-    if ACT == 'prelu':
-        ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
-    elif ACT == 'lrelu':
-        ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
-    elif ACT == 'elu':
-        ct = ELU(alpha=alpha_dec)(ct)
-    elif ACT == 'selu':
-        ct = Activation('selu', name='selu_latent_expansion')(ct)
-    if DO:
-        ct = Dropout(rate=dp, name='dropout_latent_expansion')(ct)
-    # batch renormalization to scale activations
-    if BN:
-        ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
+    if dn:
+        output = Activation(decact, name='activated_reconst')(ct)
+    else:
+        if ACT == 'prelu':
+            ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
+        elif ACT == 'lrelu':
+            ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
+        elif ACT == 'elu':
+            ct = ELU(alpha=alpha_dec)(ct)
+        elif ACT == 'selu':
+            ct = Activation('selu', name='selu_latent_expansion')(ct)
+        if DO:
+            ct = Dropout(rate=dp, name='dropout_latent_expansion')(ct)
+        # batch renormalization to scale activations
+        if BN:
+            ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -522,7 +529,7 @@ def build_autoencoder():
                                          padding=p, strides=s, name='reconst')(ct)
                 # output layer activation
                 output = Activation(decact, name='activated_reconst')(output)
-                output = Lambda(periodic_trim_convt, name='periodic_trim_output')(output)
+                # output = Lambda(periodic_trim_convt, name='periodic_trim_output')(output)
             else:
                 if cr == 1:
                     s = 2
@@ -853,11 +860,11 @@ if __name__ == '__main__':
     # mean energies
     EM = np.mean(ES, -1)
     # specific heat capacities
-    SP = np.var(np.divide(ES, CT[np.newaxis, :, np.newaxis]), 2)
+    SP = np.var(ES, 2)/np.square(CT[np.newaxis, :])
     # mean magnetizations
     MM = np.mean(MS, -1)
     # magnetic susceptibilities
-    SU = np.var(MS/CT[np.newaxis, :, np.newaxis], 2)
+    SU = np.var(MS, 2)/CT[np.newaxis, :]
 
     # kernel initializers
     KIS = {'glorot_uniform': glorot_uniform(SEED),
