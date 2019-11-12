@@ -497,6 +497,8 @@ def build_autoencoder():
         print(100*'-')
         encoder.summary()
         print(100*'-')
+    with open(OUTPREF+'.out', 'w') as out:
+        encoder.summary(print_fn=lambda x: out.write(x+'\n'))
     # --------------
     # decoder layers
     # --------------
@@ -575,6 +577,8 @@ def build_autoencoder():
         print(100*'-')
         decoder.summary()
         print(100*'-')
+    with open(OUTPREF+'.out', 'w') as out:
+        decoder.summary(print_fn=lambda x: out.write(x+'\n'))
     # ------------
     # construct ae
     # ------------
