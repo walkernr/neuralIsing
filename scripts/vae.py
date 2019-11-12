@@ -54,6 +54,8 @@ def parse_args():
                         type=int, default=4)
     parser.add_argument('-cr', '--convrep', help='convolutional repetition switch',
                         action='store_true')
+    parser.add_argument('-sf', '--filter_size', help='size of filters in hidden convolutional layers',
+                        type=int, default=2)
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
                         type=int, default=4)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
@@ -91,7 +93,7 @@ def parse_args():
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
-            args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filters, args.activation,
+            args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.filters, args.activation,
             args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.shuffle, args.batch_size, args.random_seed)
@@ -117,6 +119,7 @@ def write_specs():
         print('vgg-like structure:        %d' % VGG)
         print('convolution depth:         %d' % CD)
         print('convolution repetition:    %d' % CR)
+        print('filter size:               %d' % FS)
         print('filters:                   %d' % NF)
         print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
@@ -153,6 +156,7 @@ def write_specs():
         out.write('vgg-like structure:        %d\n' % VGG)
         out.write('convolution depth:         %d\n' % CD)
         out.write('convolution repetition     %d\n' % CR)
+        out.write('filter size:               %d\n' % FS)
         out.write('filters:                   %d\n' % NF)
         out.write('activation:                %s\n' % ACT)
         out.write('batch_normalization:       %d\n' % BN)
@@ -659,7 +663,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, ROT, SCLR,
-     PRIOR, KI, VGG, CD, CR, NF, ACT, BN, DO, LD,
+     PRIOR, KI, VGG, CD, CR, F, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, SH, BS, SEED) = parse_args()
     CWD = os.getcwd()
