@@ -56,6 +56,7 @@ def parse_args():
                         action='store_true')
     parser.add_argument('-sf', '--filter_size', help='size of filters in hidden convolutional layers',
                         type=int, default=2)
+    parser.add_argument('-ss', '--stride_size', help='stride size', type=int, default=2)
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
                         type=int, default=4)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
@@ -93,8 +94,9 @@ def parse_args():
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
-            args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.filters, args.activation,
-            args.batch_normalization, args.dropout, args.latent_dimension, args.optimizer, args.learning_rate,
+            args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.stride_size,
+            args.filters, args.activation, args.batch_normalization, args.dropout,
+            args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.shuffle, args.batch_size, args.random_seed)
 
@@ -116,10 +118,12 @@ def write_specs():
         print('rotation augment:          %d' % ROT)
         print('scaler:                    %s' % SCLR)
         print('prior distribution:        %s' % PRIOR)
+        print('kernel initializer:        %s' % KI)
         print('vgg-like structure:        %d' % VGG)
         print('convolution depth:         %d' % CD)
         print('convolution repetition:    %d' % CR)
         print('filter size:               %d' % F)
+        print('stride size:               %d' % SS)
         print('filters:                   %d' % NF)
         print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
@@ -153,10 +157,12 @@ def write_specs():
         out.write('rotation augment:          %d\n' % ROT)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('prior distribution:        %s\n' % PRIOR)
+        out.write('kernel initializer:        %s\n' % KI)
         out.write('vgg-like structure:        %d\n' % VGG)
         out.write('convolution depth:         %d\n' % CD)
         out.write('convolution repetition     %d\n' % CR)
         out.write('filter size:               %d\n' % F)
+        out.write('stride size:               %d\n' % SS)
         out.write('filters:                   %d\n' % NF)
         out.write('activation:                %s\n' % ACT)
         out.write('batch_normalization:       %d\n' % BN)
@@ -417,7 +423,7 @@ def build_autoencoder():
     init = KIS[KI]
     # number of convolutions necessary to get down to chosen size length
     # should use base 2 exponential (integer) side lengths
-    nc = np.int32(np.log2(N/CD))
+    nc = np.int32(np.log(N/CD)/np.log(SS))
     if nc == 0:
         dn = 1
     else:
@@ -436,7 +442,7 @@ def build_autoencoder():
     for i in range(nc):
         for j in range(cr):
             if cr == 1:
-                s = 2
+                s = SS
             elif cr == 2:
                 s = j+1
             if i == 0 and j == 0:
@@ -524,7 +530,7 @@ def build_autoencoder():
             p = 'same'  # 'valid'
             if i == 0 and j == 0:
                 if cr == 1:
-                    s = 2
+                    s = SS
                 elif cr == 2:
                     s = 1
                 nf = NCH
@@ -536,7 +542,7 @@ def build_autoencoder():
                 # output = Lambda(periodic_trim_convt, name='periodic_trim_output')(output)
             else:
                 if cr == 1:
-                    s = 2
+                    s = SS
                 elif cr == 2:
                     s = j+1
                 if VGG:
@@ -663,7 +669,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, ROT, SCLR,
-     PRIOR, KI, VGG, CD, CR, F, NF, ACT, BN, DO, LD,
+     PRIOR, KI, VGG, CD, CR, F, SS, NF, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, SH, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -754,11 +760,11 @@ if __name__ == '__main__':
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, ROT, SCLR,
-           PRIOR, VGG, CD, CR, NF, ACT, BN, DO, LD, OPT, LR,
+           PRIOR, KI, VGG, CD, CR, F, SS, NF, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            SH, BS, EP, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
