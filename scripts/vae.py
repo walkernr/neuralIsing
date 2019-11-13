@@ -581,7 +581,7 @@ def build_autoencoder():
         decoder.summary()
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
-        out.write('encoder network summary\n')
+        out.write('decoder network summary\n')
         out.write(100*'-'+'\n')
         decoder.summary(print_fn=lambda x: out.write(x+'\n'))
         out.write(100*'-'+'\n')
