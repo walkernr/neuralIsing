@@ -805,6 +805,10 @@ if __name__ == '__main__':
     try:
         # check is scaled data has already been computed
         SCDMP = np.load(SCPREF+'.dmp.sc.npy')
+        MNSCDMP = np.load(SCPREF+'.dmp.sc.mn.npy')
+        MXSCDMP = np.load(SCPREF+'.dmp.sc.mx.npy')
+        MSCDMP = np.load(SCPREF+'.dmp.sc.m.npy')
+        SSCDMP = np.load(SCPREF+'.dmp.sc.s.npy')
         if ROT:
             SNS *= 3
             SHP0 = (SNH, SNT, SNS, N, N, NCH)
@@ -872,6 +876,15 @@ if __name__ == '__main__':
         else:
             SCDMP = SCLRS[SCLR].fit_transform(CDMP.reshape(*SHP2)).reshape(*SHP1)
         del CDMP
+        MNSCDMP = SCDMP.min()
+        MXSCDMP = SCDMP.max()
+        MSCDMP = SCDMP.mean()
+        SSCDMP = SCDMP.std()
+        np.save(SCPREF+'.dmp.sc.npy', SCDMP)
+        np.save(SCPREF+'.dmp.sc.mn.npy', MNSCDMP)
+        np.save(SCPREF+'.dmp.sc.mx.npy', MXSCDMP)
+        np.save(SCPREF+'.dmp.sc.m.npy', MSCDMP)
+        np.save(SCPREF+'.dmp.sc.s.npy', SSCDMP)
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(100*'-')
@@ -997,6 +1010,7 @@ if __name__ == '__main__':
         if VERBOSE:
             print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
+        del SCDMP
     except:
         if VERBOSE:
             print('predicting latent encodings of scaled selected classification samples')
@@ -1015,6 +1029,7 @@ if __name__ == '__main__':
             ZENC = ZENC[:, np.newaxis, :]
         # reconstruction error (signed)
         ERR = (SCDMP-ZDEC).reshape(*SHP0)
+        del SCDMP
         # dump results
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
@@ -1028,7 +1043,7 @@ if __name__ == '__main__':
         MAEERR = np.mean(np.abs(ERR))
         RMSERR = np.sqrt(np.mean(np.square(ERR)))
         R2SCERR = 1-np.square(RMSERR)/0.25
-        ERRDOM = np.linspace(np.floor(MNER), np.ceil(MXERR), 33)
+        ERRDOM = np.linspace(np.floor(MNERR), np.ceil(MXERR), 33)
         ERRPRB = np.histogram(ERR, ERRDOM)[0]/(SNH*SNT*SNS*N*N)
         AERRDOM = np.linspace(0, np.max((np.abs(MNERR), MXERR)), 17)
         AERRPRB = np.histogram(np.abs(ERR), AERRDOM)[0]/(SNH*SNT*SNS*N*N)
@@ -1062,16 +1077,15 @@ if __name__ == '__main__':
             np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
             np.save(OUTPREF+'.zerr.kld.max.npy', MXKLD)
             np.save(OUTPREF+'.zerr.kld.min.npy', MNKLD)
-    del ERR
 
     if VERBOSE:
         print(100*'-')
         print('latent encodings of scaled selected classification samples predicted')
         print(100*'-')
-        print('mean sig:        %f' % np.mean(SCDMP))
-        print('stdv sig:        %f' % np.std(SCDMP))
-        print('max sig          %f' % np.max(SCDMP))
-        print('min sig          %f' % np.min(SCDMP))
+        print('mean sig:        %f' % MSCDMP)
+        print('stdv sig:        %f' % SSCDMP)
+        print('max sig          %f' % MXSCDMP)
+        print('min sig          %f' % MNSCDMP)
         print('mean error:      %f' % MERR)
         print('stdv error:      %f' % SERR)
         print('max error:       %f' % MXERR)
@@ -1088,10 +1102,10 @@ if __name__ == '__main__':
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
         out.write(100*'-'+'\n')
-        out.write('mean sig:        %f\n' % np.mean(SCDMP))
-        out.write('stdv sig:        %f\n' % np.std(SCDMP))
-        out.write('max sig          %f\n' % np.max(SCDMP))
-        out.write('min sig          %f\n' % np.min(SCDMP))
+        out.write('mean sig:        %f\n' % MSCDMP)
+        out.write('stdv sig:        %f\n' % MNSCDMP)
+        out.write('max sig          %f\n' % MXSCDMP)
+        out.write('min sig          %f\n' % MNSCDMP)
         out.write('mean error:      %f\n' % MERR)
         out.write('stdv error:      %f\n' % SERR)
         out.write('max error:       %f\n' % MXERR)
@@ -1105,7 +1119,6 @@ if __name__ == '__main__':
             out.write('max kld:         %f\n' % MXKLD)
             out.write('min kld:         %f\n' % MNKLD)
         out.write(100*'-'+'\n')
-    del SCDMP
 
     try:
         # check if pca projections already computed
