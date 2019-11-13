@@ -1034,6 +1034,7 @@ if __name__ == '__main__':
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
         np.save(OUTPREF+'.zerr.npy', ERR)
+        del ZDEC
         # mean and standard deviation of error
         MERR = np.mean(ERR)
         SERR = np.std(ERR)
