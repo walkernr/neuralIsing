@@ -58,6 +58,8 @@ def parse_args():
                         type=int, default=2)
     parser.add_argument('-ss', '--stride_size', help='stride size', type=int, default=2)
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
+                        type=int, default=32)
+    parser.add_arguemnt('-mf', '--filter_multiply', help='multiplicative factor of filters in successive layers',
                         type=int, default=4)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
@@ -70,7 +72,7 @@ def parse_args():
     parser.add_argument('-opt', '--optimizer', help='neural network weight optimization function',
                         type=str, default='nadam')
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network optimizer',
-                        type=float, default=1e-5)
+                        type=float, default=1e-4)
     parser.add_argument('-lss', '--loss', help='loss function',
                         type=str, default='bc')
     parser.add_argument('-reg', '--regularizer', help='regularizer for latent dimension',
