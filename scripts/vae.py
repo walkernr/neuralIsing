@@ -59,7 +59,7 @@ def parse_args():
     parser.add_argument('-ss', '--stride_size', help='stride size', type=int, default=2)
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
                         type=int, default=32)
-    parser.add_arguemnt('-mf', '--filter_multiply', help='multiplicative factor of filters in successive layers',
+    parser.add_argument('-mf', '--filter_multiply', help='multiplicative factor of filters in successive layers',
                         type=int, default=4)
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
