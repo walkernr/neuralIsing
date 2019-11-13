@@ -97,7 +97,7 @@ def parse_args():
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.stride_size,
-            args.filters, args.activation, args.batch_normalization, args.dropout,
+            args.filters, args.filter_multiply, args.activation, args.batch_normalization, args.dropout,
             args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.shuffle, args.batch_size, args.random_seed)
@@ -127,6 +127,7 @@ def write_specs():
         print('filter size:               %d' % F)
         print('stride size:               %d' % SS)
         print('filters:                   %d' % NF)
+        print('filter scale:              %d' % FM)
         print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
         print('dropout:                   %d' % DO)
@@ -166,6 +167,7 @@ def write_specs():
         out.write('filter size:               %d\n' % F)
         out.write('stride size:               %d\n' % SS)
         out.write('filters:                   %d\n' % NF)
+        out.write('filter scale:              %d\n' % FM)
         out.write('activation:                %s\n' % ACT)
         out.write('batch_normalization:       %d\n' % BN)
         out.write('dropout:                   %d\n' % DO)
@@ -452,9 +454,9 @@ def build_autoencoder():
             else:
                 p = 'same'  # 'valid'
             if VGG:
-                nf = 2**(j % 2)*NF
+                nf = FM**(j % 2)*NF
             else:
-                nf = 4**i*NF
+                nf = FM**i*NF
             # convolution
             c = Conv2D(filters=nf, kernel_size=F, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
@@ -553,9 +555,9 @@ def build_autoencoder():
                 elif cr == 2:
                     s = j+1
                 if VGG:
-                    nf = np.int32(2**((j-1) % 2)*NF)
+                    nf = np.int32(FM**((j-1) % 2)*NF)
                 else:
-                    nf = np.int32(4**(i+j-1)*NF)
+                    nf = np.int32(FM**(i+j-1)*NF)
                 # transposed convolution
                 ct = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=init,
                                      padding=p, strides=s, name='convt_%d' % u)(ct)
@@ -681,7 +683,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, ROT, SCLR,
-     PRIOR, KI, VGG, CD, CR, F, SS, NF, ACT, BN, DO, LD,
+     PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, SH, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -772,11 +774,11 @@ if __name__ == '__main__':
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, ROT, SCLR,
-           PRIOR, KI, VGG, CD, CR, F, SS, NF, ACT, BN, DO, LD, OPT, LR,
+           PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            SH, BS, EP, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
