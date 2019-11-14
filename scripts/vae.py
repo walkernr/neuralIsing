@@ -401,7 +401,7 @@ def build_autoencoder():
     init = KIS[KI]
     # number of convolutions necessary to get down to chosen size length
     # should use base 2 exponential (integer) side lengths
-    nc = np.int32(np.log(N/CD)/np.log(SS))
+    nc = CD
     if nc == 0:
         dn = 1
     else:
