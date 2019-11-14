@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument('-n', '--name', help='simulation name',
                         type=str, default='ising_init')
     parser.add_argument('-ls', '--lattice_size', help='lattice size (side length)',
-                        type=int, default=16)
+                        type=int, default=27)
     parser.add_argument('-si', '--super_interval', help='interval for selecting phase points (variational autoencoder)',
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
@@ -51,16 +51,17 @@ def parse_args():
     parser.add_argument('-vgg', '--vgg', help='vgg-like structure (instead of infogan)',
                         action='store_true')
     parser.add_argument('-cd', '--convdepth', help='convolutional layer depth (final side length, power of 2)',
-                        type=int, default=4)
+                        type=int, default=3)
     parser.add_argument('-cr', '--convrep', help='convolutional repetition switch',
                         action='store_true')
     parser.add_argument('-sf', '--filter_size', help='size of filters in hidden convolutional layers',
-                        type=int, default=2)
+                        type=int, default=3)
     parser.add_argument('-ss', '--stride_size', help='stride size', type=int, default=2)
     parser.add_argument('-nf', '--filters', help='base number of filters in hidden convolutional layers',
-                        type=int, default=32)
+                        type=int, default=27)
     parser.add_argument('-mf', '--filter_multiply', help='multiplicative factor of filters in successive layers',
-                        type=int, default=4)
+                        type=int, default=3)
+    parser.add_argument('-pd', '--padding', help='padding type', type=str, default='same')
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
     parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers switch',
@@ -68,7 +69,7 @@ def parse_args():
     parser.add_argument('-do', '--dropout', help='dropout layers switch',
                         action='store_true')
     parser.add_argument('-ld', '--latent_dimension', help='latent dimension of the autoencoder',
-                        type=int, default=2)
+                        type=int, default=3)
     parser.add_argument('-opt', '--optimizer', help='neural network weight optimization function',
                         type=str, default='nadam')
     parser.add_argument('-lr', '--learning_rate', help='learning rate for neural network optimizer',
@@ -86,18 +87,18 @@ def parse_args():
     parser.add_argument('-mss', '--minibatch_stratified_sampling', help='minibatch stratified sampling mode',
                         action='store_true')
     parser.add_argument('-ep', '--epochs', help='number of epochs',
-                        type=int, default=4)
+                        type=int, default=16)
     parser.add_argument('-sh', '--shuffle', help='shuffle samples',
                         action='store_true')
     parser.add_argument('-bs', '--batch_size', help='size of batches',
-                        type=int, default=32)
+                        type=int, default=256)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=512)
     args = parser.parse_args()
     return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.stride_size,
-            args.filters, args.filter_multiply, args.activation, args.batch_normalization, args.dropout,
+            args.filters, args.filter_multiply, args.padding, args.activation, args.batch_normalization, args.dropout,
             args.latent_dimension, args.optimizer, args.learning_rate,
             args.loss, args.regularizer, args.alpha, args.beta, args.lmbda, args.minibatch_stratified_sampling,
             args.epochs, args.shuffle, args.batch_size, args.random_seed)
@@ -128,6 +129,7 @@ def write_specs():
         print('stride size:               %d' % SS)
         print('filters:                   %d' % NF)
         print('filter scale:              %d' % FM)
+        print('padding:                   %s' % P)
         print('ativation:                 %s' % ACT)
         print('batch normalization:       %d' % BN)
         print('dropout:                   %d' % DO)
@@ -221,34 +223,6 @@ def odr_fit(func, dom, mrng, srng, pg):
     fval = func(popt, fdom)
     # return optimal parameters, errors, and function values
     return popt, perr, fdom, fval
-
-
-def periodic_pad_conv(x):
-    p = P
-    tl = x[:, -p:, -p:, :]
-    tc = x[:, -p:, :, :]
-    tr = x[:, -p:, :p, :]
-    ml = x[:, :, -p:, :]
-    mc = x
-    mr = x[:, :, :p, :]
-    bl = x[:, :p, -p:, :]
-    bc = x[:, :p, :, :]
-    br = x[:, :p, :p, :]
-    top = K.concatenate((tl, tc, tr), axis=2)
-    middle = K.concatenate((ml, mc, mr), axis=2)
-    bottom = K.concatenate((bl, bc, br), axis=2)
-    return K.concatenate((top, middle, bottom), axis=1)
-
-
-def periodic_trim_convt(x):
-    p = K.int_shape(x)[1]//2
-    tl = x[:, :p, :p, :]
-    tr = x[:, :p, -p:, :]
-    bl = x[:, -p:, :p, :]
-    br = x[:, -p:, -p:, :]
-    top = K.concatenate((tl, tr), axis=2)
-    bottom = K.concatenate((bl, br), axis=2)
-    return K.concatenate((top, bottom), axis=1)
 
 
 def gauss_sampling(beta, batch_size=None):
@@ -433,12 +407,12 @@ def build_autoencoder():
     else:
         dn = 0
     cr = CR+1
+    p = P
     # --------------
     # encoder layers
     # --------------
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
-    # c = Lambda(periodic_pad_conv, name='periodic_pad_input')(input)
     c = input
     u = 0
     # loop through convolutions
@@ -449,10 +423,6 @@ def build_autoencoder():
                 s = SS
             elif cr == 2:
                 s = j+1
-            if i == 0 and j == 0:
-                p = 'same'  # 'valid'
-            else:
-                p = 'same'  # 'valid'
             if VGG:
                 nf = FM**(j % 2)*NF
             else:
@@ -474,8 +444,6 @@ def build_autoencoder():
             # batch normalization to scale activations
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
-            # if i < (nc-1) and s == 2:
-            #     c = Lambda(periodic_pad_conv, name='periodic_pad_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -536,7 +504,6 @@ def build_autoencoder():
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
         for j in range(cr-1, -1, -1):
-            p = 'same'  # 'valid'
             if i == 0 and j == 0:
                 if cr == 1:
                     s = SS
@@ -548,7 +515,6 @@ def build_autoencoder():
                                          padding=p, strides=s, name='reconst')(ct)
                 # output layer activation
                 output = Activation(decact, name='activated_reconst')(output)
-                # output = Lambda(periodic_trim_convt, name='periodic_trim_output')(output)
             else:
                 if cr == 1:
                     s = SS
@@ -575,7 +541,6 @@ def build_autoencoder():
                 # batch normalization to scale activations
                 if BN:
                     ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
-                # ct = Lambda(periodic_trim_convt, name='periodic_trim_convt_%d' % u)(ct)
                 u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
@@ -683,7 +648,7 @@ if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, ROT, SCLR,
-     PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, ACT, BN, DO, LD,
+     PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, P, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, SH, BS, SEED) = parse_args()
     CWD = os.getcwd()
@@ -769,16 +734,14 @@ if __name__ == '__main__':
     SNH, SNT = CH.size, CT.size
     # number of data channels
     NCH = 1
-    # filter size
-    P = int(np.ceil((F-1)/2))
 
     # run parameter tuple
     PRM = (NAME, N, SNI, SNS, ROT, SCLR,
-           PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, ACT, BN, DO, LD, OPT, LR,
+           PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, P, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            SH, BS, EP, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
