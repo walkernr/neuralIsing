@@ -61,7 +61,7 @@ def parse_args():
                         type=int, default=27)
     parser.add_argument('-mf', '--filter_multiply', help='multiplicative factor of filters in successive layers',
                         type=int, default=3)
-    parser.add_argument('-p', '--padding', help='padding type', type=str, default='same')
+    parser.add_argument('-pad', '--padding', help='padding type', type=str, default='same')
     parser.add_argument('-an', '--activation', help='hidden layer activations',
                         type=str, default='selu')
     parser.add_argument('-bn', '--batch_normalization', help='batch normalization layers switch',
