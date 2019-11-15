@@ -395,7 +395,7 @@ def build_autoencoder():
         decact = 'sigmoid'
     else:
         decact = 'tanh'
-    dp = 0.25
+    dp = 0.5
     # kernel initializer - customizable
     # use lecun_normal with selu
     init = KIS[KI]
@@ -440,7 +440,7 @@ def build_autoencoder():
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
             if DO:
-                c = Dropout(rate=dp, name='dropout_conv_%d' % u)(c)
+                c = SpatialDropout2D(rate=dp, name='dropout_conv_%d' % u)(c)
             # batch normalization to scale activations
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
@@ -496,7 +496,7 @@ def build_autoencoder():
         elif ACT == 'selu':
             ct = Activation('selu', name='selu_latent_expansion')(ct)
         if DO:
-            ct = Dropout(rate=dp, name='dropout_latent_expansion')(ct)
+            ct = SpatialDropout2D(rate=dp, name='dropout_latent_expansion')(ct)
         # batch renormalization to scale activations
         if BN:
             ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
@@ -537,7 +537,7 @@ def build_autoencoder():
                 elif ACT == 'selu':
                     ct = Activation('selu', name='selu_convt_%d' % u)(ct)
                 if DO:
-                    ct = Dropout(rate=dp, name='dropout_convt_%d' % u)(ct)
+                    ct = SpatialDropout2D(rate=dp, name='dropout_convt_%d' % u)(ct)
                 # batch normalization to scale activations
                 if BN:
                     ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
@@ -692,7 +692,7 @@ if __name__ == '__main__':
     import tensorflow as tf
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
-                              Flatten, Reshape, BatchNormalization, Activation, Dropout)
+                              Flatten, Reshape, BatchNormalization, Activation, SpatialDropout2D)
     from keras.optimizers import SGD, Adadelta, Adam, Adamax, Nadam
     from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
