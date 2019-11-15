@@ -395,7 +395,7 @@ def build_autoencoder():
         decact = 'sigmoid'
     else:
         decact = 'tanh'
-    dp = 0.5
+    dp = 0.25
     # kernel initializer - customizable
     # use lecun_normal with selu
     init = KIS[KI]
