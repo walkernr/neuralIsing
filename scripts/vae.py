@@ -1319,7 +1319,7 @@ if __name__ == '__main__':
         MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
         # diagrams for latent variables
         ZMDIAG = np.mean(ZENC.reshape(*shp0), 2).reshape(*shp1)
-        ZVDIAG = np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp1)
+        # ZVDIAG = np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp1)
         # diagrams for pca embeddings of latent variables
         PZMDIAG = np.mean(PZENC.reshape(*shp0), 2).reshape(*shp1)
         for i in range(LD):
@@ -1328,9 +1328,10 @@ if __name__ == '__main__':
             if PRIOR == 'gaussian':
                 if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
                     PZMDIAG[:, :, 1, i] = -PZMDIAG[:, :, 1, i]
-        PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
+        # PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
         # plot latent variable diagrams
-        for i in range(2):
+        # for i in range(2):
+        for i in range(1):
             for j in range(ED):
                 for k in range(LD):
                     fig, ax = plt.subplots()
@@ -1342,8 +1343,8 @@ if __name__ == '__main__':
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
                         dat = ZMDIAG[:, :, j, k]
-                    if i == 1:
-                        dat = ZVDIAG[:, :, j, k]
+                    # if i == 1:
+                    #     dat = ZVDIAG[:, :, j, k]
                     im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
@@ -1355,10 +1356,12 @@ if __name__ == '__main__':
                     ax.set_xlabel('T')
                     ax.set_ylabel('H')
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                    fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.%d.png' % (i, j, k))
+                    # fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.png' % (j, k))
                     plt.close()
         # plot pca latent variable diagrams
-        for i in range(2):
+        # for i in range(2):
+        for i in range(1):
             for j in range(ED):
                 for k in range(LD):
                     fig, ax = plt.subplots()
@@ -1370,8 +1373,8 @@ if __name__ == '__main__':
                     ax.yaxis.set_ticks_position('left')
                     if i == 0:
                         dat = PZMDIAG[:, :, j, k]
-                    if i == 1:
-                        dat = PZVDIAG[:, :, j, k]
+                    # if i == 1:
+                    #     dat = PZVDIAG[:, :, j, k]
                     im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
                     ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
                     ax.set_xticks(np.arange(CT.size), minor=True)
@@ -1383,7 +1386,8 @@ if __name__ == '__main__':
                     ax.set_xlabel('T')
                     ax.set_ylabel('H')
                     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    # fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
+                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.png' % (j, k))
                     plt.close()
         # plot physical measurement diagrams
         for i in range(2):
