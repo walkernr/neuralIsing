@@ -948,28 +948,33 @@ if __name__ == '__main__':
 
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
-        ZDEC = np.load(OUTPREF+'.zdec.npy').reshape(*SHP1)
-        ERR = np.load(OUTPREF+'.zerr.npy').reshape(*SHP0)
-        MERR = np.load(OUTPREF+'.zerr.mean.npy')
-        SERR = np.load(OUTPREF+'.zerr.stdv.npy')
-        MXERR = np.load(OUTPREF+'.zerr.max.npy')
-        MNERR = np.load(OUTPREF+'.zerr.min.npy')
-        MAEERR = np.load(OUTPREF+'.zerr.mae.npy')
-        RMSERR = np.load(OUTPREF+'.zerr.rms.npy')
-        R2SCERR = np.load(OUTPREF+'.zerr.r2sc.npy')
+        MERR = np.load(OUTPREF+'.zerr.err.mean.npy')
+        SERR = np.load(OUTPREF+'.zerr.err.stdv.npy')
+        MXERR = np.load(OUTPREF+'.zerr.err.max.npy')
+        MNERR = np.load(OUTPREF+'.zerr.err.min.npy')
+        MAEERR = np.load(OUTPREF+'.zerr.err.mae.npy')
         ERRDOM = np.load(OUTPREF+'.zerr.err.dom.npy')
         ERRPRB = np.load(OUTPREF+'.zerr.err.prb.npy')
         AERRDOM = np.load(OUTPREF+'.zerr.err.abs.dom.npy')
         AERRPRB = np.load(OUTPREF+'.zerr.err.abs.prb.npy')
         DMERR = np.load(OUTPREF+'.zerr.err.dg.me.npy')
         DMAERR = np.load(OUTPREF+'.zerr.err.dg.mae.npy')
-        DRMSERR = np.load(OUTPREF+'.zerr.err.dg.rms.npy')
         if PRIOR == 'gaussian':
-            KLD = np.load(OUTPREF+'.zerr.kld.npy')
             MKLD = np.load(OUTPREF+'.zerr.kld.mean.npy')
             SKLD = np.load(OUTPREF+'.zerr.kld.stdv.npy')
             MXKLD = np.load(OUTPREF+'.zerr.kld.max.npy')
             MNKLD = np.load(OUTPREF+'.zerr.kld.min.npy')
+            KLDDOM = np.load(OUTPREF+'.zerr.kld.dom.npy')
+            KLDPRB = np.load(OUTPREF+'.zerr.kld.prb.npy')
+            DMKLD = np.load(OUTPREF+'.zerr.kld.dg.me.npy')
+        if LSS == 'bc':
+            MBC = np.load(OUTPREF+'.zerr.bc.mean.npy')
+            SBC = np.load(OUTPREF+'.zerr.bc.stdv.npy')
+            MXBC = np.load(OUTPREF+'.zerr.bc.max.npy')
+            MNBC = np.load(OUTPREF+'.zerr.bc.min.npy')
+            BCDOM = np.load(OUTPREF+'.zerr.bc.dom.npy')
+            BCPRB = np.load(OUTPREF+'.zerr.bc.prb.npy')
+            DMBC = np.load(OUTPREF+'.zerr.bc.dg.me.npy')
         if VERBOSE:
             print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -986,18 +991,34 @@ if __name__ == '__main__':
             ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
             # convert log variance to standard deviation
             ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
+            # mean and standard deviation kullback-liebler divergence
+            MKLD = np.mean(KLD)
+            SKLD = np.std(KLD)
+            # minimum and maximum kullback-liebler divergence
+            MXKLD = np.max(KLD)
+            MNKLD = np.min(KLD)
+            # kld distribution
+            KLDDOM = np.linspace(0, np.ceil(MXKLD), 33)
+            KLDPRB = np.histogram(KLD, KLDDOM)[0]/(SNH*SNT*SNS)
+            DMKLD = np.mean(KLD, -1)
             np.save(OUTPREF+'.zerr.kld.npy', KLD)
+            np.save(OUTPREF+'.zerr.kld.mean.npy', MKLD)
+            np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
+            np.save(OUTPREF+'.zerr.kld.max.npy', MXKLD)
+            np.save(OUTPREF+'.zerr.kld.min.npy', MNKLD)
+            np.save(OUTPREF+'.zerr.kld.dom.npy', KLDDOM)
+            np.save(OUTPREF+'.zerr.kld.prb.npy', KLDPRB)
+            np.save(OUTPREF+'.zerr.kld.dg.me.npy', DMKLD)
+            del KLD
         elif PRIOR == 'none':
             ZDEC = np.array(DEC.predict(ZENC, verbose=VERBOSE))
             ZENC = ZENC[:, np.newaxis, :]
         # reconstruction error (signed)
         ERR = (SCDMP-ZDEC).reshape(*SHP0)
-        del SCDMP
         # dump results
         np.save(OUTPREF+'.zenc.npy', ZENC.reshape(*SHP3))
         np.save(OUTPREF+'.zdec.npy', ZDEC.reshape(*SHP0))
-        np.save(OUTPREF+'.zerr.npy', ERR)
-        del ZDEC
+        np.save(OUTPREF+'.zerr.err.npy', ERR)
         # mean and standard deviation of error
         MERR = np.mean(ERR)
         SERR = np.std(ERR)
@@ -1005,42 +1026,46 @@ if __name__ == '__main__':
         MXERR = np.max(ERR)
         MNERR = np.min(ERR)
         MAEERR = np.mean(np.abs(ERR))
-        RMSERR = np.sqrt(np.mean(np.square(ERR)))
-        R2SCERR = 1-np.square(RMSERR)/0.25
-        ERRDOM = np.linspace(np.floor(MNERR), np.ceil(MXERR), 33)
+        ERRDOM = np.linspace(np.floor(MNERR), np.ceil(MXERR), 66)
         ERRPRB = np.histogram(ERR, ERRDOM)[0]/(SNH*SNT*SNS*N*N)
-        AERRDOM = np.linspace(0, np.max((np.abs(MNERR), MXERR)), 17)
+        AERRDOM = np.linspace(0, np.max((np.abs(MNERR), MXERR)), 33)
         AERRPRB = np.histogram(np.abs(ERR), AERRDOM)[0]/(SNH*SNT*SNS*N*N)
         DMERR = np.mean(ERR, (2, 3, 4, 5))
         DMAERR = np.mean(np.abs(ERR), (2, 3, 4, 5))
-        DRMSERR = np.sqrt(np.mean(np.square(ERR), (2, 3, 4, 5)))
-        if PRIOR  == 'gaussian':
-            # mean and standard deviation kullback-liebler divergence
-            MKLD = np.mean(KLD)
-            SKLD = np.std(KLD)
-            # minimum and maximum kullback-liebler divergence
-            MXKLD = np.max(KLD)
-            MNKLD = np.min(KLD)
+        del ERR
+        if LSS != 'bc':
+            del SCDMP, ZDEC
         # dump results
-        np.save(OUTPREF+'.zerr.mean.npy', MERR)
-        np.save(OUTPREF+'.zerr.stdv.npy', SERR)
-        np.save(OUTPREF+'.zerr.max.npy', MXERR)
-        np.save(OUTPREF+'.zerr.min.npy', MNERR)
-        np.save(OUTPREF+'.zerr.mae.npy', MAEERR)
-        np.save(OUTPREF+'.zerr.rms.npy', RMSERR)
-        np.save(OUTPREF+'.zerr.r2sc.npy', R2SCERR)
+        np.save(OUTPREF+'.zerr.err.mean.npy', MERR)
+        np.save(OUTPREF+'.zerr.err.stdv.npy', SERR)
+        np.save(OUTPREF+'.zerr.err.max.npy', MXERR)
+        np.save(OUTPREF+'.zerr.err.min.npy', MNERR)
+        np.save(OUTPREF+'.zerr.err.mae.npy', MAEERR)
         np.save(OUTPREF+'.zerr.err.dom.npy', ERRDOM)
         np.save(OUTPREF+'.zerr.err.prb.npy', ERRPRB)
         np.save(OUTPREF+'.zerr.err.abs.dom.npy', AERRDOM)
         np.save(OUTPREF+'.zerr.err.abs.prb.npy', AERRPRB)
         np.save(OUTPREF+'.zerr.err.dg.me.npy', DMERR)
         np.save(OUTPREF+'.zerr.err.dg.mae.npy', DMAERR)
-        np.save(OUTPREF+'.zerr.err.dg.rms.npy', DRMSERR)
-        if PRIOR == 'gaussian':
-            np.save(OUTPREF+'.zerr.kld.mean.npy', MKLD)
-            np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
-            np.save(OUTPREF+'.zerr.kld.max.npy', MXKLD)
-            np.save(OUTPREF+'.zerr.kld.min.npy', MNKLD)
+        if LSS == 'bc':
+            BC = (-(ZDEC*np.log(SCDMP+EPS)+(1-ZDEC)*np.log(1-SCDMP+EPS))).reshape(*SHP0)
+            del SCDMP, ZDEC
+            np.save(OUTPREF+'.zerr.bc.npy', BC)
+            MBC = np.mean(BC)
+            SBC = np.std(BC)
+            MXBC = np.max(BC)
+            MNBC = np.min(BC)
+            BCDOM = np.linspace(0, np.ceil(MXBC), 33)
+            BCPRB = np.histogram(BC, BCDOM)[0]/(SNH*SNT*SNS*N*N)
+            DMBC = np.mean(BC, (2, 3, 4, 5))
+            del BC
+            np.save(OUTPREF+'.zerr.bc.mean.npy', MBC)
+            np.save(OUTPREF+'.zerr.bc.stdv.npy', SBC)
+            np.save(OUTPREF+'.zerr.bc.max.npy', MXBC)
+            np.save(OUTPREF+'.zerr.bc.min.npy', MNBC)
+            np.save(OUTPREF+'.zerr.bc.dom.npy', BCDOM)
+            np.save(OUTPREF+'.zerr.bc.prb.npy', BCPRB)
+            np.save(OUTPREF+'.zerr.bc.dg.me.npy', DMBC)
 
     if VERBOSE:
         print(100*'-')
@@ -1055,13 +1080,16 @@ if __name__ == '__main__':
         print('max error:       %f' % MXERR)
         print('min error:       %f' % MNERR)
         print('mae error:       %f' % MAEERR)
-        print('rms error:       %f' % RMSERR)
-        print('r2 score:        %f' % R2SCERR)
         if PRIOR == 'gaussian':
             print('mean kld:        %f' % MKLD)
             print('stdv kld:        %f' % SKLD)
             print('max kld:         %f' % MXKLD)
             print('min kld:         %f' % MNKLD)
+        if LSS == 'bc':
+            print('mean bc:         %f' % MBC)
+            print('stdv bc:         %f' % SBC)
+            print('max bc:          %f' % MXBC)
+            print('min bc:          %f' % MNBC)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
@@ -1075,13 +1103,16 @@ if __name__ == '__main__':
         out.write('max error:       %f\n' % MXERR)
         out.write('min error:       %f\n' % MNERR)
         out.write('mae error:       %f\n' % MAEERR)
-        out.write('rms error:       %f\n' % RMSERR)
-        out.write('r2 score:        %f\n' % R2SCERR)
         if PRIOR == 'gaussian':
             out.write('mean kld:        %f\n' % MKLD)
             out.write('stdv kld:        %f\n' % SKLD)
             out.write('max kld:         %f\n' % MXKLD)
             out.write('min kld:         %f\n' % MNKLD)
+        if LSS == 'bc':
+            out.write('mean bc:         %f\n' % MBC)
+            out.write('stdv bc:         %f\n' % SBC)
+            out.write('max bc:          %f\n' % MXBC)
+            out.write('min bc:          %f\n' % MNBC)
         out.write(100*'-'+'\n')
 
     try:
@@ -1171,8 +1202,8 @@ if __name__ == '__main__':
         ax.set_yticks(ey)
         ax.set_xticklabels(np.linspace(np.floor(MNERR), np.ceil(MXERR), 5))
         ax.set_yticklabels(ey)
-        ax.set_xlabel('ERROR')
-        ax.set_ylabel('HISTOGRAM')
+        ax.set_xlabel('Error')
+        ax.set_ylabel('Probability Density')
         fig.savefig(OUTPREF+'.ae.dist.err.me.png')
         plt.close()
 
@@ -1192,8 +1223,8 @@ if __name__ == '__main__':
         ax.set_yticks(ey)
         ax.set_xticklabels(np.linspace(0, np.ceil(np.max((np.abs(MNERR), MXERR))), 5))
         ax.set_yticklabels(ey)
-        ax.set_xlabel('ERROR')
-        ax.set_ylabel('HISTOGRAM')
+        ax.set_xlabel('Absolute Error')
+        ax.set_ylabel('Probability Density')
         fig.savefig(OUTPREF+'.ae.dist.err.mae.png')
         plt.close()
 
@@ -1213,8 +1244,8 @@ if __name__ == '__main__':
         ax.set_yticks(np.arange(CH.size)[::4], minor=False)
         ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
         ax.set_yticklabels(np.round(CH, 2)[::4])
-        ax.set_xlabel('T')
-        ax.set_ylabel('H')
+        ax.set_xlabel(r'$T$')
+        ax.set_ylabel(r'$H$')
         fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
         fig.savefig(OUTPREF+'.ae.diag.err.me.png')
         plt.close()
@@ -1235,32 +1266,10 @@ if __name__ == '__main__':
         ax.set_yticks(np.arange(CH.size)[::4], minor=False)
         ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
         ax.set_yticklabels(np.round(CH, 2)[::4])
-        ax.set_xlabel('T')
-        ax.set_ylabel('H')
+        ax.set_xlabel(r'$T$')
+        ax.set_ylabel(r'$H$')
         fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
         fig.savefig(OUTPREF+'.ae.diag.err.mae.png')
-        plt.close()
-
-        fig, ax = plt.subplots()
-        div = make_axes_locatable(ax)
-        cax = div.append_axes('top', size='5%', pad=0.8)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
-        dat = DRMSERR
-        im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-        ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-        ax.set_xticks(np.arange(CT.size), minor=True)
-        ax.set_yticks(np.arange(CH.size), minor=True)
-        ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-        ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-        ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-        ax.set_yticklabels(np.round(CH, 2)[::4])
-        ax.set_xlabel('T')
-        ax.set_ylabel('H')
-        fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-        fig.savefig(OUTPREF+'.ae.diag.err.rms.png')
         plt.close()
 
         if PRIOR == 'gaussian':
@@ -1271,18 +1280,18 @@ if __name__ == '__main__':
             ax.spines['top'].set_visible(False)
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
-            ex = np.linspace(0.0, np.ceil(KLD.max()), 33)
-            er = np.histogram(KLD, ex)[0]/(SNH*SNT*SNS)
+            ex = KLDDOM
+            er = KLDPRB
             dex = ex[1]-ex[0]
             ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
             ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
             ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
-            ax.set_xticks(np.linspace(0.0, np.ceil(KLD.max()), 5))
+            ax.set_xticks(np.linspace(0.0, np.ceil(MXKLD), 5))
             ax.set_yticks(ey)
-            ax.set_xticklabels(np.linspace(0.0, np.ceil(KLD.max()), 5))
+            ax.set_xticklabels(np.linspace(0.0, np.ceil(MXKLD), 5))
             ax.set_yticklabels(ey)
-            ax.set_xlabel('KLD')
-            ax.set_ylabel('HISTOGRAM')
+            ax.set_xlabel('KullBack-Leibler Divergence')
+            ax.set_ylabel('Probability Density')
             fig.savefig(OUTPREF+'.ae.dist.kld.png')
             plt.close()
 
@@ -1293,7 +1302,7 @@ if __name__ == '__main__':
             ax.spines['top'].set_visible(False)
             ax.xaxis.set_ticks_position('bottom')
             ax.yaxis.set_ticks_position('left')
-            dat = np.mean(KLD, axis=-1)
+            dat = DMKLD
             im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
             ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
             ax.set_xticks(np.arange(CT.size), minor=True)
@@ -1302,24 +1311,67 @@ if __name__ == '__main__':
             ax.set_yticks(np.arange(CH.size)[::4], minor=False)
             ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
             ax.set_yticklabels(np.round(CH, 2)[::4])
-            ax.set_xlabel('T')
-            ax.set_ylabel('H')
+            ax.set_xlabel(r'$T$')
+            ax.set_ylabel(r'$H$')
             fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
             fig.savefig(OUTPREF+'.ae.diag.kld.png')
+            plt.close()
+
+        if LSS == 'bc':
+            # plot binary crossentropy distribution
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.xaxis.set_ticks_position('bottom')
+            ax.yaxis.set_ticks_position('left')
+            ex = BCDOM
+            er = BCPRB
+            dex = ex[1]-ex[0]
+            ey = np.array([0.0, 0.05, 0.1, 0.25, 0.5])
+            ax.bar(ex[1:]-0.5*dex, er, dex, color=CM(0.15))
+            ax.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.linspace(0.0, np.ceil(MXBC), 5))
+            ax.set_yticks(ey)
+            ax.set_xticklabels(np.linspace(0.0, np.ceil(MXBC), 5))
+            ax.set_yticklabels(ey)
+            ax.set_xlabel('Binary Crossentropy')
+            ax.set_ylabel('Probability Density')
+            fig.savefig(OUTPREF+'.ae.dist.bc.png')
+            plt.close()
+
+            fig, ax = plt.subplots()
+            div = make_axes_locatable(ax)
+            cax = div.append_axes('top', size='5%', pad=0.8)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.xaxis.set_ticks_position('bottom')
+            ax.yaxis.set_ticks_position('left')
+            dat = DMBC
+            im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+            ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+            ax.set_xticks(np.arange(CT.size), minor=True)
+            ax.set_yticks(np.arange(CH.size), minor=True)
+            ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+            ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+            ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+            ax.set_yticklabels(np.round(CH, 2)[::4])
+            ax.set_xlabel(r'$T$')
+            ax.set_ylabel(r'$H$')
+            fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+            fig.savefig(OUTPREF+'.ae.diag.bc.png')
             plt.close()
 
         shp0 = (SNH, SNT, SNS, ED*LD)
         shp1 = (SNH, SNT, ED, LD)
         shp2 = (SNH*SNT, ED*LD)
         shp3 = (SNH, SNT, SNS, ED, LD)
-        ct = CT[np.newaxis, :, np.newaxis, np.newaxis]
 
         # diagrams for physical measurements
         MEMDIAG = np.stack((MM, EM), axis=-1).reshape(SNH, SNT, 2)
         MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
         # diagrams for latent variables
         ZMDIAG = np.mean(ZENC.reshape(*shp0), 2).reshape(*shp1)
-        # ZVDIAG = np.var(np.divide(ZENC.reshape(*shp0), ct), 2).reshape(*shp1)
         # diagrams for pca embeddings of latent variables
         PZMDIAG = np.mean(PZENC.reshape(*shp0), 2).reshape(*shp1)
         for i in range(LD):
@@ -1328,67 +1380,54 @@ if __name__ == '__main__':
             if PRIOR == 'gaussian':
                 if PZMDIAG[0, 0, 1, i] > PZMDIAG[0, -1, 1, i]:
                     PZMDIAG[:, :, 1, i] = -PZMDIAG[:, :, 1, i]
-        # PZVDIAG = np.var(np.divide(PZENC.reshape(*shp0), ct), 2).reshape(*shp1)
         # plot latent variable diagrams
-        # for i in range(2):
-        for i in range(1):
-            for j in range(ED):
-                for k in range(LD):
-                    fig, ax = plt.subplots()
-                    div = make_axes_locatable(ax)
-                    cax = div.append_axes('top', size='5%', pad=0.8)
-                    ax.spines['right'].set_visible(False)
-                    ax.spines['top'].set_visible(False)
-                    ax.xaxis.set_ticks_position('bottom')
-                    ax.yaxis.set_ticks_position('left')
-                    if i == 0:
-                        dat = ZMDIAG[:, :, j, k]
-                    # if i == 1:
-                    #     dat = ZVDIAG[:, :, j, k]
-                    im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                    ax.set_xticks(np.arange(CT.size), minor=True)
-                    ax.set_yticks(np.arange(CH.size), minor=True)
-                    ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-                    ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-                    ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-                    ax.set_yticklabels(np.round(CH, 2)[::4])
-                    ax.set_xlabel('T')
-                    ax.set_ylabel('H')
-                    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                    # fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.%d.png' % (i, j, k))
-                    fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.png' % (j, k))
-                    plt.close()
+        for j in range(ED):
+            for k in range(LD):
+                fig, ax = plt.subplots()
+                div = make_axes_locatable(ax)
+                cax = div.append_axes('top', size='5%', pad=0.8)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                dat = ZMDIAG[:, :, j, k]
+                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                ax.set_yticklabels(np.round(CH, 2)[::4])
+                ax.set_xlabel(r'$T$')
+                ax.set_ylabel(r'$H$')
+                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+                fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.png' % (j, k))
+                plt.close()
         # plot pca latent variable diagrams
-        # for i in range(2):
-        for i in range(1):
-            for j in range(ED):
-                for k in range(LD):
-                    fig, ax = plt.subplots()
-                    div = make_axes_locatable(ax)
-                    cax = div.append_axes('top', size='5%', pad=0.8)
-                    ax.spines['right'].set_visible(False)
-                    ax.spines['top'].set_visible(False)
-                    ax.xaxis.set_ticks_position('bottom')
-                    ax.yaxis.set_ticks_position('left')
-                    if i == 0:
-                        dat = PZMDIAG[:, :, j, k]
-                    # if i == 1:
-                    #     dat = PZVDIAG[:, :, j, k]
-                    im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
-                    ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
-                    ax.set_xticks(np.arange(CT.size), minor=True)
-                    ax.set_yticks(np.arange(CH.size), minor=True)
-                    ax.set_xticks(np.arange(CT.size)[::4], minor=False)
-                    ax.set_yticks(np.arange(CH.size)[::4], minor=False)
-                    ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
-                    ax.set_yticklabels(np.round(CH, 2)[::4])
-                    ax.set_xlabel('T')
-                    ax.set_ylabel('H')
-                    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                    # fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.%d.png' % (i, j, k))
-                    fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.png' % (j, k))
-                    plt.close()
+        for j in range(ED):
+            for k in range(LD):
+                fig, ax = plt.subplots()
+                div = make_axes_locatable(ax)
+                cax = div.append_axes('top', size='5%', pad=0.8)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.xaxis.set_ticks_position('bottom')
+                ax.yaxis.set_ticks_position('left')
+                dat = PZMDIAG[:, :, j, k]
+                im = ax.imshow(dat, aspect='equal', interpolation='none', origin='lower', cmap=CM)
+                ax.grid(which='minor', axis='both', linestyle='-', color='k', linewidth=1)
+                ax.set_xticks(np.arange(CT.size), minor=True)
+                ax.set_yticks(np.arange(CH.size), minor=True)
+                ax.set_xticks(np.arange(CT.size)[::4], minor=False)
+                ax.set_yticks(np.arange(CH.size)[::4], minor=False)
+                ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
+                ax.set_yticklabels(np.round(CH, 2)[::4])
+                ax.set_xlabel(r'$T$')
+                ax.set_ylabel(r'$H$')
+                fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
+                fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.png' % (j, k))
+                plt.close()
         # plot physical measurement diagrams
         for i in range(2):
             for j in range(2):
@@ -1411,8 +1450,8 @@ if __name__ == '__main__':
                 ax.set_yticks(np.arange(CH.size)[::4], minor=False)
                 ax.set_xticklabels(np.round(CT, 2)[::4], rotation=-60)
                 ax.set_yticklabels(np.round(CH, 2)[::4])
-                ax.set_xlabel('T')
-                ax.set_ylabel('H')
+                ax.set_xlabel(r'$T$')
+                ax.set_ylabel(r'$H$')
                 fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
                 fig.savefig(OUTPREF+'.ae.diag.mv.%d.%d.png' % (i, j))
                 plt.close()
