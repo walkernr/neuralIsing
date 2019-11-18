@@ -430,6 +430,9 @@ def build_autoencoder():
             # convolution
             c = Conv2D(filters=nf, kernel_size=F, kernel_initializer=init,
                        padding=p, strides=s, name='conv_%d' % u)(c)
+            # batch normalization to scale activations
+            if BN:
+                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
             # activations
             if ACT == 'prelu':
                 c = PReLU(alpha_initializer=alpha_enc, name='prelu_conv_%d' % u)(c)
@@ -444,9 +447,6 @@ def build_autoencoder():
                     c = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
                 else:
                     c = SpatialDropout2D(rate=dp, name='dropout_conv_%d' % u)(c)
-            # batch normalization to scale activations
-            if BN:
-                c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -490,6 +490,9 @@ def build_autoencoder():
     if dn:
         output = Activation(decact, name='activated_reconst')(ct)
     else:
+        # batch renormalization to scale activations
+        if BN:
+            ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
         if ACT == 'prelu':
             ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
         elif ACT == 'lrelu':
@@ -503,9 +506,6 @@ def build_autoencoder():
                 ct = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
             else:
                 ct = SpatialDropout2D(rate=dp, name='dropout_latent_expansion')(ct)
-        # batch renormalization to scale activations
-        if BN:
-            ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -533,6 +533,9 @@ def build_autoencoder():
                 # transposed convolution
                 ct = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=init,
                                      padding=p, strides=s, name='convt_%d' % u)(ct)
+                # batch normalization to scale activations
+                if BN:
+                    ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
                 # activations
                 if ACT == 'prelu':
                     ct = PReLU(alpha_initializer=alpha_dec, name='prelu_convt_%d' % u)(ct)
@@ -547,9 +550,6 @@ def build_autoencoder():
                         ct = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, nf), name='dropout_convt_%d' % u)(ct)
                     else:
                         ct = SpatialDropout2D(rate=dp, name='dropout_convt_%d' % u)(ct)
-                # batch normalization to scale activations
-                if BN:
-                    ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
                 u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
