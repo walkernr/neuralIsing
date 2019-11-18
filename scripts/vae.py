@@ -375,9 +375,7 @@ def build_autoencoder():
     # --------------
     # initialization
     # --------------
-    # output layer activation
-    # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
-    # caused by scaling
+    # hidden activation parameters
     if ACT == 'lrelu':
         alpha_enc = 0.25
         alpha_dec = 0.125
@@ -387,26 +385,28 @@ def build_autoencoder():
     elif ACT == 'elu':
         alpha_enc = 1.0
         alpha_dec = 0.125
-    if PRIOR == 'gaussian':
-        alpha_mu = 1.0
-        alpha_logsigma = 1.0
-    alpha_z = 1.0
+    # output layer activation
+    # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
+    # caused by scaling
     if SCLR in ['minmax', 'tanh', 'global']:
         decact = 'sigmoid'
     else:
         decact = 'tanh'
-    dp = 0.5
+    # dropout rate
+    r = 0.5
     # kernel initializer - customizable
     # use lecun_normal with selu
     init = KIS[KI]
-    # number of convolutions necessary to get down to chosen size length
-    # should use base 2 exponential (integer) side lengths
+    # number of convolutions
     nc = CD
+    # switch for single layer dense network
     if nc == 0:
         dn = 1
     else:
         dn = 0
+    # convolution repitition
     cr = CR+1
+    # padding
     p = P
     # --------------
     # encoder layers
@@ -414,6 +414,7 @@ def build_autoencoder():
     # input layer
     input = Input(shape=(N, N, NCH), name='encoder_input')
     c = input
+    # counter for loop
     u = 0
     # loop through convolutions
     # filter size of (3, 3) to capture nearest neighbors from input
@@ -422,7 +423,7 @@ def build_autoencoder():
             if cr == 1:
                 s = SS
             elif cr == 2:
-                s = j+1
+                s = SS**i
             if VGG:
                 nf = FM**(j % 2)*NF
             else:
@@ -442,15 +443,17 @@ def build_autoencoder():
                 c = ELU(alpha=alpha_enc)(c)
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
+            # dropout
             if DO:
                 if ACT == 'selu':
-                    c = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
+                    c = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
                 else:
-                    c = SpatialDropout2D(rate=dp, name='dropout_conv_%d' % u)(c)
+                    c = SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
     d0 = Flatten(name='flatten')(c)
+    # prior parameters
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
         mu = Dense(LD, name='mu', kernel_initializer=init)(d0)
@@ -462,6 +465,7 @@ def build_autoencoder():
         z = Lambda(gauss_sampling, output_shape=(LD,), name='latent_encoding')([mu, logvar])
         # construct encoder
         encoder = Model(input, [mu, logvar, z], name='encoder')
+    # non-regularized encoding
     elif PRIOR == 'none':
         # encoding
         z = Dense(LD, name='latent_encoding', kernel_initializer=init)(d0)
@@ -486,13 +490,14 @@ def build_autoencoder():
     d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
-    # activations
+    # stop if dense network
     if dn:
         output = Activation(decact, name='activated_reconst')(ct)
     else:
         # batch renormalization to scale activations
         if BN:
             ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
+        # activations
         if ACT == 'prelu':
             ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
         elif ACT == 'lrelu':
@@ -501,11 +506,12 @@ def build_autoencoder():
             ct = ELU(alpha=alpha_dec)(ct)
         elif ACT == 'selu':
             ct = Activation('selu', name='selu_latent_expansion')(ct)
+        # dropout
         if DO:
             if ACT == 'selu':
-                ct = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
+                ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
             else:
-                ct = SpatialDropout2D(rate=dp, name='dropout_latent_expansion')(ct)
+                ct = SpatialDropout2D(rate=r, name='dropout_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -547,9 +553,9 @@ def build_autoencoder():
                     ct = Activation('selu', name='selu_convt_%d' % u)(ct)
                 if DO:
                     if ACT == 'selu':
-                        ct = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, nf), name='dropout_convt_%d' % u)(ct)
+                        ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_convt_%d' % u)(ct)
                     else:
-                        ct = SpatialDropout2D(rate=dp, name='dropout_convt_%d' % u)(ct)
+                        ct = SpatialDropout2D(rate=r, name='dropout_convt_%d' % u)(ct)
                 u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
@@ -781,6 +787,7 @@ if __name__ == '__main__':
         MXSCDMP = np.load(SCPREF+'.dmp.sc.mx.npy')
         MSCDMP = np.load(SCPREF+'.dmp.sc.m.npy')
         SSCDMP = np.load(SCPREF+'.dmp.sc.s.npy')
+        # expand sample space to accomodate augmented samples
         if ROT:
             SNS *= 3
             SHP0 = (SNH, SNT, SNS, N, N, NCH)
@@ -955,6 +962,7 @@ if __name__ == '__main__':
             out.write('%02d %.2f\n' % (i, TLOSS[i]))
         out.write(100*'-' + '\n')
 
+    # attempt to load encoding and reconstruction data
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
         MERR = np.load(OUTPREF+'.zerr.err.mean.npy')
@@ -988,6 +996,7 @@ if __name__ == '__main__':
             print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
         del SCDMP
+    # generate encoding and reconstruction data
     except:
         if VERBOSE:
             print('predicting latent encodings of scaled selected classification samples')
@@ -1056,6 +1065,7 @@ if __name__ == '__main__':
         np.save(OUTPREF+'.zerr.err.abs.prb.npy', AERRPRB)
         np.save(OUTPREF+'.zerr.err.dg.me.npy', DMERR)
         np.save(OUTPREF+'.zerr.err.dg.mae.npy', DMAERR)
+        # calculate binary crossentropy error analysis
         if LSS == 'bc':
             BC = (-(ZDEC*np.log(SCDMP+EPS)+(1-ZDEC)*np.log(1-SCDMP+EPS))).reshape(*SHP0)
             del SCDMP, ZDEC
@@ -1190,6 +1200,7 @@ if __name__ == '__main__':
 
     def ae_plots():
 
+        # plot model diagrams
         # plot_model(AE, to_file=OUTPREF+'.model.ae.png')
         # plot_model(ENC, to_file=OUTPREF+'.model.enc.png')
         # plot_model(DEC, to_file=OUTPREF+'.model.dec.png')
