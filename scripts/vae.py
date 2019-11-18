@@ -440,7 +440,10 @@ def build_autoencoder():
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
             if DO:
-                c = SpatialDropout2D(rate=dp, name='dropout_conv_%d' % u)(c)
+                if ACT == 'selu':
+                    c = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
+                else:
+                    c = SpatialDropout2D(rate=dp, name='dropout_conv_%d' % u)(c)
             # batch normalization to scale activations
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
@@ -496,7 +499,10 @@ def build_autoencoder():
         elif ACT == 'selu':
             ct = Activation('selu', name='selu_latent_expansion')(ct)
         if DO:
-            ct = SpatialDropout2D(rate=dp, name='dropout_latent_expansion')(ct)
+            if ACT == 'selu':
+                ct = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
+            else:
+                ct = SpatialDropout2D(rate=dp, name='dropout_latent_expansion')(ct)
         # batch renormalization to scale activations
         if BN:
             ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
@@ -537,7 +543,10 @@ def build_autoencoder():
                 elif ACT == 'selu':
                     ct = Activation('selu', name='selu_convt_%d' % u)(ct)
                 if DO:
-                    ct = SpatialDropout2D(rate=dp, name='dropout_convt_%d' % u)(ct)
+                    if ACT == 'selu':
+                        ct = AlphaDropout(rate=dp, noise_shape=(BS, 1, 1, nf), name='dropout_convt_%d' % u)(ct)
+                    else:
+                        ct = SpatialDropout2D(rate=dp, name='dropout_convt_%d' % u)(ct)
                 # batch normalization to scale activations
                 if BN:
                     ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
@@ -692,7 +701,7 @@ if __name__ == '__main__':
     import tensorflow as tf
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
-                              Flatten, Reshape, BatchNormalization, Activation, SpatialDropout2D)
+                              Flatten, Reshape, BatchNormalization, Activation, SpatialDropout2D, AlphaDropout)
     from keras.optimizers import SGD, Adadelta, Adam, Adamax, Nadam
     from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
