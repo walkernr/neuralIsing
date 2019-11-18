@@ -1026,7 +1026,7 @@ if __name__ == '__main__':
         MXERR = np.max(ERR)
         MNERR = np.min(ERR)
         MAEERR = np.mean(np.abs(ERR))
-        ERRDOM = np.linspace(np.floor(MNERR), np.ceil(MXERR), 66)
+        ERRDOM = np.linspace(np.floor(MNERR), np.ceil(MXERR), 65)
         ERRPRB = np.histogram(ERR, ERRDOM)[0]/(SNH*SNT*SNS*N*N)
         AERRDOM = np.linspace(0, np.max((np.abs(MNERR), MXERR)), 33)
         AERRPRB = np.histogram(np.abs(ERR), AERRDOM)[0]/(SNH*SNT*SNS*N*N)
