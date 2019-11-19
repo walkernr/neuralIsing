@@ -398,7 +398,7 @@ def build_autoencoder():
     # number of convolutions
     nc = CD
     # dropout rate
-    r = 0.5/CD
+    r = 0.5
     # switch for single layer dense network
     if nc == 0:
         dn = 1
@@ -448,9 +448,9 @@ def build_autoencoder():
             # dropout
             if DO:
                 if ACT == 'selu':
-                    c = AlphaDropout(rate=r*(i+1), noise_shape=(1, 1, nf), name='dropout_conv_%d' % u)(c)
+                    c = AlphaDropout(rate=r, noise_shape=(1, 1, nf), name='dropout_conv_%d' % u)(c)
                 else:
-                    c = SpatialDropout2D(rate=r*(i+1), name='dropout_conv_%d' % u)(c)
+                    c = SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -513,7 +513,7 @@ def build_autoencoder():
         # dropout
         if DO:
             if ACT == 'selu':
-                ct = AlphaDropout(rate=r*CD, noise_shape=(1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
+                ct = AlphaDropout(rate=r, noise_shape=(1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
             else:
                 ct = SpatialDropout2D(rate=r, name='dropout_latent_expansion')(ct)
     u = 0
@@ -559,9 +559,9 @@ def build_autoencoder():
                     ct = Activation('selu', name='selu_convt_%d' % u)(ct)
                 if DO:
                     if ACT == 'selu':
-                        ct = AlphaDropout(rate=r*i, noise_shape=(1, 1, nf), name='dropout_convt_%d' % u)(ct)
+                        ct = AlphaDropout(rate=r, noise_shape=(1, 1, nf), name='dropout_convt_%d' % u)(ct)
                     else:
-                        ct = SpatialDropout2D(rate=r*i, name='dropout_convt_%d' % u)(ct)
+                        ct = SpatialDropout2D(rate=r, name='dropout_convt_%d' % u)(ct)
                 u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
