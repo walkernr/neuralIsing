@@ -435,6 +435,8 @@ def build_autoencoder():
             if BN:
                 c = BatchNormalization(name='batch_norm_conv_%d' % u)(c)
             # activations
+            if ACT == 'relu':
+                c = Activation('relu', name='relu_conv_%d' % u)(c)
             if ACT == 'prelu':
                 c = PReLU(alpha_initializer=alpha_enc, name='prelu_conv_%d' % u)(c)
             elif ACT == 'lrelu':
@@ -498,6 +500,8 @@ def build_autoencoder():
         if BN:
             ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
         # activations
+        if ACT == 'relu':
+            ct = Activation('relu', name='relu_latent_expansion')(ct)
         if ACT == 'prelu':
             ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
         elif ACT == 'lrelu':
@@ -543,6 +547,8 @@ def build_autoencoder():
                 if BN:
                     ct = BatchNormalization(name='batch_norm_convt_%d' % u)(ct)
                 # activations
+                if ACT == 'relu':
+                    ct = Activation('relu', name='relu_convt_%d' % u)(ct)
                 if ACT == 'prelu':
                     ct = PReLU(alpha_initializer=alpha_dec, name='prelu_convt_%d' % u)(ct)
                 elif ACT == 'lrelu':
