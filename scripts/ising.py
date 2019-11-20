@@ -266,7 +266,7 @@ def extract(config, h):
             nn = config[(i+1)%N, j]+config[i,(j+1)%N]+config[(i-1)%N, j]+config[i,(j-1)%N]
             ener -= J*s*nn
     # correction factor
-    ener = 0.25*ener
+    ener = 0.5*ener
     # add in magnetic contribution to energy
     ener -= h*mag
     return ener, mag
