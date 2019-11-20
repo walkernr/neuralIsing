@@ -853,9 +853,10 @@ if __name__ == '__main__':
         # data scaling
         if SCLR == 'global':
             SCDMP = CDMP.reshape(*SHP1)
-            for i in range(NCH):
-                TMIN, TMAX = SCDMP[:, :, :, i].min(), SCDMP[:, :, :, i].max()
-                SCDMP[:, :, :, i] = (SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
+            # for i in range(NCH):
+            #     TMIN, TMAX = SCDMP[:, :, :, i].min(), SCDMP[:, :, :, i].max()
+            #     SCDMP[:, :, :, i] = (SCDMP[:, :, :, i]-TMIN)/(TMAX-TMIN)
+            SCDMP = (CDMP+1)/2
         elif SCLR == 'none':
             SCDMP = CDMP.reshape(*SHP1)
         else:
@@ -897,7 +898,8 @@ if __name__ == '__main__':
            'he_normal': he_normal(SEED)}
 
     # optmizers
-    OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
+    OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=False),
+            'nag': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
             'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
             'adam': Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True),
             'adamax': Adamax(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0),
