@@ -513,7 +513,7 @@ def build_autoencoder():
         # dropout
         if DO:
             if ACT == 'selu':
-                ct = AlphaDropout(rate=r, noise_shape=(BC, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
+                ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
             else:
                 ct = SpatialDropout2D(rate=r, name='dropout_latent_expansion')(ct)
     u = 0
