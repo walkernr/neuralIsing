@@ -1077,7 +1077,7 @@ if __name__ == '__main__':
         np.save(OUTPREF+'.zerr.err.dg.mae.npy', DMAERR)
         # calculate binary crossentropy error analysis
         if LSS == 'bc':
-            BC = (-(ZDEC*np.log(SCDMP+EPS)+(1-ZDEC)*np.log(1-SCDMP+EPS))).reshape(*SHP0)
+            BC = (-(SCDMP*np.log(ZDEC+EPS)+(1-SCDMP)*np.log(1-ZDEC+EPS))).reshape(*SHP0)
             del SCDMP, ZDEC
             np.save(OUTPREF+'.zerr.bc.npy', BC)
             MBC = np.mean(BC)
