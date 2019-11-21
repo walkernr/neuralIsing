@@ -1127,7 +1127,7 @@ if __name__ == '__main__':
         out.write('fitting errors\n')
         out.write(100*'-'+'\n')
         out.write('mean sig:        %f\n' % MSCDMP)
-        out.write('stdv sig:        %f\n' % MNSCDMP)
+        out.write('stdv sig:        %f\n' % SSCDMP)
         out.write('max sig          %f\n' % MXSCDMP)
         out.write('min sig          %f\n' % MNSCDMP)
         out.write('mean error:      %f\n' % MERR)
