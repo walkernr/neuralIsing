@@ -447,10 +447,11 @@ def build_autoencoder():
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
             # dropout
             if DO:
-                if ACT == 'selu':
-                    c = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
-                else:
-                    c = SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
+                # if ACT == 'selu':
+                #     c = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
+                # else:
+                    # c = SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
+                SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
@@ -512,10 +513,11 @@ def build_autoencoder():
             ct = Activation('selu', name='selu_latent_expansion')(ct)
         # dropout
         if DO:
-            if ACT == 'selu':
-                ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
-            else:
-                ct = SpatialDropout2D(rate=r, name='dropout_latent_expansion')(ct)
+            # if ACT == 'selu':
+            #     ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
+            # else:
+            #     ct = SpatialDropout2D(rate=r, name='dropout_latent_expansion')(ct)
+            ct = SpatialDropout2D(rate=r, name='dropout_latent_expansion')(ct)
     u = 0
     # loop through convolution transposes
     for i in range(nc-1, -1, -1):
@@ -558,10 +560,11 @@ def build_autoencoder():
                 elif ACT == 'selu':
                     ct = Activation('selu', name='selu_convt_%d' % u)(ct)
                 if DO:
-                    if ACT == 'selu':
-                        ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_convt_%d' % u)(ct)
-                    else:
-                        ct = SpatialDropout2D(rate=r, name='dropout_convt_%d' % u)(ct)
+                    # if ACT == 'selu':
+                    #     ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_convt_%d' % u)(ct)
+                    # else:
+                    #     ct = SpatialDropout2D(rate=r, name='dropout_convt_%d' % u)(ct)
+                    ct = SpatialDropout2D(rate=r, name='dropout_convt_%d' % u)(ct)
                 u += 1
     # construct decoder
     decoder = Model(latent_input, output, name='decoder')
