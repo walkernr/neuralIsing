@@ -451,7 +451,7 @@ def build_autoencoder():
                 #     c = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, nf), name='dropout_conv_%d' % u)(c)
                 # else:
                     # c = SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
-                SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
+                c = SpatialDropout2D(rate=r, name='dropout_conv_%d' % u)(c)
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
