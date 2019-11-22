@@ -668,6 +668,12 @@ def rotation_augment(dmp, dat):
     return dmp, dat
 
 
+def regular_subsampling(dat):
+    nsq = np.int32(SNH*SNT/BS)
+    ind = np.arange(SNH*SNT)
+    mind = np.concatenate([ind[i::nsq] for i in range(nsq))
+    return mind
+
 if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
@@ -939,7 +945,7 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
-        AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
+        AE.fit(x=np.moveaxis(SCDMP.reshape(SNH*SNT, SNS, N, N, NCH)[regular_subsampling()], 1, 0).reshape(*SHP1),
                y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
         # VLOSS = AE.history.history['val_loss']
