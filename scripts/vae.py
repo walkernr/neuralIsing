@@ -671,7 +671,7 @@ def rotation_augment(dmp, dat):
 def regular_subsampling(dat):
     nsq = np.int32(SNH*SNT/BS)
     ind = np.arange(SNH*SNT)
-    mind = np.concatenate([ind[i::nsq] for i in range(nsq))
+    mind = np.concatenate([ind[i::nsq] for i in range(nsq)])
     return mind
 
 if __name__ == '__main__':
