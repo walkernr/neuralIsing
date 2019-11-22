@@ -670,9 +670,13 @@ def rotation_augment(dmp, dat):
 
 def regular_subsampling(dat):
     nsq = np.int32(SNH*SNT/BS)
-    ind = np.arange(SNH*SNT)
-    mind = np.concatenate([ind[i::nsq] for i in range(nsq)])
-    return mind
+    nsql = np.int32(np.sqrt(nsq))
+    sql = np.int32(np.sqrt(BS))
+    sqi = np.stack(np.meshgrid(np.arange(sql), np.arange(sql)), axis=-1).reshape(-1, 2)[:, ::-1]
+    sqis = np.array([[sqi+sql*np.array([i,j]).reshape(1, -1) for i in range(nsql)] for j in range(nsql)])
+    sqis1d = np.ravel_multi_index(sqis.reshape(-1, 2).T, dims=(SNH, SNT))
+    msqis1d = np.concatenate([sqis1d[i::BS] for i in range(BS)])
+    return msqis1d
 
 if __name__ == '__main__':
     # parse command line arguments
@@ -945,8 +949,13 @@ if __name__ == '__main__':
         CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
-        AE.fit(x=np.moveaxis(SCDMP.reshape(SNH*SNT, SNS, N, N, NCH)[regular_subsampling()], 1, 0).reshape(*SHP1),
-               y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+        try:
+            PHIND = regular_subsampling()
+            AE.fit(x=np.moveaxis(SCDMP.reshape(SNH*SNT, SNS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
+                   y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+        except:
+            AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
+                   y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = AE.history.history['loss']
         # VLOSS = AE.history.history['val_loss']
         AE.save_weights(OUTPREF+'.ae.wt.h5')
