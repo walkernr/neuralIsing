@@ -668,7 +668,7 @@ def rotation_augment(dmp, dat):
     return dmp, dat
 
 
-def regular_subsampling(dat):
+def regular_subsampling():
     nsq = np.int32(SNH*SNT/BS)
     nsql = np.int32(np.sqrt(nsq))
     sql = np.int32(np.sqrt(BS))
