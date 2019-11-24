@@ -25,6 +25,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', help='verbose output',
                         action='store_true')
+    parser.add_argument('-r', '--restart', help='restart mode',
+                        action='store_true')
     parser.add_argument('-pt', '--plot', help='plot results',
                         action='store_true')
     parser.add_argument('-p', '--parallel', help='parallel (cpu) mode',
@@ -95,7 +97,7 @@ def parse_args():
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=512)
     args = parser.parse_args()
-    return (args.verbose, args.plot, args.parallel, args.gpu, args.threads, args.name,
+    return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads, args.name,
             args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.stride_size,
             args.filters, args.filter_multiply, args.padding, args.activation, args.batch_normalization, args.dropout,
@@ -110,6 +112,7 @@ def write_specs():
         print(100*'-')
         print('input summary')
         print(100*'-')
+        print('restart:                   %d' % RSTRT)
         print('plot:                      %d' % PLOT)
         print('parallel:                  %d' % PARALLEL)
         print('gpu:                       %d' % GPU)
@@ -151,6 +154,7 @@ def write_specs():
         out.write(100*'-' + '\n')
         out.write('input summary\n')
         out.write(100*'-' + '\n')
+        out.write('restart:                   %d\n' % RSTRT)
         out.write('plot:                      %d\n' % PLOT)
         out.write('parallel:                  %d\n' % PARALLEL)
         out.write('gpu:                       %d\n' % GPU)
@@ -680,7 +684,7 @@ def regular_subsampling():
 
 if __name__ == '__main__':
     # parse command line arguments
-    (VERBOSE, PLOT, PARALLEL, GPU, THREADS, NAME,
+    (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS, NAME,
      N, SNI, SNS, ROT, SCLR,
      PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, P, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
@@ -941,6 +945,30 @@ if __name__ == '__main__':
         if VERBOSE:
             print('autoencoder trained weights loaded from file')
             print(100*'-')
+        if RSTRT:
+            if VERBOSE:
+                print('autoencoder training on scaled selected classification samples')
+                print(100*'-')
+            # output log
+            CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
+            # learning rate decay on loss plateau
+            LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
+            try:
+                PHIND = regular_subsampling()
+                AE.fit(x=np.moveaxis(SCDMP.reshape(SNH*SNT, SNS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
+                       y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+            except:
+                AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
+                       y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
+            TLOSS = np.concatenate((TLOSS, AE.history.history['loss']))
+            # VLOSS = AE.history.history['val_loss']
+            AE.save_weights(OUTPREF+'.ae.wt.h5')
+            np.save(OUTPREF+'.ae.loss.trn.npy', TLOSS)
+            # np.save(OUTPREF+'.ae.loss.val.npy', VLOSS)
+            if VERBOSE:
+                print(100*'-')
+                print('autoencoder weights trained')
+                print(100*'-')
     except:
         if VERBOSE:
             print('autoencoder training on scaled selected classification samples')
