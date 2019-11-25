@@ -1000,7 +1000,7 @@ if __name__ == '__main__':
         # print('| epoch | training loss | validation loss |')
         print('| epoch | training loss |')
         print(100*'-')
-        for i in range(EP):
+        for i in range(TLOSS.size):
             # print('%02d %.2f %.2f' % (i, TLOSS[i], VLOSS[i]))
             print('%02d %.2f' % (i, TLOSS[i]))
         print(100*'-')
@@ -1011,7 +1011,7 @@ if __name__ == '__main__':
         # out.write('| epoch | training loss | validation loss |\n')
         out.write('| epoch | training loss |\n')
         out.write(100*'-' + '\n')
-        for i in range(EP):
+        for i in range(TLOSS.size):
             # out.write('%02d %.2f %.2f\n' % (i, TLOSS[i], VLOSS[i]))
             out.write('%02d %.2f\n' % (i, TLOSS[i]))
         out.write(100*'-' + '\n')
