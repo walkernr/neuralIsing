@@ -321,9 +321,6 @@ def spin_flip_mc(config, h, t, nts, nas):
     nts += 1
     ener, _ = extract(config, h)
     u, v = np.random.randint(0, N, size=2)
-    # config[u, v] *= -1
-    # nener, _ = extract(config, h)
-    # de = nener-ener
     s = config[u, v]
     nn = config[(u+1)%N, v]+config[u, (v+1)%N]+config[(u-1)%N, v]+config[u, (v-1)%N]
     de = 2*s*(J*nn+h)
@@ -331,11 +328,21 @@ def spin_flip_mc(config, h, t, nts, nas):
         # update acceptations
         nas += 1
         config[u, v] *= -1
-    # else:
-        # revert spin
-        # config[u, v] *= -1
     # return spins and tries/acceptations
     return config, nts, nas
+
+
+@nb.njit
+def total_spin_flip_mc(config, h, t):
+    ''' spin flip monte carlo '''
+    nts += 1
+    ener, _ = extract(config, h)
+    nener, _ = extract(-1*config, h)
+    de = nener-ener
+    if de < 0 or np.random.rand() < np.exp(-de/t):
+        config *= -1
+    # return spins
+    return config
 
 # ---------------------
 # monte carlo procedure
@@ -353,6 +360,8 @@ def gen_sample(k, state):
     # loop through monte carlo moves
     for _ in it.repeat(None, MOD):
         config, nts, nas = spin_flip_mc(config, h, t, nts, nas)
+    if np.random.rand() < 0.5:
+        config = total_spin_flip_mc(config, h, t)
     # extract system properties
     ener, mag = extract(config, h)
     # acceptation ratio
