@@ -335,7 +335,6 @@ def spin_flip_mc(config, h, t, nts, nas):
 @nb.njit
 def total_spin_flip_mc(config, h, t):
     ''' spin flip monte carlo '''
-    nts += 1
     ener, _ = extract(config, h)
     nener, _ = extract(-1*config, h)
     de = nener-ener
