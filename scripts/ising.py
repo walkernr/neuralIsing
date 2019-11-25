@@ -398,24 +398,26 @@ def replica_exchange():
     ''' performs parallel tempering across temperature samples for each field strength '''
     # catalog swaps
     swaps = 0
-    # loop through pressures
-    for u in range(NH):
-        # loop through reference temperatures from high to low
-        for v in range(NT-1, -1, -1):
-            # loop through temperatures from low to current reference temperature
-            for w in range(v):
-                # extract index from each pressure/temperature index pair
-                i = np.ravel_multi_index((u, v), (NH, NT), order='C')
-                j = np.ravel_multi_index((u, w), (NH, NT), order='C')
-                # calculate energy and volume differences
-                de = STATE[i][1]-STATE[j][1]
-                # enthalpy difference
-                dh = de*(1./T[v]-1./T[w])
-                # metropolis criterion
-                if np.random.rand() <= np.exp(dh):
-                    swaps += 1
-                    # swap states
-                    STATE[j], STATE[i] = STATE[i], STATE[j]
+    # loop through fields high to low
+    for u in range(NH-1, -1, -1):
+        # loop through fields from low to reference field
+        for v in range(u):
+            # loop through reference temperatures from high to low
+            for p in range(NT-1, -1, -1):
+                # loop through temperatures from low to current reference temperature
+                for q in range(v):
+                    # extract index from each field/temperature index pair
+                    i = np.ravel_multi_index((u, p), (NH, NT), order='C')
+                    j = np.ravel_multi_index((v, q), (NH, NT), order='C')
+                    # calculate energy differences
+                    de = STATE[i][1]-STATE[j][1]
+                    # enthalpy difference
+                    dh = de*(1./T[p]-1./T[q])
+                    # metropolis criterion
+                    if np.random.rand() <= np.exp(dh):
+                        swaps += 1
+                        # swap states
+                        STATE[j], STATE[i] = STATE[i], STATE[j]
     if VERBOSE:
         if PARALLEL:
             print('\n-------------------------------')
