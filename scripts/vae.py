@@ -903,7 +903,7 @@ if __name__ == '__main__':
     # mean magnetizations
     MM = np.mean(MS, -1)
     # magnetic susceptibilities
-    SU = np.var(MS, 2)/CT[np.newaxis, :]
+    SU = np.var(np.abs(MS), 2)/CT[np.newaxis, :]
 
     # kernel initializers
     KIS = {'glorot_uniform': glorot_uniform(SEED),
