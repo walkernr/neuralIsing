@@ -993,7 +993,7 @@ if __name__ == '__main__':
             except:
                 AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
                        y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
-            TLOSS = np.concatenate((TLOSS, AE.history.history['loss']))
+            TLOSS = np.concatenate((TLOSS, np.array(AE.history.history['loss'])))
             # VLOSS = AE.history.history['val_loss']
             AE.save_weights(OUTPREF+'.ae.wt.h5')
             np.save(OUTPREF+'.ae.loss.trn.npy', TLOSS)
@@ -1017,7 +1017,7 @@ if __name__ == '__main__':
         except:
             AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
                    y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
-        TLOSS = AE.history.history['loss']
+        TLOSS = np.array(AE.history.history['loss'])
         # VLOSS = AE.history.history['val_loss']
         AE.save_weights(OUTPREF+'.ae.wt.h5')
         np.save(OUTPREF+'.ae.loss.trn.npy', TLOSS)
