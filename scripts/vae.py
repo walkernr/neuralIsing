@@ -462,7 +462,7 @@ def build_autoencoder():
     # flatten convolutional output
     shape = K.int_shape(c)
     d = Flatten(name='flatten')(c)
-    d = Dense(units=1024, kernel_initializer=init, name='dense_0')(d)
+    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_0')(d)
     # batch normalization to scale activations
     if BN:
         d = BatchNormalization(name='batch_norm_dense_0')(d)
@@ -480,10 +480,10 @@ def build_autoencoder():
     # prior parameters
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
-        mu = Dense(LD, kernel_initializer='glorot_uniform', name='mu')(d)
+        mu = Dense(units=LD, kernel_initializer='glorot_uniform', name='mu')(d)
         mu = Activation('linear', name='linear_mu')(mu)
         # more numerically stable to use log(var_z)
-        logvar = Dense(LD, kernel_initializer='glorot_uniform', name='log_var')(d)
+        logvar = Dense(units=LD, kernel_initializer='glorot_uniform', name='log_var')(d)
         logvar = Activation('linear', name='linear_log_var')(logvar)
         # sample from gaussian
         z = Lambda(gauss_sampling, output_shape=(LD,), name='z')([mu, logvar])
@@ -511,7 +511,7 @@ def build_autoencoder():
     # --------------
     # input layer (latent variables z)
     latent_input = Input(shape=(LD,), name='latent_encoding')
-    d = Dense(units=1024, kernel_initializer=init, name='dense_0')(latent_input)
+    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_0')(latent_input)
     # batch normalization to scale activations
     if BN:
         d = BatchNormalization(name='batch_norm_dense_0')(d)
@@ -527,7 +527,7 @@ def build_autoencoder():
     elif ACT == 'selu':
         d = Activation('selu', name='selu_dense_0')(d)
     # dense network of same size as convolution output from encoder
-    d = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(d)
+    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(d)
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d)
     # stop if dense network
