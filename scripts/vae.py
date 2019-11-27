@@ -381,20 +381,22 @@ def build_autoencoder():
     # --------------
     # hidden activation parameters
     if ACT == 'lrelu':
-        alpha_enc = 0.25
-        alpha_dec = 0.125
+        alpha_enc = 0.0
+        alpha_dec = 0.1
     if ACT == 'prelu':
-        alpha_enc = Constant(value=0.25)
-        alpha_dec = Constant(value=0.125)
+        alpha_enc = Constant(value=0.0)
+        alpha_dec = Constant(value=0.1)
     elif ACT == 'elu':
-        alpha_enc = 1.0
-        alpha_dec = 0.125
+        alpha_enc = 0.0
+        alpha_dec = 0.1
     # output layer activation
     # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
     # caused by scaling
     if SCLR in ['minmax', 'tanh', 'global']:
+        decinit = 'glorot_uniform'
         decact = 'sigmoid'
     else:
+        decinit = 'glorot_uniform'
         decact = 'tanh'
     # kernel initializer - customizable
     # use lecun_normal with selu
@@ -446,7 +448,7 @@ def build_autoencoder():
             elif ACT == 'lrelu':
                 c = LeakyReLU(alpha=alpha_enc, name='lrelu_conv_%d' % u)(c)
             elif ACT == 'elu':
-                c = ELU(alpha=alpha_enc)(c)
+                c = ELU(alpha=alpha_enc, name='elu_conv_%d' % u)(c)
             elif ACT == 'selu':
                 c = Activation('selu', name='selu_conv_%d' % u)(c)
             # dropout
@@ -459,23 +461,39 @@ def build_autoencoder():
             u += 1
     # flatten convolutional output
     shape = K.int_shape(c)
-    d0 = Flatten(name='flatten')(c)
+    d = Flatten(name='flatten')(c)
+    d = Dense(units=1024, kernel_initializer=init, name='dense_0')(d)
+    # batch normalization to scale activations
+    if BN:
+        d = BatchNormalization(name='batch_norm_dense_0')(d)
+    # activations
+    if ACT == 'relu':
+        d = Activation('relu', name='relu_dense_0')(d)
+    if ACT == 'prelu':
+        d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_0')(d)
+    elif ACT == 'lrelu':
+        d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_0')(d)
+    elif ACT == 'elu':
+        d = ELU(alpha=alpha_enc, name='elu_dense_0')(c)
+    elif ACT == 'selu':
+        d = Activation('selu', name='selu_dense_0')(d)
     # prior parameters
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
-        mu = Dense(LD, name='mu', kernel_initializer=init)(d0)
+        mu = Dense(LD, kernel_initializer='glorot_uniform', name='mu')(d)
         mu = Activation('linear', name='linear_mu')(mu)
         # more numerically stable to use log(var_z)
-        logvar = Dense(LD, name='log_var', kernel_initializer=init)(d0)
+        logvar = Dense(LD, kernel_initializer='glorot_uniform', name='log_var')(d)
         logvar = Activation('linear', name='linear_log_var')(logvar)
         # sample from gaussian
-        z = Lambda(gauss_sampling, output_shape=(LD,), name='latent_encoding')([mu, logvar])
+        z = Lambda(gauss_sampling, output_shape=(LD,), name='z')([mu, logvar])
         # construct encoder
         encoder = Model(input, [mu, logvar, z], name='encoder')
     # non-regularized encoding
     elif PRIOR == 'none':
         # encoding
-        z = Dense(LD, name='latent_encoding', kernel_initializer=init)(d0)
+        z = Dense(LD, kernel_initializer=init, name='z')(d)
+        z = Activation('linear', name='linear_z')(z)
         # construct encoder
         encoder = Model(input, z, name='encoder')
     if VERBOSE:
@@ -493,10 +511,25 @@ def build_autoencoder():
     # --------------
     # input layer (latent variables z)
     latent_input = Input(shape=(LD,), name='latent_encoding')
+    d = Dense(units=1024, kernel_initializer=init, name='dense_0')(latent_input)
+    # batch normalization to scale activations
+    if BN:
+        d = BatchNormalization(name='batch_norm_dense_0')(d)
+    # activations
+    if ACT == 'relu':
+        d = Activation('relu', name='relu_dense_0')(d)
+    if ACT == 'prelu':
+        d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_0')(d)
+    elif ACT == 'lrelu':
+        d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_0')(d)
+    elif ACT == 'elu':
+        d = ELU(alpha=alpha_enc, name='elu_dense_0')(c)
+    elif ACT == 'selu':
+        d = Activation('selu', name='selu_dense_0')(d)
     # dense network of same size as convolution output from encoder
-    d1 = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(latent_input)
+    d = Dense(np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(d)
     # reshape to convolution shape
-    ct = Reshape(shape[1:], name='reshape_latent_expansion')(d1)
+    ct = Reshape(shape[1:], name='reshape_latent_expansion')(d)
     # stop if dense network
     if dn:
         output = Activation(decact, name='activated_reconst')(ct)
@@ -533,7 +566,7 @@ def build_autoencoder():
                     s = 1
                 nf = NCH
                 # output convolution transpose layer
-                output = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=init,
+                output = Conv2DTranspose(filters=nf, kernel_size=F, kernel_initializer=decinit,
                                          padding=p, strides=s, name='reconst')(ct)
                 # output layer activation
                 output = Activation(decact, name='activated_reconst')(output)
