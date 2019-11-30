@@ -43,7 +43,6 @@ def parse_args():
                         type=int, default=1)
     parser.add_argument('-sn', '--super_samples', help='number of samples per phase point (variational autoencoder)',
                         type=int, default=256)
-    parser.add_argument('-rot', '--rotation_augment', help='rotational sample augmentation', action='store_true')
     parser.add_argument('-sc', '--scaler', help='feature scaling method (none, global, minmax, robust, standard, tanh)',
                         type=str, default='global')
     parser.add_argument('-pd', '--prior_distribution', help='prior distribution for autoencoder',
@@ -98,7 +97,7 @@ def parse_args():
                         type=int, default=512)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads, args.name,
-            args.lattice_size, args.super_interval, args.super_samples, args.rotation_augment, args.scaler,
+            args.lattice_size, args.super_interval, args.super_samples, args.scaler,
             args.prior_distribution, args.kernel_initializer, args.vgg, args.convdepth, args.convrep, args.filter_size, args.stride_size,
             args.filters, args.filter_multiply, args.padding, args.activation, args.batch_normalization, args.dropout,
             args.latent_dimension, args.optimizer, args.learning_rate,
@@ -120,8 +119,7 @@ def write_specs():
         print('name:                      %s' % NAME)
         print('lattice size:              %d' % N)
         print('super interval:            %d' % SNI)
-        print('super samples:             %d' % SNS)
-        print('rotation augment:          %d' % ROT)
+        print('super samples:             %d' % NS)
         print('scaler:                    %s' % SCLR)
         print('prior distribution:        %s' % PRIOR)
         print('kernel initializer:        %s' % KI)
@@ -162,8 +160,7 @@ def write_specs():
         out.write('name:                      %s\n' % NAME)
         out.write('lattice size:              %d\n' % N)
         out.write('super interval:            %d\n' % SNI)
-        out.write('super samples:             %d\n' % SNS)
-        out.write('rotation augment:          %d\n' % ROT)
+        out.write('super samples:             %d\n' % NS)
         out.write('scaler:                    %s\n' % SCLR)
         out.write('prior distribution:        %s\n' % PRIOR)
         out.write('kernel initializer:        %s\n' % KI)
@@ -325,7 +322,7 @@ def log_importance_weight(batch_size=None, dataset_size=None):
     if batch_size is None:
         batch_size = BS
     if dataset_size is None:
-        dataset_size = SNH*SNT*SNS
+        dataset_size = NH*NT*NS
     n, m = dataset_size, batch_size-1
     strw = (n-m)/(n*m)
     w = K.concatenate((K.concatenate((1/n*K.ones((batch_size-2, 1)),
@@ -362,8 +359,8 @@ def tc(z, beta, batch_size=None):
         logqz_prodmarginals = K.sum(log_sum_exp(K.reshape(log_iw, (batch_size, batch_size, 1))+_logqz), 1)
         logqz = log_sum_exp(log_iw+K.sum(_logqz, axis=2))
     else:
-        logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*SNH*SNT*SNS, 'float32')), 1)
-        logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*SNH*SNT*SNS, 'float32'))
+        logqz_prodmarginals = K.sum(log_sum_exp(_logqz)-K.log(K.cast(BS*NH*NT*NS, 'float32')), 1)
+        logqz = log_sum_exp(K.sum(_logqz, axis=2))-K.log(K.cast(BS*NH*NT*NS, 'float32'))
     # alpha controls index-code mutual information
     # beta controls total correlation
     # lambda controls dimension-wise kld
@@ -542,26 +539,12 @@ def build_autoencoder():
     elif ACT == 'selu':
         d = Activation('selu', name='selu_dense_1')(d)
     # reshape to convolution shape
-    ct = Reshape(shape[1:], name='reshape_latent_expansion')(d)
+    ct = Reshape(shape[1:], name='reshape_0')(d)
     # stop if dense network
     if dn:
         output = Activation(decact, name='activated_reconst')(ct)
     else:
-    #     # batch renormalization to scale activations
-    #     if BN:
-    #         ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
-    #     # activations
-    #     if ACT == 'relu':
-    #         ct = Activation('relu', name='relu_latent_expansion')(ct)
-    #     if ACT == 'prelu':
-    #         ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
-    #     elif ACT == 'lrelu':
-    #         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
-    #     elif ACT == 'elu':
-    #         ct = ELU(alpha=alpha_dec)(ct)
-    #     elif ACT == 'selu':
-    #         ct = Activation('selu', name='selu_latent_expansion')(ct)
-    #     # dropout
+        # dropout
         if DO:
             # if ACT == 'selu':
             #     ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
@@ -711,27 +694,20 @@ def inlier_selection(dmp, dat, intrvl, ns):
     return sldmp, sldat
 
 
-def rotation_augment(dmp, dat):
-    shp1 = (SNH, SNT, 3*SNS, N, N, NCH)
-    dmp = np.concatenate((dmp.reshape(*SHP0), np.flip(dmp.reshape(*SHP0), 3), np.flip(dmp.reshape(*SHP0), 4)), axis=2).reshape(*shp1)
-    dat = np.tile(dat, (1, 1, 3, 1))
-    return dmp, dat
-
-
 def regular_subsampling():
-    nsq = np.int32(SNH*SNT/BS)
+    nsq = np.int32(NH*NT/BS)
     nsql = np.int32(np.sqrt(nsq))
     sql = np.int32(np.sqrt(BS))
     sqi = np.stack(np.meshgrid(np.arange(sql), np.arange(sql)), axis=-1).reshape(-1, 2)[:, ::-1]
     sqis = np.array([[sqi+sql*np.array([i,j]).reshape(1, -1) for i in range(nsql)] for j in range(nsql)])
-    sqis1d = np.ravel_multi_index(sqis.reshape(-1, 2).T, dims=(SNH, SNT))
+    sqis1d = np.ravel_multi_index(sqis.reshape(-1, 2).T, dims=(NH, NT))
     msqis1d = np.concatenate([sqis1d[i::BS] for i in range(BS)])
     return msqis1d
 
 if __name__ == '__main__':
     # parse command line arguments
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS, NAME,
-     N, SNI, SNS, ROT, SCLR,
+     N, SNI, NS, SCLR,
      PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, P, ACT, BN, DO, LD,
      OPT, LR, LSS, REG, ALPHA, BETA, LMBDA, MSS,
      EP, SH, BS, SEED) = parse_args()
@@ -815,17 +791,17 @@ if __name__ == '__main__':
     CH = np.load(CWD+'/%s.%d.h.npy' % (NAME, N))[::SNI]
     CT = np.load(CWD+'/%s.%d.t.npy' % (NAME, N))[::SNI]
     # external field and temperature counts
-    SNH, SNT = CH.size, CT.size
+    NH, NT = CH.size, CT.size
     # number of data channels
     NCH = 1
 
     # run parameter tuple
-    PRM = (NAME, N, SNI, SNS, ROT, SCLR,
+    PRM = (NAME, N, SNI, NS, SCLR,
            PRIOR, KI, VGG, CD, CR, F, SS, NF, FM, P, ACT, BN, DO, LD, OPT, LR,
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            SH, BS, EP, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
     # write output file header
     write_specs()
 
@@ -838,34 +814,21 @@ if __name__ == '__main__':
              'tanh':TanhScaler(feature_range=(FMN, FMX))}
 
     # array shapes
-    SHP0 = (SNH, SNT, SNS, N, N, NCH)
-    SHP1 = (SNH*SNT*SNS, N, N, NCH)
-    SHP2 = (SNH*SNT*SNS, N*N*NCH)
-    SHP3 = (SNH, SNT, SNS, ED, LD)
-    SHP4 = (SNH*SNT*SNS, ED, LD)
-    SHP5 = (SNH*SNT*SNS, ED*LD)
+    SHP0 = (NH, NT, NS, N, N, NCH)
+    SHP1 = (NH*NT*NS, N, N, NCH)
+    SHP2 = (NH*NT*NS, N*N*NCH)
+    SHP3 = (NH, NT, NS, ED, LD)
+    SHP4 = (NH*NT*NS, ED, LD)
+    SHP5 = (NH*NT*NS, ED*LD)
 
     # scaled data dump prefix
-    CPREF = CWD+'/%s.%d.%d.%d.%d.%d' % (NAME, N, SNI, SNS, ROT, SEED)
-    SCPREF = CWD+'/%s.%d.%d.%d.%d.%s.%d' % (NAME, N, SNI, SNS, ROT, SCLR, SEED)
+    CPREF = CWD+'/%s.%d.%d.%d.%d' % (NAME, N, SNI, NS, SEED)
+    SCPREF = CWD+'/%s.%d.%d.%d.%s.%d' % (NAME, N, SNI, NS, SCLR, SEED)
 
     try:
         # check is scaled data has already been computed
         SCDMP = np.load(SCPREF+'.dmp.sc.npy')
-        MNSCDMP = np.load(SCPREF+'.dmp.sc.mn.npy')
-        MXSCDMP = np.load(SCPREF+'.dmp.sc.mx.npy')
-        MSCDMP = np.load(SCPREF+'.dmp.sc.m.npy')
-        SSCDMP = np.load(SCPREF+'.dmp.sc.s.npy')
-        # expand sample space to accomodate augmented samples
-        if ROT:
-            SNS *= 3
-            SHP0 = (SNH, SNT, SNS, N, N, NCH)
-            SHP1 = (SNH*SNT*SNS, N, N, NCH)
-            SHP2 = (SNH*SNT*SNS, N*N*NCH)
-            SHP3 = (SNH, SNT, SNS, ED, LD)
-            SHP4 = (SNH*SNT*SNS, ED, LD)
-            SHP5 = (SNH*SNT*SNS, ED*LD)
-            SCDMP = SCDMP.reshape(*SHP1)
+        MNSCDMP, MXSCDMP, MXSCDMP, MSCDMP, SSCDMP = np.load(SCPREF+'.dmp.sc.ms.npy')
         CDAT = np.load(CPREF+'.dat.c.npy')
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
@@ -875,15 +838,6 @@ if __name__ == '__main__':
             # check if random data subset has already been selected
             CDMP = np.load(CPREF+'.dmp.c.npy')
             CDAT = np.load(CPREF+'.dat.c.npy')
-            if ROT:
-                CDMP, CDAT = rotation_augment(CDMP, CDAT)
-                SNS *= 3
-                SHP0 = (SNH, SNT, SNS, N, N, NCH)
-                SHP1 = (SNH*SNT*SNS, N, N, NCH)
-                SHP2 = (SNH*SNT*SNS, N*N*NCH)
-                SHP3 = (SNH, SNT, SNS, ED, LD)
-                SHP4 = (SNH*SNT*SNS, ED, LD)
-                SHP5 = (SNH*SNT*SNS, ED*LD)
             if VERBOSE:
                 # print(100*'-')
                 print('selected classification samples loaded from file')
@@ -896,17 +850,8 @@ if __name__ == '__main__':
                 # print(100*'-')
                 print('full dataset loaded from file')
                 print(100*'-')
-            CDMP, CDAT = random_selection(DMP, DAT, SNI, SNS)
+            CDMP, CDAT = random_selection(DMP, DAT, SNI, NS)
             del DAT, DMP
-            if ROT:
-                CDMP, CDAT = rotation_augment(CDMP, CDAT)
-                SNS *= 3
-                SHP0 = (SNH, SNT, SNS, N, N, NCH)
-                SHP1 = (SNH*SNT*SNS, N, N, NCH)
-                SHP2 = (SNH*SNT*SNS, N*N*NCH)
-                SHP3 = (SNH, SNT, SNS, ED, LD)
-                SHP4 = (SNH*SNT*SNS, ED, LD)
-                SHP5 = (SNH*SNT*SNS, ED*LD)
             np.save(CPREF+'.dmp.c.npy', CDMP)
             np.save(CPREF+'.dat.c.npy', CDAT)
             if VERBOSE:
@@ -930,10 +875,7 @@ if __name__ == '__main__':
         MSCDMP = SCDMP.mean()
         SSCDMP = SCDMP.std()
         np.save(SCPREF+'.dmp.sc.npy', SCDMP)
-        np.save(SCPREF+'.dmp.sc.mn.npy', MNSCDMP)
-        np.save(SCPREF+'.dmp.sc.mx.npy', MXSCDMP)
-        np.save(SCPREF+'.dmp.sc.m.npy', MSCDMP)
-        np.save(SCPREF+'.dmp.sc.s.npy', SSCDMP)
+        np.save(SCPREF+'.dmp.sc.ms.npy', np.array([MNSCDMP, MXSCDMP, MSCDMP, SSCDMP]))
         if VERBOSE:
             print('scaled selected classification samples computed')
             print(100*'-')
@@ -961,12 +903,12 @@ if __name__ == '__main__':
            'he_normal': he_normal(SEED)}
 
     # optmizers
-    OPTS = {'sgd': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=False),
-            'nag': SGD(lr=LR, momentum=0.0, decay=0.0, nesterov=True),
-            'adadelta': Adadelta(lr=LR, rho=0.95, epsilon=None, decay=0.0),
-            'adam': Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True),
-            'adamax': Adamax(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0),
-            'nadam': Nadam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)}
+    OPTS = {'sgd': SGD(lr=LR, momentum=0.0, nesterov=False),
+            'nag': SGD(lr=LR, momentum=0.0, nesterov=True),
+            'adadelta': Adadelta(lr=LR, rho=0.95),
+            'adam': Adam(lr=LR, beta_1=0.5),
+            'adamax': Adamax(lr=LR, beta_1=0.5),
+            'nadam': Nadam(lr=LR, beta_1=0.5)}
 
     # reconstruction losses
     RCLS = {'mse': lambda a, b: se(a, b),
@@ -1001,7 +943,7 @@ if __name__ == '__main__':
             LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
             try:
                 PHIND = regular_subsampling()
-                AE.fit(x=np.moveaxis(SCDMP.reshape(SNH*SNT, SNS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
+                AE.fit(x=np.moveaxis(SCDMP.reshape(NH*NT, NS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
                        y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
             except:
                 AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
@@ -1025,7 +967,7 @@ if __name__ == '__main__':
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
         try:
             PHIND = regular_subsampling()
-            AE.fit(x=np.moveaxis(SCDMP.reshape(SNH*SNT, SNS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
+            AE.fit(x=np.moveaxis(SCDMP.reshape(NH*NT, NS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
                    y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         except:
             AE.fit(x=np.moveaxis(SCDMP.reshape(*SHP0), 2, 0).reshape(*SHP1),
@@ -1065,33 +1007,14 @@ if __name__ == '__main__':
     # attempt to load encoding and reconstruction data
     try:
         ZENC = np.load(OUTPREF+'.zenc.npy').reshape(*SHP4)
-        MERR = np.load(OUTPREF+'.zerr.err.mean.npy')
-        SERR = np.load(OUTPREF+'.zerr.err.stdv.npy')
-        MXERR = np.load(OUTPREF+'.zerr.err.max.npy')
-        MNERR = np.load(OUTPREF+'.zerr.err.min.npy')
-        MAEERR = np.load(OUTPREF+'.zerr.err.mae.npy')
-        ERRDOM = np.load(OUTPREF+'.zerr.err.dom.npy')
-        ERRPRB = np.load(OUTPREF+'.zerr.err.prb.npy')
-        AERRDOM = np.load(OUTPREF+'.zerr.err.abs.dom.npy')
-        AERRPRB = np.load(OUTPREF+'.zerr.err.abs.prb.npy')
-        DMERR = np.load(OUTPREF+'.zerr.err.dg.me.npy')
-        DMAERR = np.load(OUTPREF+'.zerr.err.dg.mae.npy')
+        MNERR, MXERR, MERR, SERR, MAEERR = np.load(OUTPREF+'.zerr.err.ms.npy')
+        ERRDOM, ERRPRB, AERRDOM, AERRPRB, DMERR, DMAERR = np.load(OUTPREF+'.zerr.err.dst.npy')
         if PRIOR == 'gaussian':
-            MKLD = np.load(OUTPREF+'.zerr.kld.mean.npy')
-            SKLD = np.load(OUTPREF+'.zerr.kld.stdv.npy')
-            MXKLD = np.load(OUTPREF+'.zerr.kld.max.npy')
-            MNKLD = np.load(OUTPREF+'.zerr.kld.min.npy')
-            KLDDOM = np.load(OUTPREF+'.zerr.kld.dom.npy')
-            KLDPRB = np.load(OUTPREF+'.zerr.kld.prb.npy')
-            DMKLD = np.load(OUTPREF+'.zerr.kld.dg.me.npy')
+            MNKLD, MXKLD, MKLD, SKLD = np.load(OUTPREF+'.zerr.kld.ms.npy')
+            KLDDOM, KLDPRB, DMKLD = np.load(OUTPREF+'.zerr.kld.dg.dst.npy')
         if LSS == 'bc':
-            MBC = np.load(OUTPREF+'.zerr.bc.mean.npy')
-            SBC = np.load(OUTPREF+'.zerr.bc.stdv.npy')
-            MXBC = np.load(OUTPREF+'.zerr.bc.max.npy')
-            MNBC = np.load(OUTPREF+'.zerr.bc.min.npy')
-            BCDOM = np.load(OUTPREF+'.zerr.bc.dom.npy')
-            BCPRB = np.load(OUTPREF+'.zerr.bc.prb.npy')
-            DMBC = np.load(OUTPREF+'.zerr.bc.dg.me.npy')
+            MNBC, MXBC, MBC, SBC = np.load(OUTPREF+'.zerr.bc.ms.npy')
+            BCDOM, BCPRB, DMBC = np.load(OUTPREF+'.zerr.bc.dst.npy')
         if VERBOSE:
             print('latent encodings of scaled selected classification samples loaded from file')
             print(100*'-')
@@ -1103,30 +1026,25 @@ if __name__ == '__main__':
             print(100*'-')
         ZENC = np.array(ENC.predict(SCDMP, batch_size=BS, verbose=VERBOSE))
         if PRIOR == 'gaussian':
-            KLD = K.eval(kld((ZENC[0, :, :], ZENC[1, :, :]))).reshape(SNH, SNT, SNS)
+            KLD = K.eval(kld((ZENC[0, :, :], ZENC[1, :, :]))).reshape(NH, NT, NS)
             ZDEC = np.array(DEC.predict(ZENC[2, :, :], batch_size=BS, verbose=VERBOSE))
             # swap latent space axes
             ZENC = np.swapaxes(ZENC, 0, 1)[:, :2, :]
             # convert log variance to standard deviation
             ZENC[:, 1, :] = np.exp(0.5*ZENC[:, 1, :])
+            # minimum and maximum kullback-liebler divergence
+            MNKLD = np.min(KLD)
+            MXKLD = np.max(KLD)
             # mean and standard deviation kullback-liebler divergence
             MKLD = np.mean(KLD)
             SKLD = np.std(KLD)
-            # minimum and maximum kullback-liebler divergence
-            MXKLD = np.max(KLD)
-            MNKLD = np.min(KLD)
             # kld distribution
             KLDDOM = np.linspace(0, np.ceil(MXKLD), 33)
-            KLDPRB = np.histogram(KLD, KLDDOM)[0]/(SNH*SNT*SNS)
+            KLDPRB = np.histogram(KLD, KLDDOM)[0]/(NH*NT*NS)
             DMKLD = np.mean(KLD, -1)
             np.save(OUTPREF+'.zerr.kld.npy', KLD)
-            np.save(OUTPREF+'.zerr.kld.mean.npy', MKLD)
-            np.save(OUTPREF+'.zerr.kld.stdv.npy', SKLD)
-            np.save(OUTPREF+'.zerr.kld.max.npy', MXKLD)
-            np.save(OUTPREF+'.zerr.kld.min.npy', MNKLD)
-            np.save(OUTPREF+'.zerr.kld.dom.npy', KLDDOM)
-            np.save(OUTPREF+'.zerr.kld.prb.npy', KLDPRB)
-            np.save(OUTPREF+'.zerr.kld.dg.me.npy', DMKLD)
+            np.save(OUTPREF+'.zerr.kld.ms.npy', np.array([MNKLD, MXKLD, MKLD, SKLD]))
+            np.save(OUTPREF+'.zerr.kld.dst.npy', np.array([KLDDOM, KLDPRB, DMKLD], dtype=object))
             del KLD
         elif PRIOR == 'none':
             ZDEC = np.array(DEC.predict(ZENC, verbose=VERBOSE))
@@ -1145,26 +1063,17 @@ if __name__ == '__main__':
         MNERR = np.min(ERR)
         MAEERR = np.mean(np.abs(ERR))
         ERRDOM = np.linspace(np.floor(MNERR), np.ceil(MXERR), 65)
-        ERRPRB = np.histogram(ERR, ERRDOM)[0]/(SNH*SNT*SNS*N*N)
+        ERRPRB = np.histogram(ERR, ERRDOM)[0]/(NH*NT*NS*N*N)
         AERRDOM = np.linspace(0, np.max((np.abs(MNERR), MXERR)), 33)
-        AERRPRB = np.histogram(np.abs(ERR), AERRDOM)[0]/(SNH*SNT*SNS*N*N)
+        AERRPRB = np.histogram(np.abs(ERR), AERRDOM)[0]/(NH*NT*NS*N*N)
         DMERR = np.mean(ERR, (2, 3, 4, 5))
         DMAERR = np.mean(np.abs(ERR), (2, 3, 4, 5))
         del ERR
         if LSS != 'bc':
             del SCDMP, ZDEC
         # dump results
-        np.save(OUTPREF+'.zerr.err.mean.npy', MERR)
-        np.save(OUTPREF+'.zerr.err.stdv.npy', SERR)
-        np.save(OUTPREF+'.zerr.err.max.npy', MXERR)
-        np.save(OUTPREF+'.zerr.err.min.npy', MNERR)
-        np.save(OUTPREF+'.zerr.err.mae.npy', MAEERR)
-        np.save(OUTPREF+'.zerr.err.dom.npy', ERRDOM)
-        np.save(OUTPREF+'.zerr.err.prb.npy', ERRPRB)
-        np.save(OUTPREF+'.zerr.err.abs.dom.npy', AERRDOM)
-        np.save(OUTPREF+'.zerr.err.abs.prb.npy', AERRPRB)
-        np.save(OUTPREF+'.zerr.err.dg.me.npy', DMERR)
-        np.save(OUTPREF+'.zerr.err.dg.mae.npy', DMAERR)
+        np.save(OUTPREF+'.zerr.err.ms.npy', np.array([MNERR, MXERR, MERR, SERR, MAEERR]))
+        np.save(OUTPREF+'.zerr.err.dst.npy', np.array([ERRDOM, ERRPRB, AERRDOM, AERRPRB, DMERR, DMAERR], dtype=object))
         # calculate binary crossentropy error analysis
         if LSS == 'bc':
             BC = (-(SCDMP*np.log(ZDEC+EPS)+(1-SCDMP)*np.log(1-ZDEC+EPS))).reshape(*SHP0)
@@ -1175,63 +1084,58 @@ if __name__ == '__main__':
             MXBC = np.max(BC)
             MNBC = np.min(BC)
             BCDOM = np.linspace(0, np.ceil(MXBC), 33)
-            BCPRB = np.histogram(BC, BCDOM)[0]/(SNH*SNT*SNS*N*N)
+            BCPRB = np.histogram(BC, BCDOM)[0]/(NH*NT*NS*N*N)
             DMBC = np.mean(BC, (2, 3, 4, 5))
             del BC
-            np.save(OUTPREF+'.zerr.bc.mean.npy', MBC)
-            np.save(OUTPREF+'.zerr.bc.stdv.npy', SBC)
-            np.save(OUTPREF+'.zerr.bc.max.npy', MXBC)
-            np.save(OUTPREF+'.zerr.bc.min.npy', MNBC)
-            np.save(OUTPREF+'.zerr.bc.dom.npy', BCDOM)
-            np.save(OUTPREF+'.zerr.bc.prb.npy', BCPRB)
-            np.save(OUTPREF+'.zerr.bc.dg.me.npy', DMBC)
+            np.save(OUTPREF+'.zerr.bc.ms.npy', np.array([MNBC, MXBC, MBC, SBC]))
+            np.save(OUTPREF+'.zerr.bc.dst.npy', np.array([BCDOM, BCPRB, DMBC], dtype=object))
 
     if VERBOSE:
         print(100*'-')
         print('latent encodings of scaled selected classification samples predicted')
         print(100*'-')
+        print('min sig          %f' % MNSCDMP)
+        print('max sig          %f' % MXSCDMP)
         print('mean sig:        %f' % MSCDMP)
         print('stdv sig:        %f' % SSCDMP)
-        print('max sig          %f' % MXSCDMP)
-        print('min sig          %f' % MNSCDMP)
+        print('min error:       %f' % MNERR)
+        print('max error:       %f' % MXERR)
         print('mean error:      %f' % MERR)
         print('stdv error:      %f' % SERR)
-        print('max error:       %f' % MXERR)
-        print('min error:       %f' % MNERR)
         print('mae error:       %f' % MAEERR)
         if PRIOR == 'gaussian':
+            print('min kld:         %f' % MNKLD)
+            print('max kld:         %f' % MXKLD)
             print('mean kld:        %f' % MKLD)
             print('stdv kld:        %f' % SKLD)
-            print('max kld:         %f' % MXKLD)
-            print('min kld:         %f' % MNKLD)
         if LSS == 'bc':
+            print('min bc:          %f' % MNBC)
+            print('max bc:          %f' % MXBC)
             print('mean bc:         %f' % MBC)
             print('stdv bc:         %f' % SBC)
-            print('max bc:          %f' % MXBC)
-            print('min bc:          %f' % MNBC)
         print(100*'-')
     with open(OUTPREF+'.out', 'a') as out:
         out.write('fitting errors\n')
         out.write(100*'-'+'\n')
+        out.write('min sig          %f\n' % MNSCDMP)
+        out.write('max sig          %f\n' % MXSCDMP)
         out.write('mean sig:        %f\n' % MSCDMP)
         out.write('stdv sig:        %f\n' % SSCDMP)
-        out.write('max sig          %f\n' % MXSCDMP)
-        out.write('min sig          %f\n' % MNSCDMP)
+        out.write('min error:       %f\n' % MNERR)
+        out.write('max error:       %f\n' % MXERR)
         out.write('mean error:      %f\n' % MERR)
         out.write('stdv error:      %f\n' % SERR)
-        out.write('max error:       %f\n' % MXERR)
-        out.write('min error:       %f\n' % MNERR)
         out.write('mae error:       %f\n' % MAEERR)
         if PRIOR == 'gaussian':
+            out.write('min kld:         %f\n' % MNKLD)
+            out.write('max kld:         %f\n' % MXKLD)
             out.write('mean kld:        %f\n' % MKLD)
             out.write('stdv kld:        %f\n' % SKLD)
-            out.write('max kld:         %f\n' % MXKLD)
-            out.write('min kld:         %f\n' % MNKLD)
         if LSS == 'bc':
+            out.write('min bc:          %f\n' % MNBC)
+            out.write('max bc:          %f\n' % MXBC)
             out.write('mean bc:         %f\n' % MBC)
             out.write('stdv bc:         %f\n' % SBC)
-            out.write('max bc:          %f\n' % MXBC)
-            out.write('min bc:          %f\n' % MNBC)
         out.write(100*'-'+'\n')
 
     try:
@@ -1248,7 +1152,7 @@ if __name__ == '__main__':
             print(100*'-')
         PCAZENC = PCA(n_components=LD)
         # pca embeddings of latent encodings
-        PZENC = np.zeros((SNH*SNT*SNS, ED, LD))
+        PZENC = np.zeros((NH*NT*NS, ED, LD))
         # pca projections of latent encodings
         CZENC = np.zeros((ED, LD, LD))
         # explained variance ratios
@@ -1482,14 +1386,14 @@ if __name__ == '__main__':
             fig.savefig(OUTPREF+'.ae.diag.bc.png')
             plt.close()
 
-        shp0 = (SNH, SNT, SNS, ED*LD)
-        shp1 = (SNH, SNT, ED, LD)
-        shp2 = (SNH*SNT, ED*LD)
-        shp3 = (SNH, SNT, SNS, ED, LD)
+        shp0 = (NH, NT, NS, ED*LD)
+        shp1 = (NH, NT, ED, LD)
+        shp2 = (NH*NT, ED*LD)
+        shp3 = (NH, NT, NS, ED, LD)
 
         # diagrams for physical measurements
-        MEMDIAG = np.stack((MM, EM), axis=-1).reshape(SNH, SNT, 2)
-        MEVDIAG = np.stack((SU, SP), axis=-1).reshape(SNH, SNT, 2)
+        MEMDIAG = np.stack((MM, EM), axis=-1).reshape(NH, NT, 2)
+        MEVDIAG = np.stack((SU, SP), axis=-1).reshape(NH, NT, 2)
         # diagrams for latent variables
         ZMDIAG = np.mean(ZENC.reshape(*shp0), 2).reshape(*shp1)
         # diagrams for pca embeddings of latent variables
