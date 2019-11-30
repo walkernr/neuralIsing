@@ -381,14 +381,14 @@ def build_autoencoder():
     # --------------
     # hidden activation parameters
     if ACT == 'lrelu':
-        alpha_enc = 0.0
-        alpha_dec = 0.1
+        alpha_enc = 0.2
+        alpha_dec = 0.2
     if ACT == 'prelu':
-        alpha_enc = Constant(value=0.0)
-        alpha_dec = Constant(value=0.1)
+        alpha_enc = Constant(value=0.2)
+        alpha_dec = Constant(value=0.2)
     elif ACT == 'elu':
-        alpha_enc = 0.0
-        alpha_dec = 0.1
+        alpha_enc = 0.2
+        alpha_dec = 0.2
     # output layer activation
     # sigmoid for activations on (0, 1) tanh otherwise (-1, 1)
     # caused by scaling
@@ -464,8 +464,8 @@ def build_autoencoder():
     d = Flatten(name='flatten')(c)
     d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_0')(d)
     # batch normalization to scale activations
-    if BN:
-        d = BatchNormalization(name='batch_norm_dense_0')(d)
+    # if BN:
+    #     d = BatchNormalization(name='batch_norm_dense_0')(d)
     # activations
     if ACT == 'relu':
         d = Activation('relu', name='relu_dense_0')(d)
@@ -474,7 +474,7 @@ def build_autoencoder():
     elif ACT == 'lrelu':
         d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_0')(d)
     elif ACT == 'elu':
-        d = ELU(alpha=alpha_enc, name='elu_dense_0')(c)
+        d = ELU(alpha=alpha_enc, name='elu_dense_0')(d)
     elif ACT == 'selu':
         d = Activation('selu', name='selu_dense_0')(d)
     # prior parameters
@@ -513,8 +513,8 @@ def build_autoencoder():
     latent_input = Input(shape=(LD,), name='latent_encoding')
     d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_0')(latent_input)
     # batch normalization to scale activations
-    if BN:
-        d = BatchNormalization(name='batch_norm_dense_0')(d)
+    # if BN:
+    #     d = BatchNormalization(name='batch_norm_dense_0')(d)
     # activations
     if ACT == 'relu':
         d = Activation('relu', name='relu_dense_0')(d)
@@ -527,28 +527,41 @@ def build_autoencoder():
     elif ACT == 'selu':
         d = Activation('selu', name='selu_dense_0')(d)
     # dense network of same size as convolution output from encoder
-    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='latent_expansion')(d)
+    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_1')(d)
+    # if BN:
+    #     d = BatchNormalization(name='batch_norm_dense_1')(d)
+    # activations
+    if ACT == 'relu':
+        d = Activation('relu', name='relu_dense_1')(d)
+    if ACT == 'prelu':
+        d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_1')(d)
+    elif ACT == 'lrelu':
+        d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_1')(d)
+    elif ACT == 'elu':
+        d = ELU(alpha=alpha_enc, name='elu_dense_1')(c)
+    elif ACT == 'selu':
+        d = Activation('selu', name='selu_dense_1')(d)
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_latent_expansion')(d)
     # stop if dense network
     if dn:
         output = Activation(decact, name='activated_reconst')(ct)
     else:
-        # batch renormalization to scale activations
-        if BN:
-            ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
-        # activations
-        if ACT == 'relu':
-            ct = Activation('relu', name='relu_latent_expansion')(ct)
-        if ACT == 'prelu':
-            ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
-        elif ACT == 'lrelu':
-            ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
-        elif ACT == 'elu':
-            ct = ELU(alpha=alpha_dec)(ct)
-        elif ACT == 'selu':
-            ct = Activation('selu', name='selu_latent_expansion')(ct)
-        # dropout
+    #     # batch renormalization to scale activations
+    #     if BN:
+    #         ct = BatchNormalization(name='batch_norm_latent_expansion')(ct)
+    #     # activations
+    #     if ACT == 'relu':
+    #         ct = Activation('relu', name='relu_latent_expansion')(ct)
+    #     if ACT == 'prelu':
+    #         ct = PReLU(alpha_initializer=alpha_dec, name='prelu_latent_expansion')(ct)
+    #     elif ACT == 'lrelu':
+    #         ct = LeakyReLU(alpha=alpha_dec, name='lrelu_latent_expansion')(ct)
+    #     elif ACT == 'elu':
+    #         ct = ELU(alpha=alpha_dec)(ct)
+    #     elif ACT == 'selu':
+    #         ct = Activation('selu', name='selu_latent_expansion')(ct)
+    #     # dropout
         if DO:
             # if ACT == 'selu':
             #     ct = AlphaDropout(rate=r, noise_shape=(BS, 1, 1, shape[-1]), name='dropout_latent_expansion')(ct)
