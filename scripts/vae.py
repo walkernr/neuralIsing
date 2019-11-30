@@ -758,8 +758,8 @@ if __name__ == '__main__':
     from tensorflow.keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
                                     lecun_uniform, lecun_normal, he_uniform, he_normal)
-    from tensorflow.keras.layers import relu, tanh, sigmoid, linear
-    from tensorflow.keras.layers.advanced_activations import LeakyReLU, PReLU, ELU
+    from tensorflow.keras.activations import relu, tanh, sigmoid, linear
+    from tensorflow.keras.layers import LeakyReLU, PReLU, ELU
     from tensorflow.keras.callbacks import History, CSVLogger, ReduceLROnPlateau
     from tesnorflow.tensorflow.keras import backend as K
     from tensorflow.keras.utils import plot_model
