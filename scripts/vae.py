@@ -750,7 +750,6 @@ if __name__ == '__main__':
     if GPU:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     # imports
-    import tensorflow as tf
     from keras.models import Model
     from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation, SpatialDropout2D, AlphaDropout)
@@ -761,7 +760,7 @@ if __name__ == '__main__':
     from keras.activations import relu, tanh, sigmoid, linear
     from keras.layers.advanced_activations import LeakyReLU, PReLU, ELU
     from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
-    from keras import backend as K
+    from tensorflow.keras import backend as K
     from keras.utils import plot_model
     if PLOT:
         import matplotlib as mpl
