@@ -108,8 +108,8 @@ def load_select_scale_data(name, lattice_length, interval, num_samples, seed, ve
     total_num_samples = interval_thrm.shape[2]
     # selected sample indices
     indices = np.zeros((num_fields, num_temps, num_samples), dtype=np.uint16)
-    for i in trange(num_fields, disable=not verbose):
-        for j in trange(num_temps, disable=not verbose):
+    for i in trange(num_fields, desc='Selecting Samples', disable=not verbose):
+        for j in range(num_temps):
                 indices[i, j] = np.random.permutation(total_num_samples)[:num_samples]
     # construct selected data subset
     select_conf = scale_configurations(index_data_by_sample(interval_conf, num_fields, num_temps, indices))
@@ -365,17 +365,17 @@ class InfoGAN():
     def generate(self, verbose=1):
         ''' generate new configurations using samples from the latent distributions '''
         z, c = self.sample_latent_distribution()
-        return self.generator.predict([z, c], batch_size=self.batch_size, verbose=verbose)
+        return self.generator.predict([z, c], batch_size=self.batch_size, verbose=0)
 
 
     def discriminate(self, x_batch, verbose=1):
         ''' discriminate input configurations '''
-        return self.discriminator.predict(x_batch, batch_size=self.batch_size, verbose=verbose)
+        return self.discriminator.predict(x_batch, batch_size=self.batch_size, verbose=0)
 
 
     def get_aux_dist(self, x_batch, verbose=1):
         ''' predict categorical assignments of input configurations '''
-        return self.auxiliary.predict(x_batch, batch_size=self.batch_size, verbose=verbose)
+        return self.auxiliary.predict(x_batch, batch_size=self.batch_size, verbose=0)
 
 
     def model_summaries(self):
