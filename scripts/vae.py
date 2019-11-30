@@ -736,7 +736,7 @@ if __name__ == '__main__':
     os.environ['KERAS_BACKEND'] = 'tensorflow'
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     import tensorflow.compat.v1 as tf
-    tf.random.set_seed(SEED)
+    # tf.random.set_seed(SEED)
     tf.disable_v2_behavior()
     if PARALLEL:
         if not GPU:
