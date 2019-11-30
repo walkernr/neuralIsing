@@ -968,6 +968,9 @@ if __name__ == '__main__':
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
         try:
             PHIND = regular_subsampling()
+            if VERBOSE:
+                print('using regular subsampling')
+                print(100*'-')
             AE.fit(x=np.moveaxis(SCDMP.reshape(NH*NT, NS, N, N, NCH)[PHIND], 0, 1).reshape(*SHP1),
                    y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         except:
