@@ -801,7 +801,7 @@ if __name__ == '__main__':
            LSS, REG, ALPHA, BETA, LMBDA, MSS,
            SH, BS, EP, SEED)
     # output file prefix
-    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d' % PRM
+    OUTPREF = CWD+'/%s.%d.%d.%d.%s.%s.%s.%d.%d.%d.%d.%d.%d.%d.%s.%s.%d.%d.%d.%s.%.0e.%s.%s.%.0e.%.0e.%.0e.%d.%d.%d.%d.%d.ae.' % PRM
     # write output file header
     write_specs()
 
@@ -927,9 +927,9 @@ if __name__ == '__main__':
 
     try:
         # check if model already trained
-        AE.load_weights(OUTPREF+'.ae.wt.h5', by_name=True)
-        TLOSS = np.load(OUTPREF+'.ae.loss.trn.npy')
-        # VLOSS = np.load(OUTPREF+'.ae.loss.val.npy')
+        AE.load_weights(OUTPREF+'.wt.h5', by_name=True)
+        TLOSS = np.load(OUTPREF+'.loss.trn.npy')
+        # VLOSS = np.load(OUTPREF+'.loss.val.npy')
         if VERBOSE:
             print('autoencoder trained weights loaded from file')
             print(100*'-')
@@ -938,7 +938,7 @@ if __name__ == '__main__':
                 print('autoencoder training on scaled selected classification samples')
                 print(100*'-')
             # output log
-            CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
+            CSVLG = CSVLogger(OUTPREF+'.log.csv', append=True, separator=',')
             # learning rate decay on loss plateau
             LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
             try:
@@ -950,9 +950,9 @@ if __name__ == '__main__':
                        y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
             TLOSS = np.concatenate((TLOSS, np.array(AE.history.history['loss'])))
             # VLOSS = AE.history.history['val_loss']
-            AE.save_weights(OUTPREF+'.ae.wt.h5')
-            np.save(OUTPREF+'.ae.loss.trn.npy', TLOSS)
-            # np.save(OUTPREF+'.ae.loss.val.npy', VLOSS)
+            AE.save_weights(OUTPREF+'.wt.h5')
+            np.save(OUTPREF+'.loss.trn.npy', TLOSS)
+            # np.save(OUTPREF+'.loss.val.npy', VLOSS)
             if VERBOSE:
                 print(100*'-')
                 print('autoencoder weights trained')
@@ -962,7 +962,7 @@ if __name__ == '__main__':
             print('autoencoder training on scaled selected classification samples')
             print(100*'-')
         # output log
-        CSVLG = CSVLogger(OUTPREF+'.ae.log.csv', append=True, separator=',')
+        CSVLG = CSVLogger(OUTPREF+'.log.csv', append=True, separator=',')
         # learning rate decay on loss plateau
         LR_DECAY = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=8, verbose=VERBOSE)
         try:
@@ -974,9 +974,9 @@ if __name__ == '__main__':
                    y=None, epochs=EP, batch_size=BS, shuffle=SH, verbose=VERBOSE, callbacks=[CSVLG, LR_DECAY, History()])
         TLOSS = np.array(AE.history.history['loss'])
         # VLOSS = AE.history.history['val_loss']
-        AE.save_weights(OUTPREF+'.ae.wt.h5')
-        np.save(OUTPREF+'.ae.loss.trn.npy', TLOSS)
-        # np.save(OUTPREF+'.ae.loss.val.npy', VLOSS)
+        AE.save_weights(OUTPREF+'.wt.h5')
+        np.save(OUTPREF+'.loss.trn.npy', TLOSS)
+        # np.save(OUTPREF+'.loss.val.npy', VLOSS)
         if VERBOSE:
             print(100*'-')
             print('autoencoder weights trained')
@@ -1205,7 +1205,7 @@ if __name__ == '__main__':
     def ae_plots():
 
         # plot model diagrams
-        # plot_model(AE, to_file=OUTPREF+'.model.ae.png')
+        # plot_model(AE, to_file=OUTPREF+'.model.png')
         # plot_model(ENC, to_file=OUTPREF+'.model.enc.png')
         # plot_model(DEC, to_file=OUTPREF+'.model.dec.png')
 
@@ -1228,7 +1228,7 @@ if __name__ == '__main__':
         ax.set_yticklabels(ey)
         ax.set_xlabel('Error')
         ax.set_ylabel('Probability Density')
-        fig.savefig(OUTPREF+'.ae.dist.err.me.png')
+        fig.savefig(OUTPREF+'.dist.err.me.png')
         plt.close()
 
         fig = plt.figure()
@@ -1249,7 +1249,7 @@ if __name__ == '__main__':
         ax.set_yticklabels(ey)
         ax.set_xlabel('Absolute Error')
         ax.set_ylabel('Probability Density')
-        fig.savefig(OUTPREF+'.ae.dist.err.mae.png')
+        fig.savefig(OUTPREF+'.dist.err.mae.png')
         plt.close()
 
         fig, ax = plt.subplots()
@@ -1271,7 +1271,7 @@ if __name__ == '__main__':
         ax.set_xlabel(r'$T$')
         ax.set_ylabel(r'$H$')
         fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-        fig.savefig(OUTPREF+'.ae.diag.err.me.png')
+        fig.savefig(OUTPREF+'.diag.err.me.png')
         plt.close()
 
         fig, ax = plt.subplots()
@@ -1293,7 +1293,7 @@ if __name__ == '__main__':
         ax.set_xlabel(r'$T$')
         ax.set_ylabel(r'$H$')
         fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-        fig.savefig(OUTPREF+'.ae.diag.err.mae.png')
+        fig.savefig(OUTPREF+'.diag.err.mae.png')
         plt.close()
 
         if PRIOR == 'gaussian':
@@ -1316,7 +1316,7 @@ if __name__ == '__main__':
             ax.set_yticklabels(ey)
             ax.set_xlabel('KullBack-Leibler Divergence')
             ax.set_ylabel('Probability Density')
-            fig.savefig(OUTPREF+'.ae.dist.kld.png')
+            fig.savefig(OUTPREF+'.dist.kld.png')
             plt.close()
 
             fig, ax = plt.subplots()
@@ -1338,7 +1338,7 @@ if __name__ == '__main__':
             ax.set_xlabel(r'$T$')
             ax.set_ylabel(r'$H$')
             fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-            fig.savefig(OUTPREF+'.ae.diag.kld.png')
+            fig.savefig(OUTPREF+'.diag.kld.png')
             plt.close()
 
         if LSS == 'bc':
@@ -1361,7 +1361,7 @@ if __name__ == '__main__':
             ax.set_yticklabels(ey)
             ax.set_xlabel('Binary Crossentropy')
             ax.set_ylabel('Probability Density')
-            fig.savefig(OUTPREF+'.ae.dist.bc.png')
+            fig.savefig(OUTPREF+'.dist.bc.png')
             plt.close()
 
             fig, ax = plt.subplots()
@@ -1383,7 +1383,7 @@ if __name__ == '__main__':
             ax.set_xlabel(r'$T$')
             ax.set_ylabel(r'$H$')
             fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-            fig.savefig(OUTPREF+'.ae.diag.bc.png')
+            fig.savefig(OUTPREF+'.diag.bc.png')
             plt.close()
 
         shp0 = (NH, NT, NS, ED*LD)
@@ -1426,7 +1426,7 @@ if __name__ == '__main__':
                 ax.set_xlabel(r'$T$')
                 ax.set_ylabel(r'$H$')
                 fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                fig.savefig(OUTPREF+'.ae.diag.ld.%d.%d.png' % (j, k))
+                fig.savefig(OUTPREF+'.diag.ld.%d.%d.png' % (j, k))
                 plt.close()
         # plot pca latent variable diagrams
         for j in range(ED):
@@ -1450,7 +1450,7 @@ if __name__ == '__main__':
                 ax.set_xlabel(r'$T$')
                 ax.set_ylabel(r'$H$')
                 fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                fig.savefig(OUTPREF+'.ae.diag.ld.pca.%d.%d.png' % (j, k))
+                fig.savefig(OUTPREF+'.diag.ld.pca.%d.%d.png' % (j, k))
                 plt.close()
         # plot physical measurement diagrams
         for i in range(2):
@@ -1477,7 +1477,7 @@ if __name__ == '__main__':
                 ax.set_xlabel(r'$T$')
                 ax.set_ylabel(r'$H$')
                 fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(dat.min(), dat.max(), 3))
-                fig.savefig(OUTPREF+'.ae.diag.mv.%d.%d.png' % (i, j))
+                fig.savefig(OUTPREF+'.diag.mv.%d.%d.png' % (i, j))
                 plt.close()
 
     if PLOT:
