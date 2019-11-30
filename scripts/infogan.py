@@ -582,10 +582,11 @@ if __name__ == '__main__':
             TRN.fit(CONF, num_epochs=EP)
             MDL.save_weights(NAME, N, I, NS, SEED)
     C = MDL.get_aux_dist(CONF, VERBOSE).reshape(NH, NT, NS, CD)
-    DGC = C.mean(2)
-    for i in trange(CD, desc='Plotting Diagrams', disable=not VERBOSE):
-        plot_diagram(DGC[:, :, i], H, T,
-                     'c_{}'.format(i), CM,
-                     NAME, N, I, NS,
-                     CN, FL, FB, FF,
-                     ZD, CD, DLR, GLR, BS)
+    if PLOT:
+        DGC = C.mean(2)
+        for i in trange(CD, desc='Plotting Diagrams', disable=not VERBOSE):
+            plot_diagram(DGC[:, :, i], H, T,
+                        'c_{}'.format(i), CM,
+                        NAME, N, I, NS,
+                        CN, FL, FB, FF,
+                        ZD, CD, DLR, GLR, BS)
