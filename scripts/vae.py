@@ -735,9 +735,10 @@ if __name__ == '__main__':
     # environment variables
     os.environ['KERAS_BACKEND'] = 'tensorflow'
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-    import tensorflow.compat.v1 as tf
-    # tf.random.set_seed(SEED)
-    tf.disable_v2_behavior()
+    import tensorflow as tf
+    tf.random.set_seed(SEED)
+    # import tensorflow.compat.v1 as tf
+    # tf.disable_v2_behavior()
     if PARALLEL:
         if not GPU:
             os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -750,18 +751,18 @@ if __name__ == '__main__':
     if GPU:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     # imports
-    from keras.models import Model
-    from keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.layers import (Input, Lambda, Dense, Conv2D, Conv2DTranspose,
                               Flatten, Reshape, BatchNormalization, Activation, SpatialDropout2D, AlphaDropout)
-    from keras.optimizers import SGD, Adadelta, Adam, Adamax, Nadam
-    from keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
+    from tensorflow.keras.optimizers import SGD, Adadelta, Adam, Adamax, Nadam
+    from tensorflow.keras.initializers import (Zeros, Ones, Constant, RandomNormal, RandomUniform,
                                     TruncatedNormal, VarianceScaling, glorot_uniform, glorot_normal,
                                     lecun_uniform, lecun_normal, he_uniform, he_normal)
-    from keras.activations import relu, tanh, sigmoid, linear
-    from keras.layers.advanced_activations import LeakyReLU, PReLU, ELU
-    from keras.callbacks import History, CSVLogger, ReduceLROnPlateau
-    from tensorflow.keras import backend as K
-    from keras.utils import plot_model
+    from tensorflow.keras.activations import relu, tanh, sigmoid, linear
+    from tensorflow.keras.layers.advanced_activations import LeakyReLU, PReLU, ELU
+    from tensorflow.keras.callbacks import History, CSVLogger, ReduceLROnPlateau
+    from tesnorflow.tensorflow.keras import backend as K
+    from tensorflow.keras.utils import plot_model
     if PLOT:
         import matplotlib as mpl
         mpl.use('Agg')
