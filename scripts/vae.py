@@ -12,10 +12,10 @@ from tqdm import tqdm
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelBinarizer
 from TanhScaler import TanhScaler
-from sklearn.decomposition import PCA, KernelPCA
-from sklearn.manifold import Isomap, LocallyLinearEmbedding
-from MulticoreTSNE import MulticoreTSNE as TSNE
-from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering, DBSCAN
+from sklearn.decomposition import PCA # , KernelPCA
+# from sklearn.manifold import Isomap, LocallyLinearEmbedding
+# from MulticoreTSNE import MulticoreTSNE as TSNE
+# from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering, DBSCAN
 from sklearn.model_selection import train_test_split
 from scipy.odr import ODR, Model as ODRModel, RealData
 
