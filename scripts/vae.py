@@ -761,7 +761,7 @@ if __name__ == '__main__':
     from tensorflow.keras.activations import relu, tanh, sigmoid, linear
     from tensorflow.keras.layers import LeakyReLU, PReLU, ELU
     from tensorflow.keras.callbacks import History, CSVLogger, ReduceLROnPlateau
-    from tesnorflow.tensorflow.keras import backend as K
+    from tensorflow.keras import backend as K
     from tensorflow.keras.utils import plot_model
     if PLOT:
         import matplotlib as mpl
