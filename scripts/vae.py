@@ -829,7 +829,7 @@ if __name__ == '__main__':
     try:
         # check is scaled data has already been computed
         SCDMP = np.load(SCPREF+'.dmp.sc.npy')
-        MNSCDMP, MXSCDMP, MXSCDMP, MSCDMP, SSCDMP = np.load(SCPREF+'.dmp.sc.ms.npy')
+        MNSCDMP, MXSCDMP, MSCDMP, SSCDMP = np.load(SCPREF+'.dmp.sc.ms.npy')
         CDAT = np.load(CPREF+'.dat.c.npy')
         if VERBOSE:
             print('scaled selected classification samples loaded from file')
