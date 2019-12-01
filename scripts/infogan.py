@@ -308,13 +308,13 @@ class InfoGAN():
         if self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_0')(x)
         # repeated dense layer
-        x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='gen_dense_1')(x)
-        if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='gen_dense_selu_1')(x)
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='gen_dense_1')(x)
+        # if self.act == 'lrelu':
+        #     x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         u = 0
@@ -360,13 +360,13 @@ class InfoGAN():
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         # dense layer
-        x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='dsc_dense_0')(x)
-        if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='dsc_dense_0')(x)
+        # if self.act == 'lrelu':
+        #     x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = x
         # dense layer
