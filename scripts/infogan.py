@@ -50,6 +50,10 @@ def parse_args():
                         type=int, default=3)
     parser.add_argument('-ud', '--u_dimension', help='sample uniform dimension',
                         type=int, default=3)
+    parser.add_argument('-ki', '--kernel_initializer', help='kernel initializer',
+                        type=str, default='he_normal')
+    parser.add_argument('-an', '--activation', help='activation function',
+                        type=str, default='lrelu')
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=2e-4)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
@@ -65,7 +69,7 @@ def parse_args():
             args.name, args.lattice_length, args.sample_interval, args.sample_number,
             args.conv_number, args.filter_length, args.filter_base, args.filter_factor,
             args.z_dimension, args.c_dimension, args.u_dimension,
-            args.discriminator_learning_rate, args.gan_learning_rate,
+            args.kernel_initializer, args.activation, args.discriminator_learning_rate, args.gan_learning_rate,
             args.epochs, args.batch_size, args.random_seed)
 
 
@@ -156,12 +160,12 @@ def load_data(name, lattice_length, interval, num_samples, seed, verbose=1):
 def plot_diagram(data, fields, temps, alias, cmap,
                  name, lattice_length, interval, num_samples,
                  conv_number, filter_length, filter_base, filter_factor,
-                 n_dim, c_dim, z_dim, dsc_lr, gan_lr, batch_size):
+                 z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size):
     # file name parameters
     params = (name, lattice_length, interval, num_samples,
               conv_number, filter_length, filter_base, filter_factor,
-              n_dim, c_dim, z_dim, dsc_lr, gan_lr, alias)
-    file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.png'.format(*params)
+              z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, alias)
+    file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.png'.format(*params)
     # initialize figure and axes
     fig, ax = plt.subplots()
     # initialize colorbar
@@ -241,6 +245,7 @@ class InfoGAN():
     def __init__(self, input_shape=(27, 27, 1), conv_number=3,
                  filter_length=3, filter_base=9, filter_factor=9,
                  z_dim=81, c_dim=3, u_dim=3,
+                 krnl_init='he_normal', act='lrelu',
                  dsc_lr=2e-4, gan_lr=2e-4, batch_size=169):
         ''' initialize model parameters '''
         # convolutional parameters
@@ -265,6 +270,9 @@ class InfoGAN():
         self.c_dim = c_dim
         # uniform control variable dimension
         self.u_dim = u_dim
+        # kernel initializer and activation
+        self.krnl_init = krnl_init
+        self.act = act
         # discriminator and generator learning rates
         self.dsc_lr = dsc_lr
         self.gan_lr = gan_lr
@@ -293,14 +301,20 @@ class InfoGAN():
         x = Concatenate()([self.z_input, self.c_input, self.u_input])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer='he_normal',
+                  kernel_initializer=self.krnl_init,
                   name='gen_dense_0')(x)
-        x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='gen_dense_selu_0')(x)
         # repeated dense layer
         x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer='he_normal',
+                  kernel_initializer=self.krnl_init,
                   name='gen_dense_1')(x)
-        x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         u = 0
@@ -308,11 +322,14 @@ class InfoGAN():
         for i in range(self.conv_number-1, 0, -1):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
-                                    kernel_initializer='he_normal',
+                                    kernel_initializer=self.krnl_init,
                                     padding='same', strides=self.filter_stride,
                                     name='gen_convt_{}'.format(u))(convt)
-            convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
-            convt = LeakyReLU(name='gen_convt_lrelu_{}'.format(u))(convt)
+            if self.act == 'lrelu':
+                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
+                convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
+            if self.act == 'selu':
+                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
             u += 1
         self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_length,
                                           kernel_initializer='glorot_uniform', activation='sigmoid',
@@ -332,25 +349,34 @@ class InfoGAN():
         for i in range(1, self.conv_number+1):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
             conv = Conv2D(filters=filter_number, kernel_size=self.filter_length,
-                          kernel_initializer='he_normal',
+                          kernel_initializer=self.krnl_init,
                           padding='valid', strides=self.filter_stride,
                           name='dsc_conv_{}'.format(i))(conv)
-            conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
-            conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(conv)
+            if self.act == 'lrelu':
+                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
+                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(conv)
+            if self.act == 'selu':
+                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         # dense layer
         x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer='he_normal',
+                  kernel_initializer=self.krnl_init,
                   name='dsc_dense_0')(x)
-        x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = x
         # dense layer
         x = Dense(units=128,
-                  kernel_initializer='he_normal',
+                  kernel_initializer=self.krnl_init,
                   name='dsc_dense_1')(x)
-        x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='dsc_dense_selu_1')(x)
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_output = Dense(units=1,
                                 kernel_initializer='glorot_uniform', activation='sigmoid',
@@ -368,9 +394,12 @@ class InfoGAN():
         ''' builds auxiliary classification reconstruction model '''
         # initialize with dense layer taking the hidden generator layer as input
         x = Dense(units=128,
-                  kernel_initializer='he_normal',
+                  kernel_initializer=self.krnl_init,
                   name='aux_dense_0')(self.dsc_hidden)
-        x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='aux_dense_selu_0')(x)
         # auxiliary output is a reconstruction of the categorical assignments fed into the generator
         self.aux_c_output = Dense(self.c_dim,
                                   kernel_initializer='glorot_uniform', activation='softmax',
@@ -417,6 +446,12 @@ class InfoGAN():
         return self.generator.predict([z, c, u], batch_size=self.batch_size, verbose=0)
 
 
+    def generate_controlled(self, c, u, verbose=1):
+        ''' generate new configurations using control variables '''
+        z, _, _ = self.sample_latent_distribution()
+        return self.generator.predict([z, c, u], batch_size=self.batch_size, verbose=0)
+
+
     def discriminate(self, x_batch, verbose=1):
         ''' discriminate input configurations '''
         return self.discriminator.predict(x_batch, batch_size=self.batch_size, verbose=0)
@@ -438,8 +473,8 @@ class InfoGAN():
         ''' save weights to file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
-        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
+                  self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
+        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
         self.gan.save_weights(file_name)
 
 
@@ -447,9 +482,41 @@ class InfoGAN():
         ''' load weights from file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
-        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
+                  self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
+        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
         self.gan.load_weights(file_name, by_name=True)
+
+
+    def save_models(self, name, lattice_length, interval, num_samples, seed):
+        ''' save models to file '''
+        params = (name, lattice_length, interval, num_samples,
+                  self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
+                  self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
+        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.mdl'.format(*params)
+        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.mdl'.format(*params)
+        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.mdl'.format(*params)
+        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.mdl'.format(*params)
+        self.discriminator.trainable = True
+        self.generator.save_model(gen_file_name)
+        self.discriminator.save_model(dsc_file_name)
+        self.auxiliary.save_model(aux_file_name)
+        self.discriminator.trainable = False
+        self.gan.save_model(gan_file_name)
+
+
+    def load_models(self, name, lattice_length, interval, num_samples, seed):
+        ''' load models from file '''
+        params = (name, lattice_length, interval, num_samples,
+                  self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
+                  self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
+        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.mdl'.format(*params)
+        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.mdl'.format(*params)
+        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.mdl'.format(*params)
+        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.mdl'.format(*params)
+        self.generator = load_model(gen_file_name, compile=False)
+        self.discriminator = load_model(dsc_file_name, compile=True)
+        self.auxiliary = load_model(aux_file_name, compile=False)
+        self.gan = load_model(gan_file_name, compile=True)
 
 
 class Trainer():
@@ -462,7 +529,8 @@ class Trainer():
         self.num_fields = num_fields
         self.num_temps = num_temps
         self.num_samples = num_samples
-        self.dsc_loss_history = []
+        self.dsc_fake_loss_history = []
+        self.dsc_real_loss_history = []
         self.gan_loss_history = []
         self.ent_cat_loss_history = []
         self.ent_con_loss_history = []
@@ -507,12 +575,13 @@ class Trainer():
             target = np.zeros(self.model.batch_size).astype(int)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(fake_batch, target)
+            self.dsc_fake_loss_history.append(dsc_loss)
         else:
             # inputs are true samples, so the discrimination targets are of unit value
             target = np.ones(self.model.batch_size).astype(int)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
-        self.dsc_loss_history.append(dsc_loss)
+            self.dsc_real_loss_history.append(dsc_loss)
 
 
     def rolling_loss_average(self, epoch, num_batches, batch):
@@ -520,7 +589,8 @@ class Trainer():
             # catch case where there are no calculated losses yet
             if batch == 0:
                 gan_loss = 0
-                dsc_loss = 0
+                dscf_loss = 0
+                dscr_loss = 0
                 ent_cat_loss = 0
                 ent_con_loss = 0
             # calculate rolling average
@@ -530,8 +600,8 @@ class Trainer():
                 # stop index for current batch (given epoch)
                 stop = num_batches*epoch+batch+1
                 gan_loss = np.mean(self.gan_loss_history[start:stop])
-                # discriminator trains on false and true samples, so has twice as many losses
-                dsc_loss = np.mean(self.dsc_loss_history[2*start:2*stop])
+                dscf_loss = np.mean(self.dsc_fake_loss_history[start:stop])
+                dscr_loss = np.mean(self.dsc_real_loss_history[start:stop])
                 if self.model.c_dim > 0:
                     ent_cat_loss = np.mean(self.ent_cat_loss_history[start:stop])
                 else:
@@ -540,7 +610,7 @@ class Trainer():
                     ent_con_loss = np.mean(self.ent_con_loss_history[start:stop])
                 else:
                     ent_con_loss = 0
-            return gan_loss, dsc_loss, ent_cat_loss, ent_con_loss
+            return gan_loss, dscf_loss, dscr_loss, ent_cat_loss, ent_con_loss
 
 
     def fit(self, x_train, num_epochs=1, verbose=1):
@@ -556,7 +626,7 @@ class Trainer():
             for j in batch_range:
                 # set batch loss description
                 batch_loss = self.rolling_loss_average(i, num_batches, j)
-                desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSC Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i, num_epochs, *batch_loss)
+                desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSCF Loss: {:.4f} DSCR Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
                 x_batch = x_train[self.model.batch_size*j:self.model.batch_size*(j+1)]
@@ -572,7 +642,7 @@ if __name__ == '__main__':
      NAME, N, I, NS,
      CN, FL, FB, FF,
      ZD, CD, UD,
-     DLR, GLR,
+     KI, AN, DLR, GLR,
      EP, BS, SEED) = parse_args()
     np.random.seed(SEED)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -591,8 +661,8 @@ if __name__ == '__main__':
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     from tensorflow.keras import backend as K
     from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate,
-                                         Dense, BatchNormalization, Conv2D, Conv2DTranspose, LeakyReLU)
-    from tensorflow.keras.optimizers import Adam
+                                         Dense, BatchNormalization, Conv2D, Conv2DTranspose, Activation, LeakyReLU)
+    from tensorflow.keras.optimizers import Adam, Adamax
     from tensorflow.keras.models import Model
     from tensorflow.keras.utils import to_categorical
     if PLOT:
@@ -626,20 +696,20 @@ if __name__ == '__main__':
     IS = (N, N, 1)
 
     K.clear_session()
-    MDL = InfoGAN(IS, CN, FL, FB, FF, ZD, CD, UD, DLR, GLR, BS)
+    MDL = InfoGAN(IS, CN, FL, FB, FF, ZD, CD, UD, KI, AN, DLR, GLR, BS)
     TRN = Trainer(MDL, NH, NT, NS)
     if VERBOSE:
         MDL.model_summaries()
     if RSTRT:
-        MDL.load_weights(NAME, N, I, NS, SEED)
+        MDL.load_models(NAME, N, I, NS, SEED)
         TRN.fit(CONF, num_epochs=EP)
-        MDL.save_weights(NAME, N, I, NS, SEED)
+        MDL.save_models(NAME, N, I, NS, SEED)
     else:
         try:
-            MDL.load_weights(NAME, N, I, NS, SEED)
+            MDL.load_models(NAME, N, I, NS, SEED)
         except:
             TRN.fit(CONF, num_epochs=EP)
-            MDL.save_weights(NAME, N, I, NS, SEED)
+            MDL.save_models(NAME, N, I, NS, SEED)
     C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
         DGC = C.mean(2)
@@ -649,10 +719,10 @@ if __name__ == '__main__':
                             'c_{}'.format(i), CM,
                             NAME, N, I, NS,
                             CN, FL, FB, FF,
-                            ZD, CD, UD, DLR, GLR, BS)
+                            ZD, CD, UD, KI, AN, DLR, GLR, BS)
             else:
                 plot_diagram(DGC[:, :, i], H, T,
                             'u_{}'.format(i-CD), CM,
                             NAME, N, I, NS,
                             CN, FL, FB, FF,
-                            ZD, CD, UD, DLR, GLR, BS)
+                            ZD, CD, UD, KI, AN, DLR, GLR, BS)

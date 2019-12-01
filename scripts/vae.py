@@ -459,21 +459,21 @@ def build_autoencoder():
     # flatten convolutional output
     shape = K.int_shape(c)
     d = Flatten(name='flatten')(c)
-    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_0')(d)
-    # batch normalization to scale activations
-    # if BN:
-    #     d = BatchNormalization(name='batch_norm_dense_0')(d)
-    # activations
-    if ACT == 'relu':
-        d = Activation('relu', name='relu_dense_0')(d)
-    if ACT == 'prelu':
-        d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_0')(d)
-    elif ACT == 'lrelu':
-        d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_0')(d)
-    elif ACT == 'elu':
-        d = ELU(alpha=alpha_enc, name='elu_dense_0')(d)
-    elif ACT == 'selu':
-        d = Activation('selu', name='selu_dense_0')(d)
+    # d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_0')(d)
+    # # batch normalization to scale activations
+    # # if BN:
+    # #     d = BatchNormalization(name='batch_norm_dense_0')(d)
+    # # activations
+    # if ACT == 'relu':
+    #     d = Activation('relu', name='relu_dense_0')(d)
+    # if ACT == 'prelu':
+    #     d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_0')(d)
+    # elif ACT == 'lrelu':
+    #     d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_0')(d)
+    # elif ACT == 'elu':
+    #     d = ELU(alpha=alpha_enc, name='elu_dense_0')(d)
+    # elif ACT == 'selu':
+    #     d = Activation('selu', name='selu_dense_0')(d)
     # prior parameters
     if PRIOR == 'gaussian':
         # gaussian parameters as dense layers
@@ -524,20 +524,20 @@ def build_autoencoder():
     elif ACT == 'selu':
         d = Activation('selu', name='selu_dense_0')(d)
     # dense network of same size as convolution output from encoder
-    d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_1')(d)
-    # if BN:
-    #     d = BatchNormalization(name='batch_norm_dense_1')(d)
-    # activations
-    if ACT == 'relu':
-        d = Activation('relu', name='relu_dense_1')(d)
-    if ACT == 'prelu':
-        d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_1')(d)
-    elif ACT == 'lrelu':
-        d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_1')(d)
-    elif ACT == 'elu':
-        d = ELU(alpha=alpha_enc, name='elu_dense_1')(c)
-    elif ACT == 'selu':
-        d = Activation('selu', name='selu_dense_1')(d)
+    # d = Dense(units=np.prod(shape[1:]), kernel_initializer=init, name='dense_1')(d)
+    # # if BN:
+    # #     d = BatchNormalization(name='batch_norm_dense_1')(d)
+    # # activations
+    # if ACT == 'relu':
+    #     d = Activation('relu', name='relu_dense_1')(d)
+    # if ACT == 'prelu':
+    #     d = PReLU(alpha_initializer=alpha_enc, name='prelu_dense_1')(d)
+    # elif ACT == 'lrelu':
+    #     d = LeakyReLU(alpha=alpha_enc, name='lrelu_dense_1')(d)
+    # elif ACT == 'elu':
+    #     d = ELU(alpha=alpha_enc, name='elu_dense_1')(c)
+    # elif ACT == 'selu':
+    #     d = Activation('selu', name='selu_dense_1')(d)
     # reshape to convolution shape
     ct = Reshape(shape[1:], name='reshape_0')(d)
     # stop if dense network
