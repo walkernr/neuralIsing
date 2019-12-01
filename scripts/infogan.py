@@ -45,15 +45,15 @@ def parse_args():
     parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters in successive layers',
                         type=int, default=9)
     parser.add_argument('-zd', '--z_dimension', help='sample noise dimension',
-                        type=int, default=64)
+                        type=int, default=81)
     parser.add_argument('-cd', '--c_dimension', help='sample classification dimension',
-                        type=int, default=4)
+                        type=int, default=3)
     parser.add_argument('-ud', '--u_dimension', help='sample uniform dimension',
-                        type=int, default=4)
+                        type=int, default=3)
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=2e-4)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
-                        type=float, default=2e-4)
+                        type=float, default=1e-3)
     parser.add_argument('-ep', '--epochs', help='number of training epochs',
                         type=int, default=32)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
