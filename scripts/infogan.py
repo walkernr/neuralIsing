@@ -44,10 +44,12 @@ def parse_args():
                         type=int, default=9)
     parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters in successive layers',
                         type=int, default=9)
-    parser.add_argument('-zd', '--z_dimension', help='sample latent dimension',
-                        type=int, default=81)
+    parser.add_argument('-zd', '--z_dimension', help='sample noise dimension',
+                        type=int, default=64)
     parser.add_argument('-cd', '--c_dimension', help='sample classification dimension',
-                        type=int, default=3)
+                        type=int, default=4)
+    parser.add_argument('-ud', '--u_dimension', help='sample uniform dimension',
+                        type=int, default=4)
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=2e-4)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
@@ -62,7 +64,7 @@ def parse_args():
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
             args.name, args.lattice_length, args.sample_interval, args.sample_number,
             args.conv_number, args.filter_length, args.filter_base, args.filter_factor,
-            args.z_dimension, args.c_dimension,
+            args.z_dimension, args.c_dimension, args.u_dimension,
             args.discriminator_learning_rate, args.gan_learning_rate,
             args.epochs, args.batch_size, args.random_seed)
 
@@ -83,17 +85,19 @@ def load_configurations(name, lattice_length):
 
 def scale_configurations(conf):
     ''' scales input configurations '''
+    # (-1, 1) -> (0, 1)
     return (conf+1)/2
 
 
 def index_data_by_sample(data, num_fields, num_temps, indices):
     ''' indexes data '''
+    # reorders samples independently for each (h, t) according to indices
     return np.array([[data[i, j, indices[i, j]] for j in range(num_temps)] for i in range(num_fields)])
 
 
 def load_select_scale_data(name, lattice_length, interval, num_samples, seed, verbose=1):
     ''' selects random subset of data according to phase point interval and sample count '''
-    # reduced fields, temperatures, configurations, and thermal data
+    # apply interval to fields, temperatures, configurations, and thermal data
     fields, temps = load_thermal_params(name, lattice_length)
     interval_fields = fields[::interval]
     interval_temps = temps[::interval]
@@ -114,6 +118,7 @@ def load_select_scale_data(name, lattice_length, interval, num_samples, seed, ve
     # construct selected data subset
     select_conf = scale_configurations(index_data_by_sample(interval_conf, num_fields, num_temps, indices))
     select_thrm = index_data_by_sample(interval_thrm, num_fields, num_temps, indices)
+    # save selected data arrays
     np.save('{}.{}.{}.h.npy'.format(name, lattice_length, interval), interval_fields)
     np.save('{}.{}.{}.t.npy'.format(name, lattice_length, interval), interval_temps)
     np.save('{}.{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
@@ -125,6 +130,7 @@ def load_select_scale_data(name, lattice_length, interval, num_samples, seed, ve
 
 def load_data(name, lattice_length, interval, num_samples, seed, verbose=1):
     try:
+        # try loading selected data arrays
         fields = np.load('{}.{}.{}.h.npy'.format(name, lattice_length, interval))
         temps = np.load('{}.{}.{}.t.npy'.format(name, lattice_length, interval))
         conf = np.load('{}.{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
@@ -132,42 +138,58 @@ def load_data(name, lattice_length, interval, num_samples, seed, verbose=1):
         thrm = np.load('{}.{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
                                                         interval, num_samples, seed))
         if verbose:
-            print('prepared ising configurations and thermal parameters/measurements loaded from file')
+            print(100*'_')
+            print('Scaled/selected Ising configurations and thermal parameters/measurements loaded from file')
+            print(100*'_')
     except:
+        # generate selected data arrays
         (fields, temps,
          conf, thrm) = load_select_scale_data(name, lattice_length,
                                               interval, num_samples, seed, verbose)
         if verbose:
-            print('ising configurations and thermal parameters/measurements prepared')
+            print(100*'_')
+            print('Ising configurations selected/scaled and thermal parameters/measurements selected')
+            print(100*'_')
     return fields, temps, conf, thrm
 
 
 def plot_diagram(data, fields, temps, alias, cmap,
                  name, lattice_length, interval, num_samples,
                  conv_number, filter_length, filter_base, filter_factor,
-                 z_dim, c_dim, dsc_lr, gan_lr, batch_size):
+                 n_dim, c_dim, z_dim, dsc_lr, gan_lr, batch_size):
+    # file name parameters
     params = (name, lattice_length, interval, num_samples,
               conv_number, filter_length, filter_base, filter_factor,
-              z_dim, c_dim, dsc_lr, gan_lr, alias)
-    file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.png'.format(*params)
+              n_dim, c_dim, z_dim, dsc_lr, gan_lr, alias)
+    file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.png'.format(*params)
+    # initialize figure and axes
     fig, ax = plt.subplots()
+    # initialize colorbar
     div = make_axes_locatable(ax)
     cax = div.append_axes('top', size='5%', pad=0.8)
+    # remove spines on top and right
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
+    # set axis ticks to left and bottom
     ax.xaxis.set_ticks_position('bottom')
     ax.yaxis.set_ticks_position('left')
+    # plot diagram
     im = ax.imshow(data, aspect='equal', interpolation='none', origin='lower', cmap=cmap)
+    # generate grid
     ax.grid(which='both', axis='both', linestyle='-', color='k', linewidth=1)
+    # label ticks
     ax.set_xticks(np.arange(temps.size), minor=True)
     ax.set_yticks(np.arange(fields.size), minor=True)
     ax.set_xticks(np.arange(temps.size)[::4], minor=False)
     ax.set_yticks(np.arange(fields.size)[::4], minor=False)
     ax.set_xticklabels(np.round(temps, 2)[::4], rotation=-60)
     ax.set_yticklabels(np.round(fields, 2)[::4])
+    # label axes
     ax.set_xlabel(r'$T$')
     ax.set_ylabel(r'$H$')
+    # place colorbal
     fig.colorbar(im, cax=cax, orientation='horizontal', ticks=np.linspace(data.min(), data.max(), 3))
+    # save figure
     fig.savefig(file_name)
     plt.close()
 
@@ -191,9 +213,24 @@ def sample_gaussian(num_rows, dimension):
 
 def sample_categorical(num_rows, num_categories):
     ''' categorical sampling '''
-    sample = np.zeros(shape=(num_rows, num_categories))
-    sample[np.arange(num_rows), np.random.randint(num_categories, size=num_rows)] = 1.
+    if num_categories > 0:
+        sample = to_categorical(np.random.randint(0, num_categories, num_rows).reshape(-1, 1))
+    else:
+        sample = np.empty(shape=(num_rows, num_categories))
     return sample
+
+
+def sample_uniform(num_rows, dimension):
+    ''' uniform sampling '''
+    return np.random.uniform(size=(num_rows, dimension))
+
+
+def mutual_information_categorical_loss(category, prediction):
+    ''' mutual information loss for categorical control variables '''
+    eps = 1e-8
+    entropy = -K.mean(K.sum(category*K.log(category+eps), axis=1))
+    conditional_entropy = -K.mean(K.sum(category*K.log(prediction+eps), axis=1))
+    return entropy+conditional_entropy
 
 
 class InfoGAN():
@@ -203,22 +240,31 @@ class InfoGAN():
     '''
     def __init__(self, input_shape=(27, 27, 1), conv_number=3,
                  filter_length=3, filter_base=9, filter_factor=9,
-                 z_dim=81, c_dim=3,
+                 z_dim=81, c_dim=3, u_dim=3,
                  dsc_lr=2e-4, gan_lr=2e-4, batch_size=169):
         ''' initialize model parameters '''
         # convolutional parameters
+        # number of convolutions
         self.conv_number = conv_number
+        # number of filters for first convolution
         self.filter_base = filter_base
+        # multiplicative factor for filters in subsequent convolutions
         self.filter_factor = filter_factor
+        # filter side length
         self.filter_length = filter_length
+        # set stride to be same as filter size
         self.filter_stride = filter_length
         # convolutional input and output shapes
         self.input_shape = input_shape
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
                                                      self.filter_length, self.filter_base, self.filter_factor)
         # latent and classification dimensions
+        # latent noise dimension
         self.z_dim = z_dim
+        # categorical control variable dimension
         self.c_dim = c_dim
+        # uniform control variable dimension
+        self.u_dim = u_dim
         # discriminator and generator learning rates
         self.dsc_lr = dsc_lr
         self.gan_lr = gan_lr
@@ -242,8 +288,9 @@ class InfoGAN():
         # latent unit gaussian and categorical inputs
         self.z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='z_input')
         self.c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='c_input')
+        self.u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='u_input')
         # concatenate features
-        x = Concatenate()([self.z_input, self.c_input])
+        x = Concatenate()([self.z_input, self.c_input, self.u_input])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer='he_normal',
@@ -272,7 +319,7 @@ class InfoGAN():
                                           padding='same', strides=self.filter_stride,
                                           name='gen_output')(convt)
         # build generator
-        self.generator = Model(inputs=[self.z_input, self.c_input], outputs=[self.gen_output],
+        self.generator = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[self.gen_output],
                                name='generator')
 
 
@@ -323,49 +370,51 @@ class InfoGAN():
         x = Dense(units=128,
                   kernel_initializer='he_normal',
                   name='aux_dense_0')(self.dsc_hidden)
-        x = LeakyReLU(alpha=0.2, name='axus_dense_lrelu_0')(x)
+        x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
         # auxiliary output is a reconstruction of the categorical assignments fed into the generator
-        self.aux_output = Dense(self.c_dim,
-                                kernel_initializer='glorot_uniform', activation='softmax',
-                                name='aux_output')(x)
+        self.aux_c_output = Dense(self.c_dim,
+                                  kernel_initializer='glorot_uniform', activation='softmax',
+                                  name='aux_output_c')(x)
+        self.aux_u_output = Dense(self.u_dim,
+                                  kernel_initializer='glorot_uniform', activation='sigmoid',
+                                  name='aux_output_u')(x)
         # build auxiliary classifier
-        self.auxiliary = Model(inputs=[self.dsc_input], outputs=[self.aux_output],
+        self.auxiliary = Model(inputs=[self.dsc_input], outputs=[self.aux_c_output, self.aux_u_output],
                                name='auxiliary')
 
 
     def _build_gan(self):
         ''' builds generative adversarial network '''
-        # discriminator is not trained while the GAN is trained
+        # static discriminator output
         self.discriminator.trainable = False
-        # discriminator output
         gan_output = self.discriminator(self.gen_output)
         # auxiliary output
-        gan_output_aux = self.auxiliary(self.gen_output)
+        gan_output_aux_c, gan_output_aux_u = self.auxiliary(self.gen_output)
         # build GAN
-        self.gan = Model(inputs=[self.z_input, self.c_input], outputs=[gan_output, gan_output_aux],
+        self.gan = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[gan_output, gan_output_aux_c, gan_output_aux_u],
                          name='infogan')
         # define GAN optimizer
         self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
         # compile GAN
         self.gan.compile(loss={'discriminator' : 'binary_crossentropy',
-                               'auxiliary' : 'categorical_crossentropy'},
-                         loss_weights={'discriminator' : 1.,
-                                       'auxiliary' : 1.},
+                               'auxiliary' : 'categorical_crossentropy',
+                               'auxiliary_1' : 'mse'},
                          optimizer=self.gan_opt)
-        self.discriminator.trainable=True
+        self.discriminator.trainable = True
 
 
     def sample_latent_distribution(self):
         ''' draws samples from the latent gaussian and categorical distributions '''
         z = sample_gaussian(self.batch_size, self.z_dim)
         c = sample_categorical(self.batch_size, self.c_dim)
-        return z, c
+        u = sample_uniform(self.batch_size, self.u_dim)
+        return z, c, u
 
 
     def generate(self, verbose=1):
         ''' generate new configurations using samples from the latent distributions '''
-        z, c = self.sample_latent_distribution()
-        return self.generator.predict([z, c], batch_size=self.batch_size, verbose=0)
+        z, c, u = self.sample_latent_distribution()
+        return self.generator.predict([z, c, u], batch_size=self.batch_size, verbose=0)
 
 
     def discriminate(self, x_batch, verbose=1):
@@ -389,8 +438,8 @@ class InfoGAN():
         ''' save weights to file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.dsc_lr, self.gan_lr)
-        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
+                  self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
+        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
         self.gan.save_weights(file_name)
 
 
@@ -398,8 +447,8 @@ class InfoGAN():
         ''' load weights from file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.dsc_lr, self.gan_lr)
-        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
+                  self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
+        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
         self.gan.load_weights(file_name, by_name=True)
 
 
@@ -415,7 +464,8 @@ class Trainer():
         self.num_samples = num_samples
         self.dsc_loss_history = []
         self.gan_loss_history = []
-        self.ent_loss_history = []
+        self.ent_cat_loss_history = []
+        self.ent_con_loss_history = []
 
 
     def training_indices(self):
@@ -437,13 +487,14 @@ class Trainer():
     def train_gan(self):
         ''' train GAN '''
         # sample latent variables (gaussian noise and categorical controls)
-        z, c = self.model.sample_latent_distribution()
+        z, c, u = self.model.sample_latent_distribution()
         # inputs are true samples, so the discrimination targets are of unit value
         target = np.ones(self.model.batch_size).astype(int)
         # GAN and entropy losses
-        gan_loss = self.model.gan.train_on_batch([z, c], [target, c])
+        gan_loss = self.model.gan.train_on_batch([z, c, u], [target, c, u])
         self.gan_loss_history.append(gan_loss[1])
-        self.ent_loss_history.append(gan_loss[2])
+        self.ent_cat_loss_history.append(gan_loss[2])
+        self.ent_con_loss_history.append(gan_loss[3])
 
 
     def train_discriminator(self, x_batch=None):
@@ -470,7 +521,8 @@ class Trainer():
             if batch == 0:
                 gan_loss = 0
                 dsc_loss = 0
-                ent_loss = 0
+                ent_cat_loss = 0
+                ent_con_loss = 0
             # calculate rolling average
             else:
                 # start index for current epoch
@@ -480,8 +532,15 @@ class Trainer():
                 gan_loss = np.mean(self.gan_loss_history[start:stop])
                 # discriminator trains on false and true samples, so has twice as many losses
                 dsc_loss = np.mean(self.dsc_loss_history[2*start:2*stop])
-                ent_loss = np.mean(self.ent_loss_history[start:stop])
-            return gan_loss, dsc_loss, ent_loss
+                if self.model.c_dim > 0:
+                    ent_cat_loss = np.mean(self.ent_cat_loss_history[start:stop])
+                else:
+                    ent_cat_loss = 0
+                if self.model.z_dim > 0:
+                    ent_con_loss = np.mean(self.ent_con_loss_history[start:stop])
+                else:
+                    ent_con_loss = 0
+            return gan_loss, dsc_loss, ent_cat_loss, ent_con_loss
 
 
     def fit(self, x_train, num_epochs=1, verbose=1):
@@ -497,7 +556,7 @@ class Trainer():
             for j in batch_range:
                 # set batch loss description
                 batch_loss = self.rolling_loss_average(i, num_batches, j)
-                desc = 'Epoch: {} GAN Loss: {:.4f} DSC Loss: {:.4f} Entropy: {:.4f}'.format(i, *batch_loss)
+                desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSC Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
                 x_batch = x_train[self.model.batch_size*j:self.model.batch_size*(j+1)]
@@ -512,7 +571,7 @@ if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS,
      CN, FL, FB, FF,
-     ZD, CD,
+     ZD, CD, UD,
      DLR, GLR,
      EP, BS, SEED) = parse_args()
     np.random.seed(SEED)
@@ -535,7 +594,7 @@ if __name__ == '__main__':
                                          Dense, BatchNormalization, Conv2D, Conv2DTranspose, LeakyReLU)
     from tensorflow.keras.optimizers import Adam
     from tensorflow.keras.models import Model
-    from sklearn.decomposition import PCA
+    from tensorflow.keras.utils import to_categorical
     if PLOT:
         import matplotlib as mpl
         mpl.use('Agg')
@@ -567,7 +626,7 @@ if __name__ == '__main__':
     IS = (N, N, 1)
 
     K.clear_session()
-    MDL = InfoGAN(IS, CN, FL, FB, FF, ZD, CD, DLR, GLR, BS)
+    MDL = InfoGAN(IS, CN, FL, FB, FF, ZD, CD, UD, DLR, GLR, BS)
     TRN = Trainer(MDL, NH, NT, NS)
     if VERBOSE:
         MDL.model_summaries()
@@ -581,12 +640,19 @@ if __name__ == '__main__':
         except:
             TRN.fit(CONF, num_epochs=EP)
             MDL.save_weights(NAME, N, I, NS, SEED)
-    C = MDL.get_aux_dist(CONF, VERBOSE).reshape(NH, NT, NS, CD)
+    C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
         DGC = C.mean(2)
-        for i in trange(CD, desc='Plotting Diagrams', disable=not VERBOSE):
-            plot_diagram(DGC[:, :, i], H, T,
-                        'c_{}'.format(i), CM,
-                        NAME, N, I, NS,
-                        CN, FL, FB, FF,
-                        ZD, CD, DLR, GLR, BS)
+        for i in trange(CD+UD, desc='Plotting Diagrams', disable=not VERBOSE):
+            if i < CD:
+                plot_diagram(DGC[:, :, i], H, T,
+                            'c_{}'.format(i), CM,
+                            NAME, N, I, NS,
+                            CN, FL, FB, FF,
+                            ZD, CD, UD, DLR, GLR, BS)
+            else:
+                plot_diagram(DGC[:, :, i], H, T,
+                            'u_{}'.format(i-CD), CM,
+                            NAME, N, I, NS,
+                            CN, FL, FB, FF,
+                            ZD, CD, UD, DLR, GLR, BS)
