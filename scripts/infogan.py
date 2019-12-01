@@ -202,7 +202,7 @@ def plot_diagrams(data, fields, temps, alias, cmap,
                  name, lattice_length, interval, num_samples,
                  conv_number, filter_length, filter_base, filter_factor,
                  z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size):
-
+    pass
 
 
 def get_final_conv_shape(input_shape, conv_number,
