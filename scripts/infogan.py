@@ -8,7 +8,7 @@ Created on Sat Jan 30 01:29:38 2019
 import argparse
 import os
 import numpy as np
-from tqdm import trange
+from tqdm import tqdm, trange
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 
@@ -199,10 +199,20 @@ def plot_diagram(data, fields, temps, alias, cmap,
 
 
 def plot_diagrams(data, fields, temps, alias, cmap,
-                 name, lattice_length, interval, num_samples,
-                 conv_number, filter_length, filter_base, filter_factor,
-                 z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size):
-    pass
+                  name, lattice_length, interval, num_samples,
+                  conv_number, filter_length, filter_base, filter_factor,
+                  z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, verbose=1):
+    diag = data.mean(2)
+    for i in tqdm(range(c_dim), desc='Plotting Discrete Controls', disable=not verbose):
+        plot_diagram(diag[:, :, i], fields, temps, 'c_{}'.format(i), cmap,
+                     name, lattice_length, interval, num_samples,
+                     conv_number, filter_length, filter_base, filter_factor,
+                     z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size)
+    for i in tqdm(range(c_dim, c_dim+u_dim), desc='Plotting Discrete Controls', disable=not verbose):
+        plot_diagram(diag[:, :, i], fields, temps, 'u_{}'.format(i-c_dim), cmap,
+                     name, lattice_length, interval, num_samples,
+                     conv_number, filter_length, filter_base, filter_factor,
+                     z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size)
 
 
 def get_final_conv_shape(input_shape, conv_number,
@@ -546,6 +556,15 @@ class Trainer():
         self.ent_con_loss_history = []
 
 
+    def get_losses(self):
+        dsc_fake_loss = np.array(self.dsc_fake_loss_history).reshape(-1, self.num_batches)
+        dsc_real_loss = np.array(self.dsc_real_loss_history).reshape(-1, self.num_batches)
+        gan_loss = np.array(self.gan_loss_history).reshape(-1, self.num_batches)
+        ent_cat_loss = np.array(self.ent_cat_loss_history).reshape(-1, self.num_batches)
+        ent_con_loss = np.array(self.ent_con_loss_history).reshape(-1, self.num_batches)
+        return dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss
+
+
     def training_indices(self):
         num_sq = np.int32(np.sqrt(np.int32(self.num_fields*self.num_temps/self.model.batch_size)))
         sq_length = np.int32(np.sqrt(self.model.batch_size))
@@ -594,7 +613,7 @@ class Trainer():
             self.dsc_real_loss_history.append(dsc_loss)
 
 
-    def rolling_loss_average(self, epoch, num_batches, batch):
+    def rolling_loss_average(self, epoch, batch):
             ''' calculate rolling loss averages over batches during training '''
             # catch case where there are no calculated losses yet
             if batch == 0:
@@ -606,9 +625,9 @@ class Trainer():
             # calculate rolling average
             else:
                 # start index for current epoch
-                start = num_batches*epoch
+                start = self.num_batches*epoch
                 # stop index for current batch (given epoch)
-                stop = num_batches*epoch+batch+1
+                stop = self.num_batches*epoch+batch+1
                 gan_loss = np.mean(self.gan_loss_history[start:stop])
                 dscf_loss = np.mean(self.dsc_fake_loss_history[start:stop])
                 dscr_loss = np.mean(self.dsc_real_loss_history[start:stop])
@@ -633,7 +652,7 @@ class Trainer():
             # loop through batches
             for j in batch_range:
                 # set batch loss description
-                batch_loss = self.rolling_loss_average(i, num_batches, j)
+                batch_loss = self.rolling_loss_average(i, self.num_batches, j)
                 desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSCF Loss: {:.4f} DSCR Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i+1, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
@@ -711,26 +730,18 @@ if __name__ == '__main__':
     if RSTRT:
         MDL.load_models(NAME, N, I, NS, SEED)
         TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
+        LOSS = TRN.get_losses()
         MDL.save_models(NAME, N, I, NS, SEED)
     else:
         try:
             MDL.load_models(NAME, N, I, NS, SEED)
         except:
             TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
+            LOSS = TRN.get_losses()
             MDL.save_models(NAME, N, I, NS, SEED)
     C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
-        DGC = C.mean(2)
-        for i in trange(CD+UD, desc='Plotting Diagrams', disable=not VERBOSE):
-            if i < CD:
-                plot_diagram(DGC[:, :, i], H, T,
-                            'c_{}'.format(i), CM,
-                            NAME, N, I, NS,
-                            CN, FL, FB, FF,
-                            ZD, CD, UD, KI, AN, DLR, GLR, BS)
-            else:
-                plot_diagram(DGC[:, :, i], H, T,
-                            'u_{}'.format(i-CD), CM,
-                            NAME, N, I, NS,
-                            CN, FL, FB, FF,
-                            ZD, CD, UD, KI, AN, DLR, GLR, BS)
+        plot_diagrams(C, H, T, 'c_{}'.format(i), CM,
+                      NAME, N, I, NS,
+                      CN, FL, FB, FF, ZD, CD, UD,
+                      KI, AN, DLR, GLR, BS, VERBOSE)
