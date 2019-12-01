@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=2e-4)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
-                        type=float, default=1e-3)
+                        type=float, default=2e-4)
     parser.add_argument('-ep', '--epochs', help='number of training epochs',
                         type=int, default=32)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
@@ -198,6 +198,13 @@ def plot_diagram(data, fields, temps, alias, cmap,
     plt.close()
 
 
+def plot_diagrams(data, fields, temps, alias, cmap,
+                 name, lattice_length, interval, num_samples,
+                 conv_number, filter_length, filter_base, filter_factor,
+                 z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size):
+
+
+
 def get_final_conv_shape(input_shape, conv_number,
                          filter_length, filter_base, filter_factor):
     ''' calculates final convolutional layer output shape '''
@@ -307,14 +314,15 @@ class InfoGAN():
             x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_0')(x)
-        # repeated dense layer
-        # x = Dense(units=np.prod(self.final_conv_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='gen_dense_1')(x)
-        # if self.act == 'lrelu':
-        #     x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='gen_dense_selu_1')(x)
+        if self.final_conv_shape[:2] != (1, 1):
+            # repeated dense layer
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='gen_dense_1')(x)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         u = 0
@@ -359,14 +367,15 @@ class InfoGAN():
                 conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
-        # dense layer
-        # x = Dense(units=np.prod(self.final_conv_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='dsc_dense_0')(x)
-        # if self.act == 'lrelu':
-        #     x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+        if self.final_conv_shape[:2] != (1, 1):
+            # dense layer
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='dsc_dense_0')(x)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = x
         # dense layer
@@ -492,16 +501,16 @@ class InfoGAN():
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
                   self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
-        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.mdl'.format(*params)
-        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.mdl'.format(*params)
-        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.mdl'.format(*params)
-        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.mdl'.format(*params)
+        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.model.h5'.format(*params)
+        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.model.h5'.format(*params)
+        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.model.h5'.format(*params)
+        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.model.h5'.format(*params)
         self.discriminator.trainable = True
-        self.generator.save_model(gen_file_name)
-        self.discriminator.save_model(dsc_file_name)
-        self.auxiliary.save_model(aux_file_name)
+        self.generator.save(gen_file_name)
+        self.discriminator.save(dsc_file_name)
+        self.auxiliary.save(aux_file_name)
         self.discriminator.trainable = False
-        self.gan.save_model(gan_file_name)
+        self.gan.save(gan_file_name)
 
 
     def load_models(self, name, lattice_length, interval, num_samples, seed):
@@ -509,10 +518,10 @@ class InfoGAN():
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
                   self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
-        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.mdl'.format(*params)
-        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.mdl'.format(*params)
-        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.mdl'.format(*params)
-        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.mdl'.format(*params)
+        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.model.h5'.format(*params)
+        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.model.h5'.format(*params)
+        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.model.h5'.format(*params)
+        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.model.h5'.format(*params)
         self.generator = load_model(gen_file_name, compile=False)
         self.discriminator = load_model(dsc_file_name, compile=True)
         self.auxiliary = load_model(aux_file_name, compile=False)
@@ -529,6 +538,7 @@ class Trainer():
         self.num_fields = num_fields
         self.num_temps = num_temps
         self.num_samples = num_samples
+        self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.model.batch_size
         self.dsc_fake_loss_history = []
         self.dsc_real_loss_history = []
         self.gan_loss_history = []
@@ -616,17 +626,15 @@ class Trainer():
     def fit(self, x_train, num_epochs=1, verbose=1):
         ''' fit model '''
         x_train = self.reorder_training_data(x_train)
-        # calculate number of batches
-        num_batches = x_train.shape[0]//self.model.batch_size
         # loop through epochs
         for i in range(num_epochs):
             # construct progress bar for current epoch
-            batch_range = trange(num_batches, desc='', disable=not verbose)
+            batch_range = trange(self.num_batches, desc='', disable=not verbose)
             # loop through batches
             for j in batch_range:
                 # set batch loss description
                 batch_loss = self.rolling_loss_average(i, num_batches, j)
-                desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSCF Loss: {:.4f} DSCR Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i, num_epochs, *batch_loss)
+                desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSCF Loss: {:.4f} DSCR Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i+1, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
                 x_batch = x_train[self.model.batch_size*j:self.model.batch_size*(j+1)]
@@ -689,7 +697,7 @@ if __name__ == '__main__':
         plt.rcParams.update(PPARAMS)
         CM = plt.get_cmap('plasma')
 
-    H, T, CONF, THRM = load_data(NAME, N, I, NS, SEED)
+    H, T, CONF, THRM = load_data(NAME, N, I, NS, SEED, VERBOSE)
     NH, NT = H.size, T.size
     CONF = CONF.reshape(NH*NT*NS, N, N, 1)
     THRM = THRM.reshape(NH*NT*NS, -1)
@@ -702,13 +710,13 @@ if __name__ == '__main__':
         MDL.model_summaries()
     if RSTRT:
         MDL.load_models(NAME, N, I, NS, SEED)
-        TRN.fit(CONF, num_epochs=EP)
+        TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
         MDL.save_models(NAME, N, I, NS, SEED)
     else:
         try:
             MDL.load_models(NAME, N, I, NS, SEED)
         except:
-            TRN.fit(CONF, num_epochs=EP)
+            TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
             MDL.save_models(NAME, N, I, NS, SEED)
     C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
