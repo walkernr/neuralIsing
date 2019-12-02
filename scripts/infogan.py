@@ -198,7 +198,7 @@ def plot_diagram(data, fields, temps, alias, cmap,
     plt.close()
 
 
-def plot_diagrams(data, fields, temps, alias, cmap,
+def plot_diagrams(data, fields, temps, cmap,
                   name, lattice_length, interval, num_samples,
                   conv_number, filter_length, filter_base, filter_factor,
                   z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, verbose=1):
@@ -492,7 +492,8 @@ class InfoGAN():
         ''' save weights to file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
+                  self.z_dim, self.c_dim, self.u_dim,
+                  self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
         file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
         self.gan.save_weights(file_name)
 
@@ -501,7 +502,8 @@ class InfoGAN():
         ''' load weights from file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
+                  self.z_dim, self.c_dim, self.u_dim,
+                  self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
         file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.weights.h5'.format(*params)
         self.gan.load_weights(file_name, by_name=True)
 
@@ -510,24 +512,26 @@ class InfoGAN():
         ''' save models to file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim, self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
-        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.model.h5'.format(*params)
-        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.model.h5'.format(*params)
-        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.model.h5'.format(*params)
-        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.model.h5'.format(*params)
+                  self.z_dim, self.c_dim, self.u_dim,
+                  self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
+        gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.model.tf'.format(*params)
+        dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.model.tf'.format(*params)
+        aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.model.tf'.format(*params)
+        gan_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gan.model.tf'.format(*params)
         self.discriminator.trainable = True
-        self.generator.save(gen_file_name)
-        self.discriminator.save(dsc_file_name)
-        self.auxiliary.save(aux_file_name)
+        save_model(self.generator, gen_file_name, save_format='tf')
+        save_model(self.discriminator, dsc_file_name, save_format='tf')
+        save_model(self.auxiliary, aux_file_name, save_format='tf')
         self.discriminator.trainable = False
-        self.gan.save(gan_file_name)
+        save_model(self.gan, gan_file_name, save_format='tf')
 
 
     def load_models(self, name, lattice_length, interval, num_samples, seed):
         ''' load models from file '''
         params = (name, lattice_length, interval, num_samples,
                   self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim, self.dsc_lr, self.gan_lr)
+                  self.z_dim, self.c_dim, self.u_dim,
+                  self.krnl_init, self.act, self.dsc_lr, self.gan_lr)
         gen_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.gen.model.h5'.format(*params)
         dsc_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.dsc.model.h5'.format(*params)
         aux_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.aux.model.h5'.format(*params)
@@ -554,6 +558,7 @@ class Trainer():
         self.gan_loss_history = []
         self.ent_cat_loss_history = []
         self.ent_con_loss_history = []
+        self.past_epochs = 0
 
 
     def get_losses(self):
@@ -569,7 +574,8 @@ class Trainer():
         dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss = self.get_losses()
         params = (name, lattice_length, interval, num_samples,
                   self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
-                  self.model.z_dim, self.model.c_dim, self.model.u_dim, self.model.dsc_lr, self.model.gan_lr)
+                  self.model.z_dim, self.model.c_dim, self.model.u_dim,
+                  self.model.krnl_init, self.model.act, self.model.dsc_lr, self.model.gan_lr)
         dsc_fake_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.dsc.fake.npy'.format(*params)
         dsc_real_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.dsc.real.npy'.format(*params)
         gan_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.gan.npy'.format(*params)
@@ -580,6 +586,30 @@ class Trainer():
         np.save(gan_loss_file_name, gan_loss)
         np.save(ent_cat_loss_file_name, ent_cat_loss)
         np.save(ent_con_loss_file_name, ent_con_loss)
+
+
+    def load_losses(self, name, lattice_length, interval, num_samples, seed):
+        dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss = self.get_losses()
+        params = (name, lattice_length, interval, num_samples,
+                  self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
+                  self.model.z_dim, self.model.c_dim, self.model.u_dim,
+                  self.model.krnl_init, self.model.act, self.model.dsc_lr, self.model.gan_lr)
+        dsc_fake_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.dsc.fake.npy'.format(*params)
+        dsc_real_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.dsc.real.npy'.format(*params)
+        gan_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.gan.npy'.format(*params)
+        ent_cat_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.ent.cat.npy'.format(*params)
+        ent_con_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.ent.con.npy'.format(*params)
+        dsc_fake_loss = np.load(dsc_fake_loss_file_name)
+        dsc_real_loss = np.load(dsc_real_loss_file_name)
+        gan_loss = np.load(gan_loss_file_name)
+        ent_cat_loss = np.load(ent_cat_loss_file_name)
+        ent_con_loss = np.load(ent_con_loss_file_name)
+        self.past_epochs = dsc_fake_loss.shape[0]
+        self.dsc_fake_loss_history = list(dsc_fake_loss.reshape(-1))
+        self.dsc_real_loss_history = list(dsc_real_loss.reshape(-1))
+        self.gan_loss_history = list(gan_loss.reshape(-1))
+        self.ent_cat_loss_history = list(ent_cat_loss.reshape(-1))
+        self.ent_con_loss_history = list(ent_con_loss.reshape(-1))
 
 
     def training_indices(self):
@@ -624,7 +654,7 @@ class Trainer():
             self.dsc_fake_loss_history.append(dsc_loss)
         else:
             # inputs are true samples, so the discrimination targets are of unit value
-            target = np.ones(self.model.batch_size).astype(int)
+            target = np.ones(self.model.batch_size).astype(int)*np.random.uniform(low=0.9, high=1.0, size=1)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
             self.dsc_real_loss_history.append(dsc_loss)
@@ -632,6 +662,7 @@ class Trainer():
 
     def rolling_loss_average(self, epoch, batch):
             ''' calculate rolling loss averages over batches during training '''
+            epoch = epoch+self.past_epochs
             # catch case where there are no calculated losses yet
             if batch == 0:
                 gan_loss = 0
@@ -707,7 +738,7 @@ if __name__ == '__main__':
     from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate,
                                          Dense, BatchNormalization, Conv2D, Conv2DTranspose, Activation, LeakyReLU)
     from tensorflow.keras.optimizers import Adam, Adamax
-    from tensorflow.keras.models import Model
+    from tensorflow.keras.models import Model, save_model, load_model
     from tensorflow.keras.utils import to_categorical
     if PLOT:
         import matplotlib as mpl
@@ -746,19 +777,21 @@ if __name__ == '__main__':
         MDL.model_summaries()
     if RSTRT:
         MDL.load_models(NAME, N, I, NS, SEED)
+        TRN.load_losses(NAME, N, I, NS, SEED)
         TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
         TRN.save_losses(NAME, N, I, NS, SEED)
         MDL.save_models(NAME, N, I, NS, SEED)
     else:
         try:
             MDL.load_models(NAME, N, I, NS, SEED)
+            TRN.load_losses(NAME, N, I, NS, SEED)
         except:
             TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
             TRN.save_losses(NAME, N, I, NS, SEED)
             MDL.save_models(NAME, N, I, NS, SEED)
     C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
-        plot_diagrams(C, H, T, 'c_{}'.format(i), CM,
+        plot_diagrams(C, H, T, CM,
                       NAME, N, I, NS,
                       CN, FL, FB, FF, ZD, CD, UD,
                       KI, AN, DLR, GLR, BS, VERBOSE)
