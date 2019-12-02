@@ -652,7 +652,7 @@ class Trainer():
             # loop through batches
             for j in batch_range:
                 # set batch loss description
-                batch_loss = self.rolling_loss_average(i, self.num_batches, j)
+                batch_loss = self.rolling_loss_average(i, j)
                 desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSCF Loss: {:.4f} DSCR Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i+1, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
