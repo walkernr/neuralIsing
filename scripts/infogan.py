@@ -565,6 +565,23 @@ class Trainer():
         return dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss
 
 
+    def save_losses(self, name, lattice_length, interval, num_samples, seed):
+        dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss = self.get_losses()
+        params = (name, lattice_length, interval, num_samples,
+                  self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
+                  self.model.z_dim, self.model.c_dim, self.model.u_dim, self.model.dsc_lr, self.model.gan_lr)
+        dsc_fake_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.dsc.fake.npy'.format(*params)
+        dsc_real_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.dsc.real.npy'.format(*params)
+        gan_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.gan.npy'.format(*params)
+        ent_cat_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.ent.cat.npy'.format(*params)
+        ent_con_loss_file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.loss.ent.con.npy'.format(*params)
+        np.save(dsc_fake_loss_file_name, dsc_fake_loss)
+        np.save(dsc_real_loss_file_name, dsc_real_loss)
+        np.save(gan_loss_file_name, gan_loss)
+        np.save(ent_cat_loss_file_name, ent_cat_loss)
+        np.save(ent_con_loss_file_name, ent_con_loss)
+
+
     def training_indices(self):
         num_sq = np.int32(np.sqrt(np.int32(self.num_fields*self.num_temps/self.model.batch_size)))
         sq_length = np.int32(np.sqrt(self.model.batch_size))
@@ -730,14 +747,14 @@ if __name__ == '__main__':
     if RSTRT:
         MDL.load_models(NAME, N, I, NS, SEED)
         TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
-        LOSS = TRN.get_losses()
+        TRN.save_losses()
         MDL.save_models(NAME, N, I, NS, SEED)
     else:
         try:
             MDL.load_models(NAME, N, I, NS, SEED)
         except:
             TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
-            LOSS = TRN.get_losses()
+            TRN.save_losses()
             MDL.save_models(NAME, N, I, NS, SEED)
     C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
