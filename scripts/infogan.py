@@ -747,14 +747,14 @@ if __name__ == '__main__':
     if RSTRT:
         MDL.load_models(NAME, N, I, NS, SEED)
         TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
-        TRN.save_losses()
+        TRN.save_losses(NAME, N, I, NS, SEED)
         MDL.save_models(NAME, N, I, NS, SEED)
     else:
         try:
             MDL.load_models(NAME, N, I, NS, SEED)
         except:
             TRN.fit(CONF, num_epochs=EP, verbose=VERBOSE)
-            TRN.save_losses()
+            TRN.save_losses(NAME, N, I, NS, SEED)
             MDL.save_models(NAME, N, I, NS, SEED)
     C = np.concatenate(MDL.get_aux_dist(CONF, VERBOSE), axis=-1).reshape(NH, NT, NS, CD+UD)
     if PLOT:
