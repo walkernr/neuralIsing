@@ -107,6 +107,12 @@ def scale_configurations(conf):
     return (conf+1)/2
 
 
+def unscale_configurations(conf):
+    ''' unscales input configurations '''
+    # (0, 1) -> (-1, 1)
+    return 2*conf-1
+
+
 def index_data_by_sample(data, num_fields, num_temps, indices):
     ''' indexes data '''
     # reorders samples independently for each (h, t) according to indices
@@ -752,15 +758,15 @@ class Trainer():
             # generate batch
             fake_batch = self.model.generate()
             # inputs are false samples, so the discrimination targets are of null value
-            target = np.zeros(self.model.batch_size).astype(int)
-            # target = np.random.uniform(low=0.0, high=0.1, size=self.model.batch_size)
+            # target = np.zeros(self.model.batch_size).astype(int)
+            target = np.random.uniform(low=0.0, high=0.1, size=self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(fake_batch, target)
             self.dsc_fake_loss_history.append(dsc_loss)
         else:
             # inputs are true samples, so the discrimination targets are of unit value
-            target = np.ones(self.model.batch_size).astype(int)
-            # target = np.random.uniform(low=0.9, high=1.0, size=self.model.batch_size)
+            # target = np.ones(self.model.batch_size).astype(int)
+            target = np.random.uniform(low=0.9, high=1.0, size=self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
             self.dsc_real_loss_history.append(dsc_loss)
@@ -844,7 +850,6 @@ class Trainer():
                     # save model checkpoint
                     dsc_save_path = self.dsc_mngr.save()
                     gan_save_path = self.gan_mngr.save()
-                    #
                     print('Checkpoint DSC: {}'.format(dsc_save_path))
                     print('Checkpoint GAN: {}'.format(gan_save_path))
 
