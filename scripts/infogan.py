@@ -922,15 +922,15 @@ if __name__ == '__main__':
     C = C.reshape(NH, NT, NS, CD)
     U = U.reshape(NH, NT, NS, UD)
     if CD > 0:
-        save_data(C, 'categorical_control',
-                  NAME, N, I, NS,
-                  CN, FL, FB, FF, ZD, CD, UD,
-                  KI, AN, DLR, GLR, BS, SEED)
+        save_output_data(C, 'categorical_control',
+                         NAME, N, I, NS,
+                         CN, FL, FB, FF, ZD, CD, UD,
+                         KI, AN, DLR, GLR, BS, SEED)
     if UD > 0:
-        save_data(U, 'uniform_control',
-                  NAME, N, I, NS,
-                  CN, FL, FB, FF, ZD, CD, UD,
-                  KI, AN, DLR, GLR, BS, SEED)
+        save_output_data(U, 'uniform_control',
+                         NAME, N, I, NS,
+                         CN, FL, FB, FF, ZD, CD, UD,
+                         KI, AN, DLR, GLR, BS, SEED)
     if PLOT:
         plot_losses(L, CM,
                     NAME, N, I, NS,
