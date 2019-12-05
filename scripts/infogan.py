@@ -11,6 +11,20 @@ import numpy as np
 from tqdm import tqdm, trange
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras import backend as K
+from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate,
+                                     Dense, BatchNormalization, Conv2D, Conv2DTranspose,
+                                     Activation, LeakyReLU)
+from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
+from tensorflow.keras.models import Model, save_model, load_model
+from tensorflow.keras.utils import to_categorical
+from tensorflow.python.training.tracking.util import Checkpoint
+from tensorflow.python.training.checkpoint_management import CheckpointManager
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def parse_args():
@@ -835,21 +849,6 @@ class Trainer():
                     print('Checkpoint GAN: {}'.format(gan_save_path))
 
 if __name__ == '__main__':
-    import tensorflow as tf
-    from tensorflow.keras import backend as K
-    from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate,
-                                         Dense, BatchNormalization, Conv2D, Conv2DTranspose,
-                                         Activation, LeakyReLU)
-    from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
-    from tensorflow.keras.models import Model, save_model, load_model
-    from tensorflow.keras.utils import to_categorical
-    from tensorflow.python.training.tracking.util import Checkpoint
-    from tensorflow.python.training.checkpoint_management import CheckpointManager
-    import matplotlib as mpl
-    mpl.use('Agg')
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS,
      CN, FL, FB, FF,
