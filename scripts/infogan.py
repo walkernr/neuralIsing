@@ -59,21 +59,21 @@ def parse_args():
     parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters in successive layers',
                         type=int, default=9)
     parser.add_argument('-zd', '--z_dimension', help='sample noise dimension',
-                        type=int, default=92)
+                        type=int, default=100)
     parser.add_argument('-cd', '--c_dimension', help='sample classification dimension',
-                        type=int, default=4)
+                        type=int, default=5)
     parser.add_argument('-ud', '--u_dimension', help='sample uniform dimension',
-                        type=int, default=4)
+                        type=int, default=0)
     parser.add_argument('-ki', '--kernel_initializer', help='kernel initializer',
-                        type=str, default='he_normal')
+                        type=str, default='lecun_normal')
     parser.add_argument('-an', '--activation', help='activation function',
-                        type=str, default='lrelu')
+                        type=str, default='selu')
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=1e-2)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
                         type=float, default=1e-3)
     parser.add_argument('-ep', '--epochs', help='number of training epochs',
-                        type=int, default=32)
+                        type=int, default=4)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
                         type=int, default=169)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
@@ -345,9 +345,9 @@ class InfoGAN():
     '''
     def __init__(self, input_shape=(27, 27, 1), conv_number=3,
                  filter_length=3, filter_base=9, filter_factor=9,
-                 z_dim=81, c_dim=3, u_dim=3,
-                 krnl_init='he_normal', act='lrelu',
-                 dsc_lr=2e-4, gan_lr=2e-4, batch_size=169):
+                 z_dim=100, c_dim=5, u_dim=0,
+                 krnl_init='lecun_normal', act='selu',
+                 dsc_lr=1e-2, gan_lr=1e-3, batch_size=169):
         ''' initialize model parameters '''
         # convolutional parameters
         # number of convolutions
