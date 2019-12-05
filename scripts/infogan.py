@@ -160,6 +160,19 @@ def load_data(name, lattice_length, interval, num_samples, seed, verbose=False):
     return fields, temps, conf, thrm
 
 
+def save_output_data(data, alias,
+                     name, lattice_length, interval, num_samples,
+                     conv_number, filter_length, filter_base, filter_factor,
+                     z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed):
+    ''' save output data from model '''
+    # file parameters
+    params = (name, lattice_length, interval, num_samples,
+              conv_number, filter_length, filter_base, filter_factor,
+              z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed, alias)
+    file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.{}.npy'.format(*params)
+    np.save(file_name, data)
+
+
 def plot_batch_losses(losses, cmap, params, verbose=False):
     file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.loss.batch.png'.format(*params)
     # initialize figure and axes
@@ -908,6 +921,16 @@ if __name__ == '__main__':
     C, U = MDL.get_aux_dist(CONF, VERBOSE)
     C = C.reshape(NH, NT, NS, CD)
     U = U.reshape(NH, NT, NS, UD)
+    if CD > 0:
+        save_data(C, 'categorical_control',
+                  NAME, N, I, NS,
+                  CN, FL, FB, FF, ZD, CD, UD,
+                  KI, AN, DLR, GLR, BS, SEED)
+    if UD > 0:
+        save_data(U, 'uniform_control',
+                  NAME, N, I, NS,
+                  CN, FL, FB, FF, ZD, CD, UD,
+                  KI, AN, DLR, GLR, BS, SEED)
     if PLOT:
         plot_losses(L, CM,
                     NAME, N, I, NS,
