@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Jan 30 01:29:38 2019
+Created on Wed Dec 4 14:15:18 2019
 
 @author: Nicholas
 """
@@ -17,7 +17,6 @@ from tensorflow.keras.layers import (Input, Flatten, Reshape, Lambda,
                                      Dense, BatchNormalization, Conv2D, Conv2DTranspose,
                                      Activation, LeakyReLU)
 from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
-from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.models import Model, save_model, load_model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.python.training.tracking.util import Checkpoint

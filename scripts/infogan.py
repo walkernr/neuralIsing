@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Jan 30 01:29:38 2019
+Created on Tue Dec 3 00:13:46 2019
 
 @author: Nicholas
 """
@@ -792,15 +792,15 @@ class Trainer():
             # generate batch
             fake_batch = self.model.generate()
             # inputs are false samples, so the discrimination targets are of null value
-            # target = np.zeros(self.model.batch_size).astype(int)
-            target = np.random.uniform(low=0.0, high=0.3, size=self.model.batch_size)
+            target = np.zeros(self.model.batch_size).astype(int)
+            # target = np.random.uniform(low=0.0, high=0.3, size=self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(fake_batch, target)
             self.dsc_fake_loss_history.append(dsc_loss)
         else:
             # inputs are true samples, so the discrimination targets are of unit value
-            # target = np.ones(self.model.batch_size).astype(int)
-            target = np.random.uniform(low=0.7, high=1.0, size=self.model.batch_size)
+            target = np.ones(self.model.batch_size).astype(int)
+            # target = np.random.uniform(low=0.7, high=1.0, size=self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
             self.dsc_real_loss_history.append(dsc_loss)
