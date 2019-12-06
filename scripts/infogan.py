@@ -15,7 +15,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate, Lambda,
                                      Dense, BatchNormalization, Conv2D, Conv2DTranspose,
-                                     SpatialDropout2d, Activation, LeakyReLU)
+                                     SpatialDropout2D, Activation, LeakyReLU)
 from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
 from tensorflow.keras.models import Model, save_model, load_model
 from tensorflow.keras.utils import to_categorical
