@@ -15,7 +15,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate, Lambda,
                                      Dense, BatchNormalization, Conv2D, Conv2DTranspose,
-                                     Activation, LeakyReLU)
+                                     SpatialDropout2d, Activation, LeakyReLU)
 from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
 from tensorflow.keras.models import Model, save_model, load_model
 from tensorflow.keras.utils import to_categorical
@@ -449,6 +449,7 @@ class InfoGAN():
                 x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
+        convt = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(convt)
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
@@ -462,6 +463,7 @@ class InfoGAN():
                 convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
             if self.act == 'selu':
                 convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
+            convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
         self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_length,
                                           kernel_initializer='glorot_uniform', activation='tanh',
@@ -483,12 +485,13 @@ class InfoGAN():
             conv = Conv2D(filters=filter_number, kernel_size=self.filter_length,
                           kernel_initializer=self.krnl_init,
                           padding='valid', strides=self.filter_stride,
-                          name='dsc_conv_{}'.format(i))(conv)
+                          name='dsc_conv_{}'.format(i-1))(conv)
             if self.act == 'lrelu':
-                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
-                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(conv)
+                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i-1))(conv)
+                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i-1))(conv)
             if self.act == 'selu':
-                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(conv)
+                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i-1))(conv)
+            conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i-1))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         if self.final_conv_shape[:2] != (1, 1):
