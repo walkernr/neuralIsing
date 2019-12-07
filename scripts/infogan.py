@@ -52,12 +52,18 @@ def parse_args():
                         type=int, default=1024)
     parser.add_argument('-cn', '--conv_number', help='convolutional layer depth',
                         type=int, default=3)
-    parser.add_argument('-fl', '--filter_length', help='size of filters in hidden convolutional layers',
+    parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
                         type=int, default=3)
-    parser.add_argument('-fb', '--filter_base', help='base number of filters in hidden convolutional layers',
+    parser.add_argument('-fb', '--filter_base', help='base number of filters in base hidden convolutional layer',
                         type=int, default=9)
-    parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters in successive layers',
+    parser.add_argument('-fl', '--filter_length', help='size of filters following base convolution',
+                        type=int, default=3)
+    parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters after base convolution',
                         type=int, default=9)
+    parser.add_argument('-gd', '--generator_dropout', help='toggle generator dropout layers',
+                        action='store_true')
+    parser.add_argument('-dd', '--discriminator_dropout', help='toggle discriminator dropout layers',
+                        action='store_true')
     parser.add_argument('-zd', '--z_dimension', help='sample noise dimension',
                         type=int, default=100)
     parser.add_argument('-cd', '--c_dimension', help='sample classification dimension',
@@ -68,23 +74,35 @@ def parse_args():
                         type=str, default='lecun_normal')
     parser.add_argument('-an', '--activation', help='activation function',
                         type=str, default='selu')
+    parser.add_argument('-dop', '--discriminator_optimizer', help='optimizer for discriminator',
+                        type=str, default='sgd')
+    parser.add_argument('-gop', '--gan_optimizer', help='optimizer for gan',
+                        type=str, default='adam')
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=1e-2)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
                         type=float, default=1e-3)
-    parser.add_argument('-ep', '--epochs', help='number of training epochs',
-                        type=int, default=4)
+    parser.add_argument('-gl', '--gan_lambda', help='gan regularization lambda',
+                        type=float, default=1.0)
+    parser.add_argument('-ta', '--trainer_alpha', help='trainer alpha label smoothing',
+                        type=float, default=0.1)
+    parser.add_argument('-tb', '--trainer_beta', help='trainer beta label flipping',
+                        type=float, default=0.05)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
                         type=int, default=169)
+    parser.add_argument('-ep', '--epochs', help='number of training epochs',
+                        type=int, default=4)
     parser.add_argument('-sd', '--random_seed', help='random seed for sample selection and learning',
                         type=int, default=128)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
             args.name, args.lattice_length, args.sample_interval, args.sample_number,
-            args.conv_number, args.filter_length, args.filter_base, args.filter_factor,
-            args.z_dimension, args.c_dimension, args.u_dimension,
-            args.kernel_initializer, args.activation, args.discriminator_learning_rate, args.gan_learning_rate,
-            args.epochs, args.batch_size, args.random_seed)
+            args.conv_number, args.filter_base_length, args.filter_base, args.filter_length, args.filter_factor,
+            args.generator_dropout, args.discriminator_dropout, args.z_dimension, args.c_dimension, args.u_dimension,
+            args.kernel_initializer, args.activation,
+            args.discriminator_optimizer, args.gan_optimizer, args.discriminator_learning_rate, args.gan_learning_rate,
+            args.gan_lambda, args.trainer_alpha, args.trainer_beta,
+            args.batch_size, args.epochs, args.random_seed)
 
 
 def load_thermal_params(name, lattice_length):
@@ -119,7 +137,7 @@ def index_data_by_sample(data, num_fields, num_temps, indices):
     return np.array([[data[i, j, indices[i, j]] for j in range(num_temps)] for i in range(num_fields)])
 
 
-def load_select_scale_data(name, lattice_length, interval, num_samples, seed, verbose=False):
+def load_select_scale_data(name, lattice_length, interval, num_samples, verbose=False):
     ''' selects random subset of data according to phase point interval and sample count '''
     # apply interval to fields, temperatures, configurations, and thermal data
     fields, temps = load_thermal_params(name, lattice_length)
@@ -148,22 +166,22 @@ def load_select_scale_data(name, lattice_length, interval, num_samples, seed, ve
     # save selected data arrays
     np.save(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval), interval_fields)
     np.save(os.getcwd()+'/{}.{}.{}.t.npy'.format(name, lattice_length, interval), interval_temps)
-    np.save(os.getcwd()+'/{}.{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
-                                                          interval, num_samples, seed), select_conf)
-    np.save(os.getcwd()+'/{}.{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
-                                                          interval, num_samples, seed), select_thrm)
+    np.save(os.getcwd()+'/{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
+                                                       interval, num_samples), select_conf)
+    np.save(os.getcwd()+'/{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
+                                                       interval, num_samples), select_thrm)
     return interval_fields, interval_temps, select_conf, select_thrm
 
 
-def load_data(name, lattice_length, interval, num_samples, seed, verbose=False):
+def load_data(name, lattice_length, interval, num_samples, verbose=False):
     try:
         # try loading selected data arrays
         fields = np.load(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval))
         temps = np.load(os.getcwd()+'/{}.{}.{}.t.npy'.format(name, lattice_length, interval))
-        conf = np.load(os.getcwd()+'/{}.{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
-                                                                     interval, num_samples, seed))
-        thrm = np.load(os.getcwd()+'/{}.{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
-                                                                     interval, num_samples, seed))
+        conf = np.load(os.getcwd()+'/{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
+                                                                  interval, num_samples))
+        thrm = np.load(os.getcwd()+'/{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
+                                                                  interval, num_samples))
         if verbose:
             print(100*'_')
             print('Scaled/selected Ising configurations and thermal parameters/measurements loaded from file')
@@ -172,7 +190,7 @@ def load_data(name, lattice_length, interval, num_samples, seed, verbose=False):
         # generate selected data arrays
         (fields, temps,
          conf, thrm) = load_select_scale_data(name, lattice_length,
-                                              interval, num_samples, seed, verbose)
+                                              interval, num_samples, verbose)
         if verbose:
             print(100*'_')
             print('Ising configurations selected/scaled and thermal parameters/measurements selected')
@@ -180,21 +198,16 @@ def load_data(name, lattice_length, interval, num_samples, seed, verbose=False):
     return fields, temps, conf, thrm
 
 
-def save_output_data(data, alias,
-                     name, lattice_length, interval, num_samples,
-                     conv_number, filter_length, filter_base, filter_factor,
-                     z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed):
+def save_output_data(data, alias, name, lattice_length, interval, num_samples, prfx):
     ''' save output data from model '''
     # file parameters
-    params = (name, lattice_length, interval, num_samples,
-              conv_number, filter_length, filter_base, filter_factor,
-              z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed, alias)
-    file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.{}.npy'.format(*params)
+    params = (name, lattice_length, interval, num_samples)
+    file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+prfx+'.{}.npy'.format(alias)
     np.save(file_name, data)
 
 
-def plot_batch_losses(losses, cmap, params, verbose=False):
-    file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.loss.batch.png'.format(*params)
+def plot_batch_losses(losses, cmap, file_prfx, verbose=False):
+    file_name = os.getcwd()+'/'+file_prfx+'.loss.batch.png'
     # initialize figure and axes
     fig, ax = plt.subplots()
     # remove spines on top and right
@@ -218,8 +231,8 @@ def plot_batch_losses(losses, cmap, params, verbose=False):
     plt.close()
 
 
-def plot_epoch_losses(losses, cmap, params, verbose=False):
-    file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.loss.epoch.png'.format(*params)
+def plot_epoch_losses(losses, cmap, file_prfx, verbose=False):
+    file_name = os.getcwd()+'/'+file_prfx+'.loss.epoch.png'
     # initialize figure and axes
     fig, ax = plt.subplots()
     # remove spines on top and right
@@ -245,19 +258,17 @@ def plot_epoch_losses(losses, cmap, params, verbose=False):
 
 def plot_losses(losses, cmap,
                 name, lattice_length, interval, num_samples,
-                conv_number, filter_length, filter_base, filter_factor,
-                z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed, verbose=False):
+                prfx, verbose=False):
     # file name parameters
-    params = (name, lattice_length, interval, num_samples,
-              conv_number, filter_length, filter_base, filter_factor,
-              z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed)
-    plot_batch_losses(losses, cmap, params, verbose)
-    plot_epoch_losses(losses, cmap, params, verbose)
+    params = (name, lattice_length, interval, num_samples)
+    file_prfx = '{}.{}.{}.{}.'.format(*params)+prfx
+    plot_batch_losses(losses, cmap, file_prfx, verbose)
+    plot_epoch_losses(losses, cmap, file_prfx, verbose)
 
 
-def plot_diagram(data, fields, temps, cmap, params):
+def plot_diagram(data, fields, temps, cmap, file_prfx, alias):
     # file name parameters
-    file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.{}.png'.format(*params)
+    file_name = os.getcwd()+'/'+file_prfx+'.{}.png'.format(alias)
     # initialize figure and axes
     fig, ax = plt.subplots()
     # initialize colorbar
@@ -292,19 +303,19 @@ def plot_diagram(data, fields, temps, cmap, params):
 
 def plot_diagrams(c_data, u_data, fields, temps, cmap,
                   name, lattice_length, interval, num_samples,
-                  conv_number, filter_length, filter_base, filter_factor,
-                  z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed, verbose=False):
-    params = (name, lattice_length, interval, num_samples,
-              conv_number, filter_length, filter_base, filter_factor,
-              z_dim, c_dim, u_dim, krnl_init, act, dsc_lr, gan_lr, batch_size, seed)
+                  prfx, verbose=False):
+    params = (name, lattice_length, interval, num_samples)
+    file_prfx = '{}.{}.{}.{}.'.format(*params)+prfx
     c_diag = c_data.mean(2)
     u_diag = u_data.mean(2)
+    c_dim = c_diag.shape[-1]
+    u_dim = u_diag.shape[-1]
     for i in trange(c_dim, desc='Plotting Discrete Controls', disable=not verbose):
-        plot_diagram(c_diag[:, :, i], fields, temps, cmap, params+('c_{}'.format(i),))
+        plot_diagram(c_diag[:, :, i], fields, temps, cmap, prfx, 'c_{}'.format(i))
     for i in trange(u_dim, desc='Plotting Continuous Controls', disable=not verbose):
-        # plot_diagram(u_diag[:, :, i], fields, temps, cmap, params+('m_{}'.format(i),))
-        # plot_diagram(u_diag[:, :, u_dim+i], fields, temps, cmap, params+('s_{}'.format(i),))
-        plot_diagram(u_diag[:, :, i], fields, temps, cmap, params+('u_{}'.format(i),))
+        # plot_diagram(u_diag[:, :, i], fields, temps, cmap, prfx, 'm_{}'.format(i))
+        # plot_diagram(u_diag[:, :, u_dim+i], fields, temps, cmap, prfx, 's_{}'.format(i))
+        plot_diagram(u_diag[:, :, i], fields, temps, cmap, prfx, 'u_{}'.format(i))
 
 
 def nrelu(x):
@@ -313,15 +324,24 @@ def nrelu(x):
 
 
 def get_final_conv_shape(input_shape, conv_number,
-                         filter_length, filter_base, filter_factor):
+                         filter_base_length, filter_length,
+                         filter_base, filter_factor):
     ''' calculates final convolutional layer output shape '''
-    return tuple(np.array(input_shape[:2])//(filter_length**conv_number))+\
+    return tuple(np.array(input_shape[:2])//(filter_base_length*filter_length**(conv_number-1)))+\
            (input_shape[2]*filter_base*filter_factor**(conv_number-1),)
 
 
 def get_filter_number(conv_iter, filter_base, filter_factor):
     ''' calculates the filter count for a given convolutional iteration '''
-    return filter_base*filter_factor**(conv_iter-1)
+    return filter_base*filter_factor**(conv_iter)
+
+
+def get_filter_length_stride(conv_iter, filter_base_length, filter_length):
+    ''' calculates filter length and stride for a given convolutional iteration '''
+    if conv_iter == 0:
+        return filter_base_length, filter_base_length
+    else:
+        return filter_length, filter_length
 
 
 def sample_gaussian(num_rows, dimension):
@@ -357,10 +377,12 @@ class InfoGAN():
     Generative adversarial modeling of the Ising spin configurations
     '''
     def __init__(self, input_shape=(27, 27, 1), conv_number=3,
-                 filter_length=3, filter_base=9, filter_factor=9,
+                 filter_base_length=3, filter_base=9, filter_length=3, filter_factor=9,
+                 gen_drop=False, dsc_drop=False,
                  z_dim=100, c_dim=5, u_dim=0,
                  krnl_init='lecun_normal', act='selu',
-                 dsc_lr=1e-2, gan_lr=1e-3, batch_size=169):
+                 dsc_opt_n='sgd', gan_opt_n='adam', dsc_lr=1e-2, gan_lr=1e-3,
+                 lamb=1.0, batch_size=169):
         ''' initialize model parameters '''
         self.eps = 1e-8
         # convolutional parameters
@@ -371,14 +393,19 @@ class InfoGAN():
         # multiplicative factor for filters in subsequent convolutions
         self.filter_factor = filter_factor
         # filter side length
+        self.filter_base_length = filter_base_length
         self.filter_length = filter_length
         # set stride to be same as filter size
-        self.filter_stride = filter_length
+        self.filter_base_stride = self.filter_base_length
+        self.filter_stride = self.filter_length
         # convolutional input and output shapes
         self.input_shape = input_shape
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
-                                                     self.filter_length, self.filter_base, self.filter_factor)
-        # latent and classification dimensions
+                                                     self.filter_base_length, self.filter_length,
+                                                     self.filter_base, self.filter_factor)
+        # generator and discriminator dropout
+        self.gen_drop = gen_drop
+        self.dsc_drop = dsc_drop
         # latent noise dimension
         self.z_dim = z_dim
         # categorical control variable dimension
@@ -388,14 +415,30 @@ class InfoGAN():
         # kernel initializer and activation
         self.krnl_init = krnl_init
         self.act = act
-        # discriminator and generator learning rates
+        # discriminator and gan optimizers
+        self.dsc_opt_n = dsc_opt_n
+        self.gan_opt_n = gan_opt_n
+        # discriminator and gan learning rates
         self.dsc_lr = dsc_lr
         self.gan_lr = gan_lr
+        # regularization constant
+        self.lamb = lamb
         # batch size and callbacks
         self.batch_size = batch_size
         self.callbacks = []
         # build full model
         self._build_model()
+    
+
+    def get_file_prefix(self):
+        ''' gets parameter tuple and filename string prefix '''
+        params = (self.conv_number, self.filter_base_length, self.filter_base, self.filter_length, self.filter_factor,
+                  self.gen_drop, self.dsc_drop, self.z_dim, self.c_dim, self.u_dim,
+                  self.krnl_init, self.act,
+                  self.dsc_opt_n, self.gan_opt_n, self.dsc_lr, self.gan_lr,
+                  self.lamb, self.batch_size)
+        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}'.format(*params)
+        return file_name
 
 
     def _build_model(self):
@@ -449,7 +492,8 @@ class InfoGAN():
                 x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
-        # convt = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(convt)
+        if self.gen_drop:
+            convt = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(convt)
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
@@ -463,11 +507,12 @@ class InfoGAN():
                 convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
             if self.act == 'selu':
                 convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
-            # convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
+            if self.gen_drop:
+                convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
-        self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_length,
+        self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                           kernel_initializer='glorot_uniform', activation='tanh',
-                                          padding='same', strides=self.filter_stride,
+                                          padding='same', strides=self.filter_base_stride,
                                           name='gen_output')(convt)
         # build generator
         self.generator = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[self.gen_output],
@@ -480,18 +525,20 @@ class InfoGAN():
         self.dsc_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='dsc_input')
         conv = self.dsc_input
         # iterative convolutions over input
-        for i in range(1, self.conv_number+1):
+        for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
-            conv = Conv2D(filters=filter_number, kernel_size=self.filter_length,
+            filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
+            conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                           kernel_initializer=self.krnl_init,
-                          padding='valid', strides=self.filter_stride,
-                          name='dsc_conv_{}'.format(i-1))(conv)
+                          padding='valid', strides=filter_stride,
+                          name='dsc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
-                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i-1))(conv)
-                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i-1))(conv)
+                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
+                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(conv)
             if self.act == 'selu':
-                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i-1))(conv)
-            # conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i-1))(conv)
+                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(conv)
+            if self.dsc_drop:
+                conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         if self.final_conv_shape[:2] != (1, 1):
@@ -521,8 +568,14 @@ class InfoGAN():
         self.discriminator = Model(inputs=[self.dsc_input], outputs=[self.dsc_output],
                                    name='discriminator')
         # define optimizer
-        self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
-        # self.dsc_opt = SGD(lr=self.dsc_lr)
+        if self.dsc_opt_n == 'adam':
+            self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+        if self.dsc_opt_n == 'adamax':
+            self.dsc_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
+        if self.dsc_opt_n == 'nadam':
+            self.dsc_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+        if self.dsc_opt_n == 'sgd':
+            self.dsc_opt = SGD(lr=self.dsc_lr)
         # compile discriminator
         self.discriminator.compile(loss='binary_crossentropy', optimizer=self.dsc_opt)
 
@@ -567,11 +620,21 @@ class InfoGAN():
         self.gan = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[gan_output, gan_output_aux_c, gan_output_aux_u],
                          name='infogan')
         # define GAN optimizer
-        self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+        if self.gan_opt_n == 'adam':
+            self.gan_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+        if self.gan_opt_n == 'adamax':
+            self.gan_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
+        if self.gan_opt_n == 'nadam':
+            self.gan_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+        if self.gan_opt_n == 'sgd':
+            self.gan_opt = SGD(lr=self.dsc_lr)
         # compile GAN
         self.gan.compile(loss={'discriminator' : 'binary_crossentropy',
                                'auxiliary' : 'categorical_crossentropy',
                                'auxiliary_1' : 'mse'},
+                         loss_weights={'discriminator': 1.0,
+                                       'auxiliary': self.lamb,
+                                       'auxiliary_1': self.lamb},
                          optimizer=self.gan_opt)
         self.discriminator.trainable = True
 
@@ -632,26 +695,20 @@ class InfoGAN():
         self.gan.summary()
 
 
-    def save_weights(self, name, lattice_length, interval, num_samples, seed):
+    def save_weights(self, name, lattice_length, interval, num_samples):
         ''' save weights to file '''
         # file parameters
-        params = (name, lattice_length, interval, num_samples,
-                  self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim,
-                  self.krnl_init, self.act, self.dsc_lr, self.gan_lr, self.batch_size, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.gan.weights.h5'.format(*params)
+        params = (name, lattice_length, interval, num_samples)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
         # save weights
         self.gan.save_weights(file_name)
 
 
-    def load_weights(self, name, lattice_length, interval, num_samples, seed):
+    def load_weights(self, name, lattice_length, interval, num_samples):
         ''' load weights from file '''
         # file parameters
-        params = (name, lattice_length, interval, num_samples,
-                  self.conv_number, self.filter_length, self.filter_base, self.filter_factor,
-                  self.z_dim, self.c_dim, self.u_dim,
-                  self.krnl_init, self.act, self.dsc_lr, self.gan_lr, self.batch_size, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.gan.weights.h5'.format(*params)
+        params = (name, lattice_length, interval, num_samples)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
         # load weights
         self.gan.load_weights(file_name, by_name=True)
 
@@ -660,17 +717,13 @@ class Trainer():
     '''
     InfoGAN trainer
     '''
-    def __init__(self, model, num_fields, num_temps, num_samples):
+    def __init__(self, model, alpha, beta):
         ''' initialize trainer '''
         # model
         self.model = model
-        # number of external thermal parameters
-        self.num_fields = num_fields
-        self.num_temps = num_temps
-        # number of samples per (h, t)
-        self.num_samples = num_samples
-        # number of batches
-        self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.model.batch_size
+        # smoothing constant
+        self.alpha = alpha
+        self.beta = beta
         # loss histories
         self.dsc_fake_loss_history = []
         self.dsc_real_loss_history = []
@@ -682,6 +735,11 @@ class Trainer():
         # checkpoint managers
         self.dsc_mngr = None
         self.gan_mngr = None
+    
+
+    def get_file_prefix(self):
+        ''' gets file prefix '''
+        return self.model.get_file_prefix()+'.{:.0e}.{:.0e}'.format(self.alpha, self.beta)
 
 
     def get_losses(self):
@@ -695,30 +753,25 @@ class Trainer():
         return dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss
 
 
-    def save_losses(self, name, lattice_length, interval, num_samples, seed):
+    def save_losses(self, name, lattice_length, interval, num_samples):
         ''' save loss histories to file '''
         # retrieve losses
         losses = self.get_losses()
         # file parameters
-        params = (name, lattice_length, interval, num_samples,
-                  self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
-                  self.model.z_dim, self.model.c_dim, self.model.u_dim,
-                  self.model.krnl_init, self.model.act, self.model.dsc_lr, self.model.gan_lr, self.model.batch_size, seed)
-        loss_file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.loss.npy'.format(*params)
-        np.save(loss_file_name, np.stack(losses, axis=-1))
+        params = (name, lattice_length, interval, num_samples)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.loss.npy'
+        np.save(file_name, np.stack(losses, axis=-1))
 
 
-    def load_losses(self, name, lattice_length, interval, num_samples, seed):
+    def load_losses(self, name, lattice_length, interval, num_samples):
         ''' load loss histories from file '''
         # file parameters
-        params = (name, lattice_length, interval, num_samples,
-                  self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
-                  self.model.z_dim, self.model.c_dim, self.model.u_dim,
-                  self.model.krnl_init, self.model.act, self.model.dsc_lr, self.model.gan_lr, self.model.batch_size, seed)
-        loss_file_name = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.loss.npy'.format(*params)
-        losses = np.load(loss_file_name)
+        params = (name, lattice_length, interval, num_samples)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.loss.npy'
+        losses = np.load(file_name)
         # set past epochs
         self.past_epochs = losses.shape[0]
+        self.num_batches = losses.shape[1]
         # change loss histories into lists
         self.dsc_fake_loss_history = list(losses[:, :, 0].reshape(-1))
         self.dsc_real_loss_history = list(losses[:, :, 1].reshape(-1))
@@ -727,33 +780,27 @@ class Trainer():
         self.ent_con_loss_history = list(losses[:, :, 4].reshape(-1))
 
 
-    def initialize_checkpoint_managers(self, name, lattice_length, interval, num_samples, seed):
+    def initialize_checkpoint_managers(self, name, lattice_length, interval, num_samples):
         ''' initialize training checkpoint managers '''
         # initialize checkpoints
         self.dsc_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.model.dsc_opt, net=self.model.discriminator)
         self.gan_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.model.gan_opt, net=self.model.gan)
         # file parameters
-        params = (name, lattice_length, interval, num_samples,
-                  self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
-                  self.model.z_dim, self.model.c_dim, self.model.u_dim,
-                  self.model.krnl_init, self.model.act, self.model.dsc_lr, self.model.gan_lr, self.model.batch_size, seed)
-        directory = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.ckpts'.format(*params)
+        params = (name, lattice_length, interval, num_samples)
+        directory = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # initialize checkpoint managers
         self.dsc_mngr = CheckpointManager(self.dsc_ckpt, directory+'/discriminator/', max_to_keep=4)
         self.gan_mngr = CheckpointManager(self.gan_ckpt, directory+'/gan/', max_to_keep=4)
 
 
-    def load_latest_checkpoint(self, name, lattice_length, interval, num_samples, seed):
+    def load_latest_checkpoint(self, name, lattice_length, interval, num_samples):
         ''' load latest training checkpoint from file '''
         # initialize checkpoint managers
-        self.initialize_checkpoint_managers(name, lattice_length, interval, num_samples, seed)
-        self.load_losses(name, lattice_length, interval, num_samples, seed)
+        self.initialize_checkpoint_managers(name, lattice_length, interval, num_samples)
+        self.load_losses(name, lattice_length, interval, num_samples)
         # file parameters
-        params = (name, lattice_length, interval, num_samples,
-                  self.model.conv_number, self.model.filter_length, self.model.filter_base, self.model.filter_factor,
-                  self.model.z_dim, self.model.c_dim, self.model.u_dim,
-                  self.model.krnl_init, self.model.act, self.model.dsc_lr, self.model.gan_lr, self.model.batch_size, seed)
-        directory = os.getcwd()+'/{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{}.{}.ckpts'.format(*params)
+        params = (name, lattice_length, interval, num_samples)
+        directory = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # restore checkpoints
         self.dsc_ckpt.restore(self.dsc_mngr.latest_checkpoint).assert_consumed()
         self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
@@ -795,15 +842,19 @@ class Trainer():
             # generate batch
             fake_batch = self.model.generate()
             # inputs are false samples, so the discrimination targets are of null value
-            # target = np.zeros(self.model.batch_size).astype(int)
-            target = np.random.uniform(low=0.0, high=0.1, size=self.model.batch_size)
+            target = np.zeros(self.model.batch_size).astype(int)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(fake_batch, target)
             self.dsc_fake_loss_history.append(dsc_loss)
         else:
             # inputs are true samples, so the discrimination targets are of unit value
             # target = np.ones(self.model.batch_size).astype(int)
-            target = np.random.uniform(low=0.9, high=1.0, size=self.model.batch_size)
+            # label smoothing
+            target = np.random.uniform(low=1.0-self.alpha, high=1.0, size=self.model.batch_size)
+            # label randomizing
+            flp_size = np.int32(self.beta*self.model.batch_size)
+            flp_ind = np.random.choice(self.model.batch_size, size=flp_size)
+            target[flp_ind] = np.random.uniform(low=0.0, high=0.1, size=flp_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
             self.dsc_real_loss_history.append(dsc_loss)
@@ -857,6 +908,8 @@ class Trainer():
 
     def fit(self, x_train, num_epochs=4, save_step=4, verbose=False):
         ''' fit model '''
+        self.num_fields, self.num_temps, self.num_samples, _, _, = x_train.shape
+        self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.model.batch_size
         x_train = self.reorder_training_data(x_train)
         num_epochs += self.past_epochs
         # loop through epochs
@@ -893,10 +946,12 @@ class Trainer():
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS,
-     CN, FL, FB, FF,
-     ZD, CD, UD,
-     KI, AN, DLR, GLR,
-     EP, BS, SEED) = parse_args()
+     CN, FBL, FB, FL, FF,
+     GD, DD, ZD, CD, UD,
+     KI, AN,
+     DOPT, GOPT, DLR, GLR,
+     GLAMB, TALPHA, TBETA,
+     BS, EP, SEED) = parse_args()
 
     plt.rc('font', family='sans-serif')
     FTSZ = 28
@@ -917,10 +972,8 @@ if __name__ == '__main__':
     plt.rcParams.update(PPARAMS)
     CM = plt.get_cmap('plasma')
 
-    H, T, CONF, THRM = load_data(NAME, N, I, NS, SEED, VERBOSE)
+    H, T, CONF, THRM = load_data(NAME, N, I, NS, VERBOSE)
     NH, NT = H.size, T.size
-    CONF = CONF.reshape(NH*NT*NS, N, N, 1)
-    THRM = THRM.reshape(NH*NT*NS, -1)
     IS = (N, N, 1)
 
     np.random.seed(SEED)
@@ -935,51 +988,44 @@ if __name__ == '__main__':
         tf.config.threading.set_inter_op_parallelism_threads(THREADS)
     tf.device(DEVICE)
 
-    MDL = InfoGAN(IS, CN, FL, FB, FF, ZD, CD, UD, KI, AN, DLR, GLR, BS)
-    TRN = Trainer(MDL, NH, NT, NS)
+    MDL = InfoGAN(IS, CN, FBL, FB, FL, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS)
+    TRN = Trainer(MDL, TALPHA, TBETA)
+    PRFX = TRN.get_file_prefix()
     if RSTRT:
-        MDL.load_weights(NAME, N, I, NS, SEED)
+        MDL.load_weights(NAME, N, I, NS)
         if VERBOSE:
             MDL.model_summaries()
-        # TRN.load_latest_checkpoint(NAME, N, I, NS, SEED)
+        # TRN.load_latest_checkpoint(NAME, N, I, NS)
         TRN.fit(CONF, num_epochs=EP, save_step=EP, verbose=VERBOSE)
-        TRN.save_losses(NAME, N, I, NS, SEED)
-        MDL.save_weights(NAME, N, I, NS, SEED)
+        TRN.save_losses(NAME, N, I, NS)
+        MDL.save_weights(NAME, N, I, NS)
     else:
         try:
-            MDL.load_weights(NAME, N, I, NS, SEED)
+            MDL.load_weights(NAME, N, I, NS)
             if VERBOSE:
                 MDL.model_summaries()
-            TRN.load_losses(NAME, N, I, NS, SEED)
+            TRN.load_losses(NAME, N, I, NS)
         except:
             if VERBOSE:
                 MDL.model_summaries()
-            # TRN.initialize_checkpoint_managers(NAME, N, I, NS, SEED)
+            # TRN.initialize_checkpoint_managers(NAME, N, I, NS)
             TRN.fit(CONF, num_epochs=EP, save_step=EP, verbose=VERBOSE)
-            TRN.save_losses(NAME, N, I, NS, SEED)
-            MDL.save_weights(NAME, N, I, NS, SEED)
+            TRN.save_losses(NAME, N, I, NS)
+            MDL.save_weights(NAME, N, I, NS)
     L = TRN.get_losses()
-    C, U = MDL.get_aux_dist(CONF, VERBOSE)
+    C, U = MDL.get_aux_dist(CONF.reshape(-1, *IS), VERBOSE)
     C = C.reshape(NH, NT, NS, CD)
     # U[:, UD:] = np.exp(0.5*U[:, UD:])
     # U = U.reshape(NH, NT, NS, 2*UD)
     U = U.reshape(NH, NT, NS, UD)
     if CD > 0:
-        save_output_data(C, 'categorical_control',
-                         NAME, N, I, NS,
-                         CN, FL, FB, FF, ZD, CD, UD,
-                         KI, AN, DLR, GLR, BS, SEED)
+        save_output_data(C, 'categorical_control', NAME, N, I, NS, PRFX)
     if UD > 0:
-        save_output_data(U, 'continuous_control',
-                         NAME, N, I, NS,
-                         CN, FL, FB, FF, ZD, CD, UD,
-                         KI, AN, DLR, GLR, BS, SEED)
+        save_output_data(U, 'continuous_control', NAME, N, I, NS, PRFX)
     if PLOT:
         plot_losses(L, CM,
                     NAME, N, I, NS,
-                    CN, FL, FB, FF, ZD, CD, UD,
-                    KI, AN, DLR, GLR, BS, SEED, VERBOSE)
+                    PRFX, VERBOSE)
         plot_diagrams(C, U, H, T, CM,
                       NAME, N, I, NS,
-                      CN, FL, FB, FF, ZD, CD, UD,
-                      KI, AN, DLR, GLR, BS, SEED, VERBOSE)
+                      PRFX, VERBOSE)
