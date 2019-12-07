@@ -50,6 +50,8 @@ def parse_args():
                         type=int, default=1)
     parser.add_argument('-sn', '--sample_number', help='number of samples per phase point (variational autoencoder)',
                         type=int, default=1024)
+    parser.add_argument('-sc', '--scale_data', help='scale data (-1, 1) -> (0, 1)',
+                        action='store_true')
     parser.add_argument('-cn', '--conv_number', help='convolutional layer depth',
                         type=int, default=3)
     parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
@@ -96,7 +98,7 @@ def parse_args():
                         type=int, default=128)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
-            args.name, args.lattice_length, args.sample_interval, args.sample_number,
+            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data,
             args.conv_number, args.filter_base_length, args.filter_base, args.filter_length, args.filter_factor,
             args.generator_dropout, args.discriminator_dropout, args.z_dimension, args.c_dimension, args.u_dimension,
             args.kernel_initializer, args.activation,
@@ -137,7 +139,7 @@ def index_data_by_sample(data, num_fields, num_temps, indices):
     return np.array([[data[i, j, indices[i, j]] for j in range(num_temps)] for i in range(num_fields)])
 
 
-def load_select_scale_data(name, lattice_length, interval, num_samples, verbose=False):
+def load_select_scale_data(name, lattice_length, interval, num_samples, scaled, seed, verbose=False):
     ''' selects random subset of data according to phase point interval and sample count '''
     # apply interval to fields, temperatures, configurations, and thermal data
     fields, temps = load_thermal_params(name, lattice_length)
@@ -160,28 +162,33 @@ def load_select_scale_data(name, lattice_length, interval, num_samples, verbose=
         for j in range(num_temps):
                 indices[i, j] = np.random.permutation(total_num_samples)[:num_samples]
     # construct selected data subset
-    # select_conf = scale_configurations(index_data_by_sample(interval_conf, num_fields, num_temps, indices))
     select_conf = index_data_by_sample(interval_conf, num_fields, num_temps, indices)
+    if scaled:
+        select_conf = scale_configurations(select_conf)
     select_thrm = index_data_by_sample(interval_thrm, num_fields, num_temps, indices)
     # save selected data arrays
     np.save(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval), interval_fields)
     np.save(os.getcwd()+'/{}.{}.{}.t.npy'.format(name, lattice_length, interval), interval_temps)
-    np.save(os.getcwd()+'/{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
-                                                       interval, num_samples), select_conf)
-    np.save(os.getcwd()+'/{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
-                                                       interval, num_samples), select_thrm)
+    np.save(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.conf.npy'.format(name, lattice_length,
+                                                               interval, num_samples,
+                                                               scaled, seed), select_conf)
+    np.save(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.thrm.npy'.format(name, lattice_length,
+                                                               interval, num_samples,
+                                                               scaled, seed), select_thrm)
     return interval_fields, interval_temps, select_conf, select_thrm
 
 
-def load_data(name, lattice_length, interval, num_samples, verbose=False):
+def load_data(name, lattice_length, interval, num_samples, scaled, seed, verbose=False):
     try:
         # try loading selected data arrays
         fields = np.load(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval))
         temps = np.load(os.getcwd()+'/{}.{}.{}.t.npy'.format(name, lattice_length, interval))
-        conf = np.load(os.getcwd()+'/{}.{}.{}.{}.conf.npy'.format(name, lattice_length,
-                                                                  interval, num_samples))
-        thrm = np.load(os.getcwd()+'/{}.{}.{}.{}.thrm.npy'.format(name, lattice_length,
-                                                                  interval, num_samples))
+        conf = np.load(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.conf.npy'.format(name, lattice_length,
+                                                                          interval, num_samples,
+                                                                          scaled, seed))
+        thrm = np.load(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.thrm.npy'.format(name, lattice_length,
+                                                                          interval, num_samples,
+                                                                          scaled, seed))
         if verbose:
             print(100*'_')
             print('Scaled/selected Ising configurations and thermal parameters/measurements loaded from file')
@@ -190,7 +197,8 @@ def load_data(name, lattice_length, interval, num_samples, verbose=False):
         # generate selected data arrays
         (fields, temps,
          conf, thrm) = load_select_scale_data(name, lattice_length,
-                                              interval, num_samples, verbose)
+                                              interval, num_samples,
+                                              scaled, seed, verbose)
         if verbose:
             print(100*'_')
             print('Ising configurations selected/scaled and thermal parameters/measurements selected')
@@ -198,11 +206,11 @@ def load_data(name, lattice_length, interval, num_samples, verbose=False):
     return fields, temps, conf, thrm
 
 
-def save_output_data(data, alias, name, lattice_length, interval, num_samples, prfx):
+def save_output_data(data, alias, name, lattice_length, interval, num_samples, scaled, seed, prfx):
     ''' save output data from model '''
     # file parameters
-    params = (name, lattice_length, interval, num_samples)
-    file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+prfx+'.{}.npy'.format(alias)
+    params = (name, lattice_length, interval, num_samples, scaled, seed)
+    file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx+'.{}.npy'.format(alias)
     np.save(file_name, data)
 
 
@@ -257,11 +265,11 @@ def plot_epoch_losses(losses, cmap, file_prfx, verbose=False):
 
 
 def plot_losses(losses, cmap,
-                name, lattice_length, interval, num_samples,
+                name, lattice_length, interval, num_samples, scaled, seed,
                 prfx, verbose=False):
     # file name parameters
-    params = (name, lattice_length, interval, num_samples)
-    file_prfx = '{}.{}.{}.{}.'.format(*params)+prfx
+    params = (name, lattice_length, interval, num_samples, scaled, seed)
+    file_prfx = '{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx
     plot_batch_losses(losses, cmap, file_prfx, verbose)
     plot_epoch_losses(losses, cmap, file_prfx, verbose)
 
@@ -302,10 +310,10 @@ def plot_diagram(data, fields, temps, cmap, file_prfx, alias):
 
 
 def plot_diagrams(c_data, u_data, fields, temps, cmap,
-                  name, lattice_length, interval, num_samples,
+                  name, lattice_length, interval, num_samples, scaled, seed,
                   prfx, verbose=False):
-    params = (name, lattice_length, interval, num_samples)
-    file_prfx = '{}.{}.{}.{}.'.format(*params)+prfx
+    params = (name, lattice_length, interval, num_samples, scaled, seed)
+    file_prfx = '{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx
     c_diag = c_data.mean(2)
     u_diag = u_data.mean(2)
     c_dim = c_diag.shape[-1]
@@ -382,7 +390,7 @@ class InfoGAN():
                  z_dim=100, c_dim=5, u_dim=0,
                  krnl_init='lecun_normal', act='selu',
                  dsc_opt_n='sgd', gan_opt_n='adam', dsc_lr=1e-2, gan_lr=1e-3,
-                 lamb=1.0, batch_size=169):
+                 lamb=1.0, batch_size=169, scaled=False):
         ''' initialize model parameters '''
         self.eps = 1e-8
         # convolutional parameters
@@ -425,7 +433,11 @@ class InfoGAN():
         self.lamb = lamb
         # batch size and callbacks
         self.batch_size = batch_size
-        self.callbacks = []
+        # scaling
+        if scaled:
+            self.gen_out_act = 'sigmoid'
+        else:
+            self.gen_out_act = 'tanh'
         # build full model
         self._build_model()
     
@@ -497,7 +509,7 @@ class InfoGAN():
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
-            filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
+            filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
                                     padding='same', strides=self.filter_stride,
@@ -511,7 +523,7 @@ class InfoGAN():
                 convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
         self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
-                                          kernel_initializer='glorot_uniform', activation='tanh',
+                                          kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                           padding='same', strides=self.filter_base_stride,
                                           name='gen_output')(convt)
         # build generator
@@ -569,11 +581,11 @@ class InfoGAN():
                                    name='discriminator')
         # define optimizer
         if self.dsc_opt_n == 'adam':
-            self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = Adam(lr=self.dsc_lr)
         if self.dsc_opt_n == 'adamax':
-            self.dsc_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = Adamax(lr=self.dsc_lr)
         if self.dsc_opt_n == 'nadam':
-            self.dsc_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = Nadam(lr=self.dsc_lr)
         if self.dsc_opt_n == 'sgd':
             self.dsc_opt = SGD(lr=self.dsc_lr)
         # compile discriminator
@@ -621,11 +633,11 @@ class InfoGAN():
                          name='infogan')
         # define GAN optimizer
         if self.gan_opt_n == 'adam':
-            self.gan_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+            self.gan_opt = Adam(lr=self.dsc_lr)
         if self.gan_opt_n == 'adamax':
-            self.gan_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
+            self.gan_opt = Adamax(lr=self.dsc_lr)
         if self.gan_opt_n == 'nadam':
-            self.gan_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+            self.gan_opt = Nadam(lr=self.dsc_lr)
         if self.gan_opt_n == 'sgd':
             self.gan_opt = SGD(lr=self.dsc_lr)
         # compile GAN
@@ -695,20 +707,20 @@ class InfoGAN():
         self.gan.summary()
 
 
-    def save_weights(self, name, lattice_length, interval, num_samples):
+    def save_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' save weights to file '''
         # file parameters
-        params = (name, lattice_length, interval, num_samples)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
+        params = (name, lattice_length, interval, num_samples, scaled, seed)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
         # save weights
         self.gan.save_weights(file_name)
 
 
-    def load_weights(self, name, lattice_length, interval, num_samples):
+    def load_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' load weights from file '''
         # file parameters
-        params = (name, lattice_length, interval, num_samples)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
+        params = (name, lattice_length, interval, num_samples, scaled, seed)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
         # load weights
         self.gan.load_weights(file_name, by_name=True)
 
@@ -753,21 +765,21 @@ class Trainer():
         return dsc_fake_loss, dsc_real_loss, gan_loss, ent_cat_loss, ent_con_loss
 
 
-    def save_losses(self, name, lattice_length, interval, num_samples):
+    def save_losses(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' save loss histories to file '''
         # retrieve losses
         losses = self.get_losses()
         # file parameters
-        params = (name, lattice_length, interval, num_samples)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.loss.npy'
+        params = (name, lattice_length, interval, num_samples, scaled, seed)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.loss.npy'
         np.save(file_name, np.stack(losses, axis=-1))
 
 
-    def load_losses(self, name, lattice_length, interval, num_samples):
+    def load_losses(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' load loss histories from file '''
         # file parameters
-        params = (name, lattice_length, interval, num_samples)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.loss.npy'
+        params = (name, lattice_length, interval, num_samples, scaled, seed)
+        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.loss.npy'
         losses = np.load(file_name)
         # set past epochs
         self.past_epochs = losses.shape[0]
@@ -780,27 +792,27 @@ class Trainer():
         self.ent_con_loss_history = list(losses[:, :, 4].reshape(-1))
 
 
-    def initialize_checkpoint_managers(self, name, lattice_length, interval, num_samples):
+    def initialize_checkpoint_managers(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' initialize training checkpoint managers '''
         # initialize checkpoints
         self.dsc_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.model.dsc_opt, net=self.model.discriminator)
         self.gan_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.model.gan_opt, net=self.model.gan)
         # file parameters
-        params = (name, lattice_length, interval, num_samples)
-        directory = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
+        params = (name, lattice_length, interval, num_samples, scaled, seed)
+        directory = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # initialize checkpoint managers
         self.dsc_mngr = CheckpointManager(self.dsc_ckpt, directory+'/discriminator/', max_to_keep=4)
         self.gan_mngr = CheckpointManager(self.gan_ckpt, directory+'/gan/', max_to_keep=4)
 
 
-    def load_latest_checkpoint(self, name, lattice_length, interval, num_samples):
+    def load_latest_checkpoint(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' load latest training checkpoint from file '''
         # initialize checkpoint managers
-        self.initialize_checkpoint_managers(name, lattice_length, interval, num_samples)
-        self.load_losses(name, lattice_length, interval, num_samples)
+        self.initialize_checkpoint_managers(name, lattice_length, interval, num_samples, scaled, seed)
+        self.load_losses(name, lattice_length, interval, num_samples, scaled, seed)
         # file parameters
-        params = (name, lattice_length, interval, num_samples)
-        directory = os.getcwd()+'/{}.{}.{}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
+        params = (name, lattice_length, interval, num_samples, scaled, seed)
+        directory = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # restore checkpoints
         self.dsc_ckpt.restore(self.dsc_mngr.latest_checkpoint).assert_consumed()
         self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
@@ -945,7 +957,7 @@ class Trainer():
 
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
-     NAME, N, I, NS,
+     NAME, N, I, NS, SC,
      CN, FBL, FB, FL, FF,
      GD, DD, ZD, CD, UD,
      KI, AN,
@@ -972,7 +984,7 @@ if __name__ == '__main__':
     plt.rcParams.update(PPARAMS)
     CM = plt.get_cmap('plasma')
 
-    H, T, CONF, THRM = load_data(NAME, N, I, NS, VERBOSE)
+    H, T, CONF, THRM = load_data(NAME, N, I, NS, SC, SEED, VERBOSE)
     NH, NT = H.size, T.size
     IS = (N, N, 1)
 
@@ -988,30 +1000,30 @@ if __name__ == '__main__':
         tf.config.threading.set_inter_op_parallelism_threads(THREADS)
     tf.device(DEVICE)
 
-    MDL = InfoGAN(IS, CN, FBL, FB, FL, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS)
+    MDL = InfoGAN(IS, CN, FBL, FB, FL, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, SC)
     TRN = Trainer(MDL, TALPHA, TBETA)
     PRFX = TRN.get_file_prefix()
     if RSTRT:
-        MDL.load_weights(NAME, N, I, NS)
+        MDL.load_weights(NAME, N, I, NS, SC, SEED)
         if VERBOSE:
             MDL.model_summaries()
         # TRN.load_latest_checkpoint(NAME, N, I, NS)
         TRN.fit(CONF, num_epochs=EP, save_step=EP, verbose=VERBOSE)
-        TRN.save_losses(NAME, N, I, NS)
-        MDL.save_weights(NAME, N, I, NS)
+        TRN.save_losses(NAME, N, I, NS, SC, SEED)
+        MDL.save_weights(NAME, N, I, NS, SC, SEED)
     else:
         try:
-            MDL.load_weights(NAME, N, I, NS)
+            MDL.load_weights(NAME, N, I, NS, SC, SEED)
             if VERBOSE:
                 MDL.model_summaries()
-            TRN.load_losses(NAME, N, I, NS)
+            TRN.load_losses(NAME, N, I, NS, SC, SEED)
         except:
             if VERBOSE:
                 MDL.model_summaries()
             # TRN.initialize_checkpoint_managers(NAME, N, I, NS)
             TRN.fit(CONF, num_epochs=EP, save_step=EP, verbose=VERBOSE)
-            TRN.save_losses(NAME, N, I, NS)
-            MDL.save_weights(NAME, N, I, NS)
+            TRN.save_losses(NAME, N, I, NS, SC, SEED)
+            MDL.save_weights(NAME, N, I, NS, SC, SEED)
     L = TRN.get_losses()
     C, U = MDL.get_aux_dist(CONF.reshape(-1, *IS), VERBOSE)
     C = C.reshape(NH, NT, NS, CD)
@@ -1019,13 +1031,9 @@ if __name__ == '__main__':
     # U = U.reshape(NH, NT, NS, 2*UD)
     U = U.reshape(NH, NT, NS, UD)
     if CD > 0:
-        save_output_data(C, 'categorical_control', NAME, N, I, NS, PRFX)
+        save_output_data(C, 'categorical_control', NAME, N, I, NS, SC, SEED, PRFX)
     if UD > 0:
-        save_output_data(U, 'continuous_control', NAME, N, I, NS, PRFX)
+        save_output_data(U, 'continuous_control', NAME, N, I, NS, SC, SEED, PRFX)
     if PLOT:
-        plot_losses(L, CM,
-                    NAME, N, I, NS,
-                    PRFX, VERBOSE)
-        plot_diagrams(C, U, H, T, CM,
-                      NAME, N, I, NS,
-                      PRFX, VERBOSE)
+        plot_losses(L, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
+        plot_diagrams(C, U, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
