@@ -449,7 +449,7 @@ class InfoGAN():
                 x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
-        convt = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(convt)
+        # convt = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(convt)
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
@@ -463,7 +463,7 @@ class InfoGAN():
                 convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
             if self.act == 'selu':
                 convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
-            convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
+            # convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
         self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_length,
                                           kernel_initializer='glorot_uniform', activation='tanh',
@@ -491,7 +491,7 @@ class InfoGAN():
                 conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i-1))(conv)
             if self.act == 'selu':
                 conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i-1))(conv)
-            conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i-1))(conv)
+            # conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i-1))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         if self.final_conv_shape[:2] != (1, 1):
@@ -521,8 +521,8 @@ class InfoGAN():
         self.discriminator = Model(inputs=[self.dsc_input], outputs=[self.dsc_output],
                                    name='discriminator')
         # define optimizer
-        # self.dsc_opt = Adam(lr=self.dsc_lr)
-        self.dsc_opt = SGD(lr=self.dsc_lr)
+        self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+        # self.dsc_opt = SGD(lr=self.dsc_lr)
         # compile discriminator
         self.discriminator.compile(loss='binary_crossentropy', optimizer=self.dsc_opt)
 
@@ -567,7 +567,7 @@ class InfoGAN():
         self.gan = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[gan_output, gan_output_aux_c, gan_output_aux_u],
                          name='infogan')
         # define GAN optimizer
-        self.gan_opt = Adam(lr=self.gan_lr)
+        self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
         # compile GAN
         self.gan.compile(loss={'discriminator' : 'binary_crossentropy',
                                'auxiliary' : 'categorical_crossentropy',
@@ -795,15 +795,15 @@ class Trainer():
             # generate batch
             fake_batch = self.model.generate()
             # inputs are false samples, so the discrimination targets are of null value
-            target = np.zeros(self.model.batch_size).astype(int)
-            # target = np.random.uniform(low=0.0, high=0.3, size=self.model.batch_size)
+            # target = np.zeros(self.model.batch_size).astype(int)
+            target = np.random.uniform(low=0.0, high=0.1, size=self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(fake_batch, target)
             self.dsc_fake_loss_history.append(dsc_loss)
         else:
             # inputs are true samples, so the discrimination targets are of unit value
-            target = np.ones(self.model.batch_size).astype(int)
-            # target = np.random.uniform(low=0.7, high=1.0, size=self.model.batch_size)
+            # target = np.ones(self.model.batch_size).astype(int)
+            target = np.random.uniform(low=0.9, high=1.0, size=self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
             self.dsc_real_loss_history.append(dsc_loss)
