@@ -311,11 +311,11 @@ def plot_diagrams(c_data, u_data, fields, temps, cmap,
     c_dim = c_diag.shape[-1]
     u_dim = u_diag.shape[-1]
     for i in trange(c_dim, desc='Plotting Discrete Controls', disable=not verbose):
-        plot_diagram(c_diag[:, :, i], fields, temps, cmap, prfx, 'c_{}'.format(i))
+        plot_diagram(c_diag[:, :, i], fields, temps, cmap, file_prfx, 'c_{}'.format(i))
     for i in trange(u_dim, desc='Plotting Continuous Controls', disable=not verbose):
         # plot_diagram(u_diag[:, :, i], fields, temps, cmap, prfx, 'm_{}'.format(i))
         # plot_diagram(u_diag[:, :, u_dim+i], fields, temps, cmap, prfx, 's_{}'.format(i))
-        plot_diagram(u_diag[:, :, i], fields, temps, cmap, prfx, 'u_{}'.format(i))
+        plot_diagram(u_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_{}'.format(i))
 
 
 def nrelu(x):
@@ -437,7 +437,7 @@ class InfoGAN():
                   self.krnl_init, self.act,
                   self.dsc_opt_n, self.gan_opt_n, self.dsc_lr, self.gan_lr,
                   self.lamb, self.batch_size)
-        file_name = '{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}'.format(*params)
+        file_name = '{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}'.format(*params)
         return file_name
 
 
