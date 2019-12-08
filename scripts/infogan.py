@@ -581,11 +581,11 @@ class InfoGAN():
                                    name='discriminator')
         # define optimizer
         if self.dsc_opt_n == 'adam':
-            self.dsc_opt = Adam(lr=self.dsc_lr)
+            self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
         if self.dsc_opt_n == 'adamax':
-            self.dsc_opt = Adamax(lr=self.dsc_lr)
+            self.dsc_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
         if self.dsc_opt_n == 'nadam':
-            self.dsc_opt = Nadam(lr=self.dsc_lr)
+            self.dsc_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
         if self.dsc_opt_n == 'sgd':
             self.dsc_opt = SGD(lr=self.dsc_lr)
         # compile discriminator
@@ -633,11 +633,11 @@ class InfoGAN():
                          name='infogan')
         # define GAN optimizer
         if self.gan_opt_n == 'adam':
-            self.gan_opt = Adam(lr=self.dsc_lr)
+            self.gan_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
         if self.gan_opt_n == 'adamax':
-            self.gan_opt = Adamax(lr=self.dsc_lr)
+            self.gan_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
         if self.gan_opt_n == 'nadam':
-            self.gan_opt = Nadam(lr=self.dsc_lr)
+            self.gan_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
         if self.gan_opt_n == 'sgd':
             self.gan_opt = SGD(lr=self.dsc_lr)
         # compile GAN
@@ -854,7 +854,7 @@ class Trainer():
             # generate batch
             fake_batch = self.model.generate()
             # inputs are false samples, so the discrimination targets are of null value
-            target = np.zeros(self.model.batch_size).astype(int)
+            target = np.zeros(self.model.batch_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(fake_batch, target)
             self.dsc_fake_loss_history.append(dsc_loss)
@@ -862,11 +862,15 @@ class Trainer():
             # inputs are true samples, so the discrimination targets are of unit value
             # target = np.ones(self.model.batch_size).astype(int)
             # label smoothing
-            target = np.random.uniform(low=1.0-self.alpha, high=1.0, size=self.model.batch_size)
+            if self.alpha > 0:
+                target = np.random.uniform(low=1.0-self.alpha, high=1.0, size=self.model.batch_size)
+            else:
+                target = np.ones(self.model.batch_size)
             # label randomizing
-            flp_size = np.int32(self.beta*self.model.batch_size)
-            flp_ind = np.random.choice(self.model.batch_size, size=flp_size)
-            target[flp_ind] = np.random.uniform(low=0.0, high=0.1, size=flp_size)
+            if self.beta > 0:
+                flp_size = np.int32(self.beta*self.model.batch_size)
+                flp_ind = np.random.choice(self.model.batch_size, size=flp_size)
+                target[flp_ind] = np.zeros(flp_size)
             # discriminator loss
             dsc_loss = self.model.discriminator.train_on_batch(x_batch, target)
             self.dsc_real_loss_history.append(dsc_loss)
@@ -1000,6 +1004,7 @@ if __name__ == '__main__':
         tf.config.threading.set_inter_op_parallelism_threads(THREADS)
     tf.device(DEVICE)
 
+    K.clear_session()
     MDL = InfoGAN(IS, CN, FBL, FB, FL, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, SC)
     TRN = Trainer(MDL, TALPHA, TBETA)
     PRFX = TRN.get_file_prefix()
