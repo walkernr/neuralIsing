@@ -1160,7 +1160,7 @@ if __name__ == '__main__':
     H, T, CONF, THRM = load_data(NAME, N, I, NS, SC, SEED, VERBOSE)
     NH, NT = H.size, T.size
     IS = (N, N, 1)
-    W = False
+    W = True
 
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
