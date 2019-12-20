@@ -930,7 +930,7 @@ class InfoCGAN():
 
     def extract_unique_data(self, x_train, t_train):
         ''' extract unique samples from data '''
-        x_train, indices = np.unique(x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape), return_indices=True, axis=0)
+        x_train, indices = np.unique(x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape), return_index=True, axis=0)
         t_train = t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.model.t_dim)[indices]
         return x_train, t_train
 
