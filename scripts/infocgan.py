@@ -800,7 +800,7 @@ class InfoCGAN():
 
     def model_summaries(self):
         ''' print model summaries '''
-        self.latent_conditioner.summary()
+        # self.latent_conditioner.summary()
         self.generator.summary()
         self.discriminator.summary()
         self.auxiliary.summary()
