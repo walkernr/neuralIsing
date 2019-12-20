@@ -1050,11 +1050,12 @@ class InfoCGAN():
                 batch_range.set_description(desc)
                 # fetch batch
                 if random_sampling:
-                    x_batch = self.draw_random_batch(x_train)
+                    x_batch, t_batch = self.draw_random_batch(x_train, t_train)
                 else:
                     x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
+                    t_batch = t_train[self.batch_size*j:self.batch_size*(j+1)]
                 # train infogan on batch
-                self.train_infogan(x_batch, n_critic)
+                self.train_infogan(x_batch, t_batch, n_critic)
             # if checkpoint managers are initialized
             if self.dsc_mngr is not None and self.gan_mngr is not None:
                 # increment checkpoints
