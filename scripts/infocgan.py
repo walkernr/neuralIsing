@@ -1148,7 +1148,7 @@ if __name__ == '__main__':
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)
     L = MDL.get_losses()
-    C, U = MDL.get_aux_dist(CONF.reshape(-1, *IS), TPARAM, VERBOSE)
+    C, U = MDL.get_aux_dist(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
     C = C.reshape(NH, NT, NS, CD)
     # U[:, UD:] = np.exp(0.5*U[:, UD:])
     # U = U.reshape(NH, NT, NS, 2*UD)
