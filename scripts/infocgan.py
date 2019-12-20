@@ -916,22 +916,22 @@ class InfoCGAN():
         ''' reorder training data by random indices '''
         indices = np.random.permutation(self.num_fields*self.num_temps*self.num_samples)
         return (x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape)[indices],
-                t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.model.t_dim)[indices])
+                t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.t_dim)[indices])
 
 
     def reorder_training_data(self, x_train, t_train):
         ''' reorder training data by class-balancing indices '''
         indices = self.get_training_indices()
         x_train = x_train.reshape(self.num_fields*self.num_temps, self.num_samples, *self.input_shape)[indices]
-        t_train = t_train.reshape(self.num_fields*self.num_temps, self.num_samples, self.model.t_dim)[indices]
+        t_train = t_train.reshape(self.num_fields*self.num_temps, self.num_samples, self.t_dim)[indices]
         return (np.moveaxis(x_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape),
-                np.moveaxis(t_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, self.model.t_dim))
+                np.moveaxis(t_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, self.t_dim))
 
 
     def extract_unique_data(self, x_train, t_train):
         ''' extract unique samples from data '''
         x_train, indices = np.unique(x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape), return_index=True, axis=0)
-        t_train = t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.model.t_dim)[indices]
+        t_train = t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.t_dim)[indices]
         return x_train, t_train
 
 
