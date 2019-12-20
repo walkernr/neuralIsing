@@ -986,7 +986,7 @@ class InfoCGAN():
         x_sample = self.sample_latent_distribution(num_samples=self.batch_size)
         x_generated = self.generator.predict(x=x_sample)
         dsc_real_loss = self.train_discriminator(x_batch=x_batch, t_batch=t_batch, real=True)
-        dsc_fake_loss = self.train_discriminator(x_batch=x_generated, t_batch=x_sample[:, 0], real=False)
+        dsc_fake_loss = self.train_discriminator(x_batch=x_generated, t_batch=x_sample[0], real=False)
         gan_loss = self.train_generator(x_sample=x_sample)
         self.dsc_real_loss_history.append(dsc_real_loss)
         self.dsc_fake_loss_history.append(dsc_fake_loss)
