@@ -237,7 +237,7 @@ def plot_batch_losses(losses, cmap, file_prfx, verbose=False):
     color_list = np.linspace(0.2, 0.8, len(losses))
     for i in trange(len(losses), desc='Plotting Batch Losses', disable=not verbose):
         ax.plot(np.arange(1, n_iters+1), losses[i].reshape(-1), color=cmap(color_list[i]), label=loss_list[i])
-    ax.legend(loc='upper right'))
+    ax.legend(loc='upper right')
     ax.set_xlabel('Batch')
     ax.set_ylabel('Loss')
     # save figure
