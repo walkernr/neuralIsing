@@ -769,15 +769,15 @@ class InfoGAN():
                          name='infogan')
         # define GAN optimizer
         if self.gan_opt_n == 'sgd':
-            self.gan_opt = SGD(lr=self.dsc_lr)
+            self.gan_opt = SGD(lr=self.gan_lr)
         if self.gan_opt_n == 'rmsprop':
-            self.gan_opt = RMSprop(lr=self.dsc_lr)
+            self.gan_opt = RMSprop(lr=self.gan_lr)
         if self.gan_opt_n == 'adam':
-            self.gan_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+            self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
         if self.gan_opt_n == 'adamax':
-            self.gan_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
+            self.gan_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
         if self.gan_opt_n == 'nadam':
-            self.gan_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+            self.gan_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
         # compile GAN
         self.gan.compile(loss={'discriminator' : dsc_loss,
                                'auxiliary' : self.mutual_information_categorical_loss,
@@ -1160,7 +1160,7 @@ if __name__ == '__main__':
     H, T, CONF, THRM = load_data(NAME, N, I, NS, SC, SEED, VERBOSE)
     NH, NT = H.size, T.size
     IS = (N, N, 1)
-    W = True
+    W = False
 
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
