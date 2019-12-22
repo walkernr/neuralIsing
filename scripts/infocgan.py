@@ -654,9 +654,9 @@ class InfoCGAN():
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
                 filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
                 conv = Conv2D(filters=filter_number, kernel_size=filter_length,
-                            kernel_initializer=self.krnl_init,
-                            padding='valid', strides=filter_stride,
-                            name='aux_conv_{}'.format(i))(conv)
+                              kernel_initializer=self.krnl_init,
+                              padding='valid', strides=filter_stride,
+                              name='aux_conv_{}'.format(i))(conv)
                 if self.act == 'lrelu':
                     conv = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(conv)
                     conv = LeakyReLU(alpha=0.2, name='aux_conv_lrelu_{}'.format(i))(conv)
@@ -724,28 +724,59 @@ class InfoCGAN():
         # auxiliary output
         gan_output_c, gan_output_u = self.auxiliary([self.gen_output, self.gen_t_input])
         # build GAN
-        self.gan = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                         outputs=[gan_output, gan_output_c, gan_output_u],
-                         name='infogan')
-        # define GAN optimizer
-        if self.gan_opt_n == 'sgd':
-            self.gan_opt = SGD(lr=self.dsc_lr)
-        if self.gan_opt_n == 'rmsprop':
-            self.gan_opt = RMSprop(lr=self.dsc_lr)
-        if self.gan_opt_n == 'adam':
-            self.gan_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
-        if self.gan_opt_n == 'adamax':
-            self.gan_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
-        if self.gan_opt_n == 'nadam':
-            self.gan_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
-        # compile GAN
-        self.gan.compile(loss={'discriminator' : dsc_loss,
-                               'auxiliary' : 'categorical_crossentropy',
-                               'auxiliary_1' : 'mean_squared_error'},
-                         loss_weights={'discriminator': 1.0,
-                                       'auxiliary': self.lamb,
-                                       'auxiliary_1': self.lamb},
-                         optimizer=self.gan_opt)
+        if self.wasserstein:
+            self.gan_dsc = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                                 outputs=[gan_output],
+                                 name='infogan')
+            self.gan_aux = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                                 outputs=[gan_output_c, gan_output_u],
+                                 name='infogan')
+        else:
+            self.gan = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                             outputs=[gan_output, gan_output_c, gan_output_u],
+                             name='infogan')
+        if self.wasserstein:
+            # define GAN optimizer
+            if self.gan_opt_n == 'sgd':
+                self.gan_dsc_opt = SGD(lr=self.gan_lr)
+                self.gan_aux_opt = SGD(lr=self.gan_lr)
+            if self.gan_opt_n == 'rmsprop':
+                self.gan_dsc_opt = RMSprop(lr=self.gan_lr)
+                self.gan_aux_opt = RMSprop(lr=self.gan_lr)
+            if self.gan_opt_n == 'adam':
+                self.gan_dsc_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'adamax':
+                self.gan_dsc_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'nadam':
+                self.gan_dsc_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+            # compile GAN
+            self.gan_dsc.compile(loss=dsc_loss, optimizer=self.gan_dsc_opt)
+            self.gan_aux.compile(loss={'auxiliary': 'categorical_crossentropy',
+                                       'auxiliary_1': 'mean_squared_error'},
+                                 optimizer=self.gan_aux_opt)
+        else:
+            # define GAN optimizer
+            if self.gan_opt_n == 'sgd':
+                self.gan_opt = SGD(lr=self.gan_lr)
+            if self.gan_opt_n == 'rmsprop':
+                self.gan_opt = RMSprop(lr=self.gan_lr)
+            if self.gan_opt_n == 'adam':
+                self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'adamax':
+                self.gan_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'nadam':
+                self.gan_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+            # compile GAN
+            self.gan.compile(loss={'discriminator': dsc_loss,
+                                   'auxiliary': 'categorical_crossentropy',
+                                   'auxiliary_1': 'mean_squared_error'},
+                             loss_weights={'discriminator': 1.0,
+                                           'auxiliary': self.lamb,
+                                           'auxiliary_1': self.lamb},
+                             optimizer=self.gan_opt)
         self.discriminator.trainable = True
 
 
@@ -804,7 +835,11 @@ class InfoCGAN():
         self.generator.summary()
         self.discriminator.summary()
         self.auxiliary.summary()
-        self.gan.summary()
+        if self.wasserstein:
+            self.gan_dsc.summary()
+            self.gan_aux.summary()
+        else:
+            self.gan.summary()
 
 
     def save_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
@@ -867,13 +902,21 @@ class InfoCGAN():
         ''' initialize training checkpoint managers '''
         # initialize checkpoints
         self.dsc_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.dsc_opt, net=self.discriminator)
-        self.gan_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_opt, net=self.gan)
+        if self.wasserstein:
+            self.gan_dsc_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_dsc_opt, net=self.gan_dsc)
+            self.gan_aux_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_aux_opt, net=self.gan_aux)
+        else:
+            self.gan_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_opt, net=self.gan)
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
         directory = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # initialize checkpoint managers
         self.dsc_mngr = CheckpointManager(self.dsc_ckpt, directory+'/discriminator/', max_to_keep=4)
-        self.gan_mngr = CheckpointManager(self.gan_ckpt, directory+'/gan/', max_to_keep=4)
+        if self.wasserstein:
+            self.gan_dsc_mngr = CheckpointManager(self.gan_dsc_ckpt, directory+'/gan/discriminator', max_to_keep=4)
+            self.gan_aux_mngr = CheckpointManager(self.gan_aux_ckpt, directory+'/gan/auxiliary', max_to_keep=4)
+        else:
+            self.gan_mngr = CheckpointManager(self.gan_ckpt, directory+'/gan/', max_to_keep=4)
 
 
     def load_latest_checkpoint(self, name, lattice_length, interval, num_samples, scaled, seed):
@@ -886,7 +929,11 @@ class InfoCGAN():
         directory = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # restore checkpoints
         self.dsc_ckpt.restore(self.dsc_mngr.latest_checkpoint).assert_consumed()
-        self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
+        if self.wasserstein:
+            self.gan_dsc_ckpt.restore(self.gan_dsc_mngr.latest_checkpoint).assert_consumed()
+            self.gan_aux_ckpt.restore(self.gan_aux_mngr.latest_checkpoint).assert_consumed()
+        else:
+            self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
 
 
     def get_training_indices(self):
@@ -974,10 +1021,15 @@ class InfoCGAN():
         ''' train generator and auxiliary '''
         # inputs are true samples, so the discrimination targets are of unit value
         target = np.ones(x_sample[0].shape[0], dtype=np.float32)
+         # GAN and entropy losses
         if self.wasserstein:
             target *= -1
-        # GAN and entropy losses
-        gan_loss = self.gan.train_on_batch(x_sample, [target, *x_sample[2:]])
+            gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample, target)
+            gan_aux_loss = self.gan_aux.train_on_batch(x_sample, *x_sample[2:])
+            gan_loss = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
+            gan_loss.insert(0, np.sum(gan_loss))
+        else:
+            gan_loss = self.gan.train_on_batch(x_sample, [target, *x_sample[2:]])
         return gan_loss
 
 
