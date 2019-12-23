@@ -727,15 +727,10 @@ class InfoCGAN():
         if self.wasserstein:
             self.gan_dsc = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
                                  outputs=[gan_output],
-                                 name='infogan')
+                                 name='infogan_discriminator')
             self.gan_aux = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
                                  outputs=[gan_output_c, gan_output_u],
-                                 name='infogan')
-        else:
-            self.gan = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                             outputs=[gan_output, gan_output_c, gan_output_u],
-                             name='infogan')
-        if self.wasserstein:
+                                 name='infogan_auxiliary')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
                 self.gan_dsc_opt = SGD(lr=self.gan_lr)
@@ -758,6 +753,9 @@ class InfoCGAN():
                                        'auxiliary_1': 'mean_squared_error'},
                                  optimizer=self.gan_aux_opt)
         else:
+            self.gan = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                             outputs=[gan_output, gan_output_c, gan_output_u],
+                             name='infogan')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
                 self.gan_opt = SGD(lr=self.gan_lr)
