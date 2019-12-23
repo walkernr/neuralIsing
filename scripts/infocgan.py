@@ -844,18 +844,34 @@ class InfoCGAN():
         ''' save weights to file '''
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
-        # save weights
-        self.gan.save_weights(file_name)
+        if self.wasserstein:
+            file_name_gen = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gen.weights.h5'
+            file_name_dsc = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.dsc.weights.h5'
+            file_name_aux = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.aux.weights.h5'
+            self.generator.save_weights(file_name_gen)
+            self.discriminator.save_weights(file_name_dsc)
+            self.auxiliary.save_weights(file_name_aux)
+        else:
+            file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
+            # save weights
+            self.gan.save_weights(file_name)
 
 
     def load_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' load weights from file '''
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
-        # load weights
-        self.gan.load_weights(file_name, by_name=True)
+        if self.wasserstein:
+            file_name_gen = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gen.weights.h5'
+            file_name_dsc = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.dsc.weights.h5'
+            file_name_aux = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.aux.weights.h5'
+            self.generator.load_weights(file_name_gen, by_name=True)
+            self.discriminator.load_weights(file_name_dsc, by_name=True)
+            self.auxiliary.load_weights(file_name_aux, by_name=True)
+        else:
+            file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
+            # load weights
+            self.gan.load_weights(file_name, by_name=True)
 
 
     def get_losses(self):
