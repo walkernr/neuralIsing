@@ -1023,7 +1023,7 @@ class InfoCGAN():
         if self.wasserstein:
             target *= -1
             gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample, target)
-            gan_aux_loss = self.gan_aux.train_on_batch(x_sample, *x_sample[2:])
+            gan_aux_loss = self.gan_aux.train_on_batch(x_sample, x_sample[2:])
             gan_loss = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
             gan_loss.insert(0, np.sum(gan_loss))
         else:
