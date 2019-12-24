@@ -532,15 +532,15 @@ class InfoGAN():
             x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_0')(x)
-        # if self.final_conv_shape[:2] != (1, 1):
-        #     # repeated dense layer
-        #     x = Dense(units=np.prod(self.final_conv_shape),
-        #               kernel_initializer=self.krnl_init,
-        #               name='gen_dense_1')(x)
-        #     if self.act == 'lrelu':
-        #         x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
-        #     if self.act == 'selu':
-        #         x = Activation(activation='selu', name='gen_dense_selu_1')(x)
+        if self.final_conv_shape[:2] != (1, 1):
+            # repeated dense layer
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='gen_dense_1')(x)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         if self.gen_drop:
@@ -607,15 +607,15 @@ class InfoGAN():
                     conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
-        # if self.final_conv_shape[:2] != (1, 1):
-        #     # dense layer
-        #     x = Dense(units=np.prod(self.final_conv_shape),
-        #               kernel_initializer=self.krnl_init,
-        #               name='dsc_dense_0')(x)
-        #     if self.act == 'lrelu':
-        #         x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-        #     if self.act == 'selu':
-        #         x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+        if self.final_conv_shape[:2] != (1, 1):
+            # dense layer
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='dsc_dense_0')(x)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
         # the dense layer is saved as a hidden encoding layer
         self.dsc_enc = x
         # dense layer
@@ -673,15 +673,15 @@ class InfoGAN():
                         conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(conv)
             # flatten final convolutional layer
             x = Flatten(name='aux_fltn_0')(conv)
-            # if self.final_conv_shape[:2] != (1, 1):
-            #     # dense layer
-            #     x = Dense(units=np.prod(self.final_conv_shape),
-            #               kernel_initializer=self.krnl_init,
-            #               name='aux_dense_0')(x)
-            #     if self.act == 'lrelu':
-            #         x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
-            #     if self.act == 'selu':
-            #         x = Activation(activation='selu', name='aux_dense_selu_0')(x)
+            if self.final_conv_shape[:2] != (1, 1):
+                # dense layer
+                x = Dense(units=np.prod(self.final_conv_shape),
+                          kernel_initializer=self.krnl_init,
+                          name='aux_dense_0')(x)
+                if self.act == 'lrelu':
+                    x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+                if self.act == 'selu':
+                    x = Activation(activation='selu', name='aux_dense_selu_0')(x)
             # dense layer
             x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
