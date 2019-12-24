@@ -519,12 +519,11 @@ class InfoGAN():
     def _build_generator(self):
         ''' builds generator model '''
         # latent unit gaussian and categorical inputs
-        self.z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='z_input')
-        self.c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='c_input')
-        self.u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='u_input')
-        # u_sample = Lambda(self.sample_gaussian, output_shape=(self.u_dim,), name='u_sample')(self.u_input)
+        self.gen_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='gen_z_input')
+        self.gen_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='gen_c_input')
+        self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         # concatenate features
-        x = Concatenate(name='gen_latent_concat')([self.z_input, self.c_input, self.u_input])
+        x = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
@@ -567,19 +566,19 @@ class InfoGAN():
                 if self.gen_drop:
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
-        self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
-                                          kernel_initializer='glorot_uniform', activation=self.gen_out_act,
-                                          padding='same', strides=self.filter_base_stride,
-                                          name='gen_output')(convt)
+        self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
+                                            kernel_initializer='glorot_uniform', activation=self.gen_out_act,
+                                            padding='same', strides=self.filter_base_stride,
+                                            name='gen_x_output')(convt)
         # build generator
-        self.generator = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[self.gen_output],
+        self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output],
                                name='generator')
 
 
     def _build_discriminator(self):
         ''' builds discriminator model '''
         # takes sample (real or fake) as input
-        self.dsc_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='dsc_input')
+        self.dsc_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='dsc_x_input')
         if self.wasserstein:
             out_act = 'linear'
             loss = self.wasserstein_loss
@@ -588,7 +587,7 @@ class InfoGAN():
             out_act = 'sigmoid'
             loss = self.binary_crossentropy_loss
             conv_constraint = None
-        conv = self.dsc_input
+        conv = self.dsc_x_input
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -617,8 +616,8 @@ class InfoGAN():
                 x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
-        # the dense layer is saved as a hidden layer
-        self.dsc_hidden = x
+        # the dense layer is saved as a hidden encoding layer
+        self.dsc_enc = x
         # dense layer
         x = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
@@ -628,11 +627,11 @@ class InfoGAN():
         if self.act == 'selu':
             x = Activation(activation='selu', name='dsc_dense_selu_1')(x)
         # discriminator classification output (0, 1) -> (fake, real)
-        self.dsc_output = Dense(units=1,
-                                kernel_initializer='glorot_uniform', activation=out_act,
-                                name='dsc_output')(x)
+        self.dsc_v_output = Dense(units=1,
+                                  kernel_initializer='glorot_uniform', activation=out_act,
+                                  name='dsc_v_output')(x)
         # build discriminator
-        self.discriminator = Model(inputs=[self.dsc_input], outputs=[self.dsc_output],
+        self.discriminator = Model(inputs=[self.dsc_x_input], outputs=[self.dsc_v_output],
                                    name='discriminator')
         # define optimizer
         if self.dsc_opt_n == 'sgd':
@@ -653,16 +652,16 @@ class InfoGAN():
         ''' builds auxiliary classification reconstruction model '''
         if self.wasserstein:
             # takes sample (real or fake) as input
-            self.aux_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_input')
-            conv = self.aux_input
+            self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
+            conv = self.aux_x_input
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
                 filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
                 conv = Conv2D(filters=filter_number, kernel_size=filter_length,
-                            kernel_initializer=self.krnl_init,
-                            padding='valid', strides=filter_stride,
-                            name='aux_conv_{}'.format(i))(conv)
+                              kernel_initializer=self.krnl_init,
+                              padding='valid', strides=filter_stride,
+                              name='aux_conv_{}'.format(i))(conv)
                 if self.act == 'lrelu':
                     conv = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(conv)
                     conv = LeakyReLU(alpha=0.2, name='aux_conv_lrelu_{}'.format(i))(conv)
@@ -694,18 +693,18 @@ class InfoGAN():
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_output_c')(x)
+                                      name='aux_c_output')(x)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_mu')(x)
+                                      name='aux_u_output')(x)
             # build auxiliary classifier
-            self.auxiliary = Model(inputs=[self.aux_input], outputs=[self.aux_c_output, self.aux_u_output],
+            self.auxiliary = Model(inputs=[self.aux_x_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
         else:
             # initialize with dense layer taking the hidden generator layer as input
             x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
-                      name='aux_dense_0')(self.dsc_hidden)
+                      name='aux_dense_0')(self.dsc_enc)
             if self.act == 'lrelu':
                 x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
             if self.act == 'selu':
@@ -713,12 +712,12 @@ class InfoGAN():
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_output_c')(x)
+                                      name='aux_c_output')(x)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_mu')(x)
+                                      name='aux_u_output')(x)
             # build auxiliary classifier
-            self.auxiliary = Model(inputs=[self.dsc_input], outputs=[self.aux_c_output, self.aux_u_output],
+            self.auxiliary = Model(inputs=[self.dsc_x_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
 
 
@@ -730,16 +729,16 @@ class InfoGAN():
         else:
             dsc_loss = self.binary_crossentropy_loss
         self.discriminator.trainable = False
-        gan_output = self.discriminator(self.gen_output)
+        gan_v_output = self.discriminator(self.gen_x_output)
         # auxiliary output
-        gan_output_aux_c, gan_output_aux_u = self.auxiliary(self.gen_output)
+        gan_c_output, gan_u_output = self.auxiliary(self.gen_x_output)
         # build GAN
         if self.wasserstein:
             self.gan_dsc = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                                 outputs=[gan_output],
+                                 outputs=[gan_v_output],
                                  name='infogan_discriminator')
             self.gan_aux = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                                 outputs=[gan_output_c, gan_output_u],
+                                 outputs=[gan_c_output, gan_u_output],
                                  name='infogan_auxiliary')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
@@ -764,7 +763,7 @@ class InfoGAN():
                                  optimizer=self.gan_aux_opt)
         else:
             self.gan = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                             outputs=[gan_output, gan_output_c, gan_output_u],
+                             outputs=[gan_v_output, gan_c_output, gan_u_output],
                              name='infogan')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
