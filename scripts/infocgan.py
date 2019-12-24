@@ -330,11 +330,6 @@ def plot_diagrams(c_data, u_data, fields, temps, cmap,
         plot_diagram(u_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_{}'.format(i))
 
 
-def nrelu(x):
-    ''' negative output relu '''
-    return -K.relu(x)
-
-
 def get_final_conv_shape(input_shape, conv_number,
                          filter_base_length, filter_length,
                          filter_base, filter_factor):
@@ -492,7 +487,6 @@ class InfoCGAN():
 
     def _build_model(self):
         ''' builds each component of the InfoGAN model '''
-        # self._build_latent_conditioner()
         self._build_generator()
         self._build_discriminator()
         self._build_auxiliary()
@@ -507,22 +501,6 @@ class InfoCGAN():
     def wasserstein_loss(self, category, prediction):
         ''' Wasserstein loss for real/fake discrimination '''
         return K.mean(category*prediction)
-    
-
-    def _build_latent_conditioner(self):
-        ''' builds latent conditioner model '''
-        self.lc_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='lc_t_input')
-        x = Dense(units=self.d_q_dim,
-                  kernel_initializer=self.krnl_init,
-                  name='lc_dense_0')(self.tc_t_input)
-        self.lc_c_output = Dense(self.c_dim,
-                                 kernel_initializer='glorot_uniform', activation='softmax',
-                                 name='lc_c_output')(x)
-        self.lc_u_output = Dense(self.u_dim,
-                                 kernel_initializer='glorot_uniform', activation='tanh',
-                                 name='lc_u_output')(x)
-        self.latent_conditioner = Model(inputs=[self.lc_t_input], outputs=[self.lc_c_output, self.lc_u_output],
-                                        name='latent_conditioner')
 
 
     def _build_generator(self):
@@ -542,6 +520,15 @@ class InfoCGAN():
             x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_0')(x)
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # repeated dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='gen_dense_1')(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+        #     if self.act == 'selu':
+        #         x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         if self.gen_drop:
@@ -609,6 +596,15 @@ class InfoCGAN():
                     conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='dsc_dense_0')(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+        #     if self.act == 'selu':
+        #         x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = x
         # dense layer
@@ -668,6 +664,15 @@ class InfoCGAN():
                         conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(conv)
             # flatten final convolutional layer
             x = Flatten(name='aux_fltn_0')(conv)
+            # if self.final_conv_shape[:2] != (1, 1):
+            #     # dense layer
+            #     x = Dense(units=np.prod(self.final_conv_shape),
+            #               kernel_initializer=self.krnl_init,
+            #               name='aux_dense_0')(x)
+            #     if self.act == 'lrelu':
+            #         x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+            #     if self.act == 'selu':
+            #         x = Activation(activation='selu', name='aux_dense_selu_0')(x)
             # dense layer
             x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
@@ -717,8 +722,6 @@ class InfoCGAN():
         else:
             dsc_loss = self.binary_crossentropy_loss
         self.discriminator.trainable = False
-        # latent code conditioned on thermal parameters
-        # gan_c_input, gan_u_input = self.latent_conditioner(self.lc_t_input)
         # discriminated generator output
         gan_output = self.discriminator([self.gen_output, self.gen_t_input])
         # auxiliary output
@@ -829,7 +832,6 @@ class InfoCGAN():
 
     def model_summaries(self):
         ''' print model summaries '''
-        # self.latent_conditioner.summary()
         self.generator.summary()
         self.discriminator.summary()
         self.auxiliary.summary()
