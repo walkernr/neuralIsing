@@ -53,6 +53,8 @@ def parse_args():
                         type=int, default=1024)
     parser.add_argument('-sc', '--scale_data', help='scale data (-1, 1) -> (0, 1)',
                         action='store_true')
+    parser.add_argument('-w', '--wasserstein', help='wasserstein gan',
+                        action='store_true')
     parser.add_argument('-cn', '--conv_number', help='convolutional layer depth',
                         type=int, default=3)
     parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
@@ -101,7 +103,7 @@ def parse_args():
                         type=int, default=128)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
-            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data,
+            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.wasserstein,
             args.conv_number, args.filter_base_length, args.filter_base, args.filter_length, args.filter_factor,
             args.generator_dropout, args.discriminator_dropout, args.z_dimension, args.c_dimension, args.u_dimension,
             args.kernel_initializer, args.activation,
@@ -336,11 +338,6 @@ def plot_diagrams(c_data, u_data, fields, temps, cmap,
         plot_diagram(u_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_{}'.format(i))
 
 
-def nrelu(x):
-    ''' negative output relu '''
-    return -K.relu(x)
-
-
 def get_final_conv_shape(input_shape, conv_number,
                          filter_base_length, filter_length,
                          filter_base, filter_factor):
@@ -484,12 +481,13 @@ class InfoGAN():
 
     def get_file_prefix(self):
         ''' gets parameter tuple and filename string prefix '''
-        params = (self.conv_number, self.filter_base_length, self.filter_base, self.filter_length, self.filter_factor,
+        params = (self.wasserstein,
+                  self.conv_number, self.filter_base_length, self.filter_base, self.filter_length, self.filter_factor,
                   self.gen_drop, self.dsc_drop, self.z_dim, self.c_dim, self.u_dim,
                   self.krnl_init, self.act,
                   self.dsc_opt_n, self.gan_opt_n, self.dsc_lr, self.gan_lr,
                   self.lamb, self.batch_size, self.alpha, self.beta)
-        file_name = '{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
+        file_name = '{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
         return file_name
 
 
@@ -499,12 +497,6 @@ class InfoGAN():
         self._build_discriminator()
         self._build_auxiliary()
         self._build_gan()
-
-
-    def sample_gaussian(self, mu):
-        mu = beta[:, :self.u_dim]
-        logvar = beta[:, self.u_dim:]
-        return mu+K.exp(0.5*logvar)*K.random_normal(shape=(self.batch_size, self.u_dim))
 
 
     def binary_crossentropy_loss(self, category, prediction):
@@ -524,15 +516,6 @@ class InfoGAN():
         return entropy+conditional_entropy
 
 
-    def kl_divergence_loss(self, beta, beta_hat):
-        ''' kl divergence for continuous control variable '''
-        mu = beta[:, :self.u_dim]
-        logvar = beta_hat[:, self.u_dim:]
-        mu_hat = beta_hat[:, :self.u_dim]
-        logvar_hat = beta_hat[:, self.u_dim:]
-        return 0.5*K.mean(K.exp(logvar_hat-logvar)+K.square(mu-mu_hat)/K.exp(logvar)-1+logvar-logvar_hat)
-
-
     def _build_generator(self):
         ''' builds generator model '''
         # latent unit gaussian and categorical inputs
@@ -550,15 +533,15 @@ class InfoGAN():
             x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_0')(x)
-        # if self.final_conv_shape[:2] != (1, 1):
-        #     # repeated dense layer
-        #     x = Dense(units=np.prod(self.final_conv_shape),
-        #               kernel_initializer=self.krnl_init,
-        #               name='gen_dense_1')(x)
-        #     if self.act == 'lrelu':
-        #         x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
-        #     if self.act == 'selu':
-        #         x = Activation(activation='selu', name='gen_dense_selu_1')(x)
+        if self.final_conv_shape[:2] != (1, 1):
+            # repeated dense layer
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='gen_dense_1')(x)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         if self.gen_drop:
@@ -625,15 +608,15 @@ class InfoGAN():
                     conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
-        # if self.final_conv_shape[:2] != (1, 1):
-        #     # dense layer
-        #     x = Dense(units=np.prod(self.final_conv_shape),
-        #               kernel_initializer=self.krnl_init,
-        #               name='dsc_dense_0')(x)
-        #     if self.act == 'lrelu':
-        #         x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-        #     if self.act == 'selu':
-        #         x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+        if self.final_conv_shape[:2] != (1, 1):
+            # dense layer
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='dsc_dense_0')(x)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = x
         # dense layer
@@ -691,15 +674,15 @@ class InfoGAN():
                         conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(conv)
             # flatten final convolutional layer
             x = Flatten(name='aux_fltn_0')(conv)
-            # if self.final_conv_shape[:2] != (1, 1):
-            #     # dense layer
-            #     x = Dense(units=np.prod(self.final_conv_shape),
-            #               kernel_initializer=self.krnl_init,
-            #               name='dsc_dense_0')(x)
-            #     if self.act == 'lrelu':
-            #         x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-            #     if self.act == 'selu':
-            #         x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+            if self.final_conv_shape[:2] != (1, 1):
+                # dense layer
+                x = Dense(units=np.prod(self.final_conv_shape),
+                          kernel_initializer=self.krnl_init,
+                          name='aux_dense_0')(x)
+                if self.act == 'lrelu':
+                    x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+                if self.act == 'selu':
+                    x = Activation(activation='selu', name='aux_dense_selu_0')(x)
             # dense layer
             x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
@@ -712,13 +695,6 @@ class InfoGAN():
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
                                       name='aux_output_c')(x)
-            # mu = Dense(self.u_dim,
-            #            kernel_initializer='glorot_uniform', activation='tanh',
-            #            name='aux_mu')(x)
-            # logvar = Dense(self.u_dim,
-            #                kernel_initializer='glorot_uniform', activation=nrelu,
-            #                name='aux_sigma')(x)
-            # self.aux_u_output = Concatenate(name='aux_u_output')([mu, logvar])
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
                                       name='aux_mu')(x)
@@ -738,13 +714,6 @@ class InfoGAN():
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
                                       name='aux_output_c')(x)
-            # mu = Dense(self.u_dim,
-            #            kernel_initializer='glorot_uniform', activation='tanh',
-            #            name='aux_mu')(x)
-            # logvar = Dense(self.u_dim,
-            #                kernel_initializer='glorot_uniform', activation=nrelu,
-            #                name='aux_sigma')(x)
-            # self.aux_u_output = Concatenate(name='aux_u_output')([mu, logvar])
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
                                       name='aux_mu')(x)
@@ -765,27 +734,57 @@ class InfoGAN():
         # auxiliary output
         gan_output_aux_c, gan_output_aux_u = self.auxiliary(self.gen_output)
         # build GAN
-        self.gan = Model(inputs=[self.z_input, self.c_input, self.u_input], outputs=[gan_output, gan_output_aux_c, gan_output_aux_u],
-                         name='infogan')
-        # define GAN optimizer
-        if self.gan_opt_n == 'sgd':
-            self.gan_opt = SGD(lr=self.gan_lr)
-        if self.gan_opt_n == 'rmsprop':
-            self.gan_opt = RMSprop(lr=self.gan_lr)
-        if self.gan_opt_n == 'adam':
-            self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
-        if self.gan_opt_n == 'adamax':
-            self.gan_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
-        if self.gan_opt_n == 'nadam':
-            self.gan_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
-        # compile GAN
-        self.gan.compile(loss={'discriminator' : dsc_loss,
-                               'auxiliary' : self.mutual_information_categorical_loss,
-                               'auxiliary_1' : 'mse'},
-                         loss_weights={'discriminator': 1.0,
-                                       'auxiliary': self.lamb,
-                                       'auxiliary_1': self.lamb},
-                         optimizer=self.gan_opt)
+        if self.wasserstein:
+            self.gan_dsc = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                                 outputs=[gan_output],
+                                 name='infogan_discriminator')
+            self.gan_aux = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                                 outputs=[gan_output_c, gan_output_u],
+                                 name='infogan_auxiliary')
+            # define GAN optimizer
+            if self.gan_opt_n == 'sgd':
+                self.gan_dsc_opt = SGD(lr=self.gan_lr)
+                self.gan_aux_opt = SGD(lr=self.gan_lr)
+            if self.gan_opt_n == 'rmsprop':
+                self.gan_dsc_opt = RMSprop(lr=self.gan_lr)
+                self.gan_aux_opt = RMSprop(lr=self.gan_lr)
+            if self.gan_opt_n == 'adam':
+                self.gan_dsc_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'adamax':
+                self.gan_dsc_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'nadam':
+                self.gan_dsc_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+            # compile GAN
+            self.gan_dsc.compile(loss=dsc_loss, optimizer=self.gan_dsc_opt)
+            self.gan_aux.compile(loss={'auxiliary': 'categorical_crossentropy',
+                                       'auxiliary_1': 'mean_squared_error'},
+                                 optimizer=self.gan_aux_opt)
+        else:
+            self.gan = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                             outputs=[gan_output, gan_output_c, gan_output_u],
+                             name='infogan')
+            # define GAN optimizer
+            if self.gan_opt_n == 'sgd':
+                self.gan_opt = SGD(lr=self.gan_lr)
+            if self.gan_opt_n == 'rmsprop':
+                self.gan_opt = RMSprop(lr=self.gan_lr)
+            if self.gan_opt_n == 'adam':
+                self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'adamax':
+                self.gan_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+            if self.gan_opt_n == 'nadam':
+                self.gan_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+            # compile GAN
+            self.gan.compile(loss={'discriminator': dsc_loss,
+                                   'auxiliary': 'categorical_crossentropy',
+                                   'auxiliary_1': 'mean_squared_error'},
+                             loss_weights={'discriminator': 1.0,
+                                           'auxiliary': self.lamb,
+                                           'auxiliary_1': self.lamb},
+                             optimizer=self.gan_opt)
         self.discriminator.trainable = True
 
 
@@ -842,25 +841,45 @@ class InfoGAN():
         self.generator.summary()
         self.discriminator.summary()
         self.auxiliary.summary()
-        self.gan.summary()
+        if self.wasserstein:
+            self.gan_dsc.summary()
+            self.gan_aux.summary()
+        else:
+            self.gan.summary()
 
 
     def save_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' save weights to file '''
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
-        # save weights
-        self.gan.save_weights(file_name)
+        if self.wasserstein:
+            file_name_gen = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gen.weights.h5'
+            file_name_dsc = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.dsc.weights.h5'
+            file_name_aux = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.aux.weights.h5'
+            self.generator.save_weights(file_name_gen)
+            self.discriminator.save_weights(file_name_dsc)
+            self.auxiliary.save_weights(file_name_aux)
+        else:
+            file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
+            # save weights
+            self.gan.save_weights(file_name)
 
 
     def load_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' load weights from file '''
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
-        # load weights
-        self.gan.load_weights(file_name, by_name=True)
+        if self.wasserstein:
+            file_name_gen = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gen.weights.h5'
+            file_name_dsc = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.dsc.weights.h5'
+            file_name_aux = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.aux.weights.h5'
+            self.generator.load_weights(file_name_gen, by_name=True)
+            self.discriminator.load_weights(file_name_dsc, by_name=True)
+            self.auxiliary.load_weights(file_name_aux, by_name=True)
+        else:
+            file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.gan.weights.h5'
+            # load weights
+            self.gan.load_weights(file_name, by_name=True)
 
 
     def get_losses(self):
@@ -905,13 +924,21 @@ class InfoGAN():
         ''' initialize training checkpoint managers '''
         # initialize checkpoints
         self.dsc_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.dsc_opt, net=self.discriminator)
-        self.gan_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_opt, net=self.gan)
+        if self.wasserstein:
+            self.gan_dsc_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_dsc_opt, net=self.gan_dsc)
+            self.gan_aux_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_aux_opt, net=self.gan_aux)
+        else:
+            self.gan_ckpt = Checkpoint(step=tf.Variable(0), optimizer=self.gan_opt, net=self.gan)
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
         directory = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # initialize checkpoint managers
         self.dsc_mngr = CheckpointManager(self.dsc_ckpt, directory+'/discriminator/', max_to_keep=4)
-        self.gan_mngr = CheckpointManager(self.gan_ckpt, directory+'/gan/', max_to_keep=4)
+        if self.wasserstein:
+            self.gan_dsc_mngr = CheckpointManager(self.gan_dsc_ckpt, directory+'/gan/discriminator', max_to_keep=4)
+            self.gan_aux_mngr = CheckpointManager(self.gan_aux_ckpt, directory+'/gan/auxiliary', max_to_keep=4)
+        else:
+            self.gan_mngr = CheckpointManager(self.gan_ckpt, directory+'/gan/', max_to_keep=4)
 
 
     def load_latest_checkpoint(self, name, lattice_length, interval, num_samples, scaled, seed):
@@ -924,7 +951,11 @@ class InfoGAN():
         directory = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.ckpts'
         # restore checkpoints
         self.dsc_ckpt.restore(self.dsc_mngr.latest_checkpoint).assert_consumed()
-        self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
+        if self.wasserstein:
+            self.gan_dsc_ckpt.restore(self.gan_dsc_mngr.latest_checkpoint).assert_consumed()
+            self.gan_aux_ckpt.restore(self.gan_aux_mngr.latest_checkpoint).assert_consumed()
+        else:
+            self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
 
 
     def get_training_indices(self):
@@ -1007,53 +1038,30 @@ class InfoGAN():
         ''' train generator and auxiliary '''
         # inputs are true samples, so the discrimination targets are of unit value
         target = np.ones(x_sample[0].shape[0], dtype=np.float32)
+         # GAN and entropy losses
         if self.wasserstein:
             target *= -1
-        # GAN and entropy losses
-        gan_loss = self.gan.train_on_batch(x_sample, [target, *x_sample[1:]])
+            gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample, target)
+            gan_aux_loss = self.gan_aux.train_on_batch(x_sample, x_sample[1:])
+            gan_loss = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
+            gan_loss.insert(0, np.sum(gan_loss))
+        else:
+            gan_loss = self.gan.train_on_batch(x_sample, [target, *x_sample[1:]])
         return gan_loss
 
 
     def train_infogan(self, x_batch, n_critic):
         ''' train infoGAN '''
-        if self.wasserstein:
-            # dsc_real_loss = []
-            # dsc_fake_loss = []
-            # for i in range(n_critic):
-            #     x_sample = self.sample_latent_distribution()
-            #     x_generated = self.generator.predict(x_sample)
-            #     dsc_real_loss_temp = self.train_discriminator(x_batch=x_batch, real=True)
-            #     dsc_fake_loss_temp = self.train_discriminator(x_batch=x_generated, real=False)
-            #     dsc_real_loss.append(dsc_real_loss_temp)
-            #     dsc_fake_loss.append(dsc_fake_loss_temp)
-            # x_sample = self.sample_latent_distribution()
-            # gan_loss = self.train_generator(x_sample=x_sample)
-            # self.dsc_real_loss_history.append(np.mean(dsc_real_loss))
-            # self.dsc_fake_loss_history.append(np.mean(dsc_fake_loss))
-            # self.gan_loss_history.append(gan_loss[1])
-            # self.ent_cat_loss_history.append(gan_loss[2])
-            # self.ent_con_loss_history.append(gan_loss[3])
-            x_sample = self.sample_latent_distribution(num_samples=self.batch_size)
-            x_generated = self.generator.predict(x=x_sample)
-            dsc_real_loss = self.train_discriminator(x_batch=x_batch, real=True)
-            dsc_fake_loss = self.train_discriminator(x_batch=x_generated, real=False)
-            gan_loss = self.train_generator(x_sample=x_sample)
-            self.dsc_real_loss_history.append(dsc_real_loss)
-            self.dsc_fake_loss_history.append(dsc_fake_loss)
-            self.gan_loss_history.append(gan_loss[1])
-            self.ent_cat_loss_history.append(gan_loss[2])
-            self.ent_con_loss_history.append(gan_loss[3])
-        else:
-            x_sample = self.sample_latent_distribution(num_samples=self.batch_size)
-            x_generated = self.generator.predict(x=x_sample)
-            dsc_real_loss = self.train_discriminator(x_batch=x_batch, real=True)
-            dsc_fake_loss = self.train_discriminator(x_batch=x_generated, real=False)
-            gan_loss = self.train_generator(x_sample=x_sample)
-            self.dsc_real_loss_history.append(dsc_real_loss)
-            self.dsc_fake_loss_history.append(dsc_fake_loss)
-            self.gan_loss_history.append(gan_loss[1])
-            self.ent_cat_loss_history.append(gan_loss[2])
-            self.ent_con_loss_history.append(gan_loss[3])
+        x_sample = self.sample_latent_distribution(num_samples=self.batch_size)
+        x_generated = self.generator.predict(x=x_sample)
+        dsc_real_loss = self.train_discriminator(x_batch=x_batch, real=True)
+        dsc_fake_loss = self.train_discriminator(x_batch=x_generated, real=False)
+        gan_loss = self.train_generator(x_sample=x_sample)
+        self.dsc_real_loss_history.append(dsc_real_loss)
+        self.dsc_fake_loss_history.append(dsc_fake_loss)
+        self.gan_loss_history.append(gan_loss[1])
+        self.ent_cat_loss_history.append(gan_loss[2])
+        self.ent_con_loss_history.append(gan_loss[3])
 
 
     def rolling_loss_average(self, epoch, batch):
@@ -1130,7 +1138,7 @@ class InfoGAN():
 
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
-     NAME, N, I, NS, SC,
+     NAME, N, I, NS, SC, W,
      CN, FBL, FB, FL, FF,
      GD, DD, ZD, CD, UD,
      KI, AN,
@@ -1160,7 +1168,6 @@ if __name__ == '__main__':
     H, T, CONF, THRM = load_data(NAME, N, I, NS, SC, SEED, VERBOSE)
     NH, NT = H.size, T.size
     IS = (N, N, 1)
-    W = False
 
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
