@@ -487,6 +487,7 @@ class InfoCGAN():
 
     def _build_model(self):
         ''' builds each component of the InfoGAN model '''
+        self._build_latent_connector()
         self._build_generator()
         self._build_discriminator()
         self._build_auxiliary()
@@ -502,6 +503,25 @@ class InfoCGAN():
         ''' Wasserstein loss for real/fake discrimination '''
         return K.mean(category*prediction)
 
+    
+    def _build_latent_connector(self):
+        self.lc_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='lc_z_input')
+        self.lc_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='lc_c_input')
+        self.lc_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='lc_u_input')
+        x = Concatenate(name='lc_latent_concat')([self.lc_z_input, self.lc_c_input, self.lc_u_input])
+        x = Dense(units=self.d_q_dim,
+                  kernel_initializer=self.krnl_init,
+                  name='lc_dense_0')(l)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='lc_dense_lrelu_0')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='lc_dense_selu_0')(x)
+        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='lc_field')(x)
+        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='lc_temp')(x)
+        self.lc_t_output = Concatenate(name='lc_t_output')([h, t])
+        self.latent_connector = Model(inputs=[self.lc_z_input, self.lc_c_input, self.lc_u_input],
+                                      outputs=[self.lc_t_output], name='latent connection')
+
 
     def _build_generator(self):
         ''' builds generator model '''
@@ -510,11 +530,11 @@ class InfoCGAN():
         self.gen_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='gen_c_input')
         self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         # concatenate features
-        l = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
+        x = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='gen_dense_0')(l)
+                  name='gen_dense_0')(x)
         if self.act == 'lrelu':
             x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
@@ -557,16 +577,7 @@ class InfoCGAN():
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                             padding='same', strides=self.filter_base_stride,
                                             name='gen_x_output')(convt)
-        x = Dense(units=self.d_q_dim,
-                  kernel_initializer=self.krnl_init,
-                  name='gen_dense_t_0')(l)
-        if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_t_0')(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='gen_dense_selu_t_0')(x)
-        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
-        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
-        self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
+        self.gen_t_output = self.latent_connector([self.gen_z_input, self.gen_c_input, self.gen_u_input])
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output, self.gen_t_output],
                                name='generator')
@@ -801,6 +812,29 @@ class InfoCGAN():
         # continuous control variable
         u = sample_uniform(-1.0, 1.0, num_samples, self.u_dim)
         return z, c, u
+    
+
+    def connect_latent(self, num_samples=None, verbose=False):
+        ''' generate new configurations using samples from the latent distributions '''
+        if num_samples is None:
+            num_samples = self.batch_size
+        # sample latent space
+        z, c, u = self.sample_latent_distribution(num_samples)
+        # generate configurations
+        return self.latent_connector.predict([z, c, u], batch_size=self.batch_size, verbose=verbose)
+
+
+    def connect_latent_controlled(self, c, u, num_samples=None, verbose=False):
+        ''' generate new configurations using control variables '''
+        if num_samples is None:
+            num_samples = self.batch_size
+        # sample latent space
+        c = np.tile(c, (num_samples, 1))
+        # u = np.tile(np.concatenate((m, np.log(np.square(s)))), (sample_count, 1))
+        u = np.tile(u, (num_samples, 1))
+        _, z, _, _ = self.sample_latent_distribution(num_samples)
+        # generate configurations
+        return self.latent_connector.predict([z, c, u], batch_size=self.batch_size, verbose=verbose)
 
 
     def generate(self, num_samples=None, verbose=False):
@@ -838,6 +872,7 @@ class InfoCGAN():
 
     def model_summaries(self):
         ''' print model summaries '''
+        self.latent_connector.summary()
         self.generator.summary()
         self.discriminator.summary()
         self.auxiliary.summary()
