@@ -506,12 +506,11 @@ class InfoCGAN():
     def _build_generator(self):
         ''' builds generator model '''
         # latent unit gaussian and categorical inputs
-        self.gen_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='gen_t_input')
         self.gen_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='gen_z_input')
         self.gen_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='gen_c_input')
         self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         # concatenate features
-        x = Concatenate(name='gen_latent_concat')([self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input])
+        l = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
@@ -554,12 +553,22 @@ class InfoCGAN():
                 if self.gen_drop:
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
-        self.gen_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
-                                          kernel_initializer='glorot_uniform', activation=self.gen_out_act,
-                                          padding='same', strides=self.filter_base_stride,
-                                          name='gen_output')(convt)
+        self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
+                                            kernel_initializer='glorot_uniform', activation=self.gen_out_act,
+                                            padding='same', strides=self.filter_base_stride,
+                                            name='gen_x_output')(convt)
+        x = Dense(units=self.d_q_dim,
+                  kernel_initializer=self.krnl_init,
+                  name='gen_dense_t_0')(l)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_t_0')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='gen_dense_selu_t_0')(x)
+        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
+        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
+        self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
         # build generator
-        self.generator = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_output],
+        self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output, self.gen_t_output],
                                name='generator')
 
 
@@ -723,16 +732,16 @@ class InfoCGAN():
             dsc_loss = self.binary_crossentropy_loss
         self.discriminator.trainable = False
         # discriminated generator output
-        gan_output = self.discriminator([self.gen_output, self.gen_t_input])
+        gan_v_output = self.discriminator([self.gen_output, self.gen_t_output])
         # auxiliary output
-        gan_output_c, gan_output_u = self.auxiliary([self.gen_output, self.gen_t_input])
+        gan_c_output, gan_u_output = self.auxiliary([self.gen_output, self.gen_t_output])
         # build GAN
         if self.wasserstein:
-            self.gan_dsc = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                                 outputs=[gan_output],
+            self.gan_dsc = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                                 outputs=[gan_v_output],
                                  name='infocgan_discriminator')
-            self.gan_aux = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                                 outputs=[gan_output_c, gan_output_u],
+            self.gan_aux = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                                 outputs=[gan_c_output, gan_u_output],
                                  name='infocgan_auxiliary')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
@@ -756,8 +765,8 @@ class InfoCGAN():
                                        'auxiliary_1': 'mean_squared_error'},
                                  optimizer=self.gan_aux_opt)
         else:
-            self.gan = Model(inputs=[self.gen_t_input, self.gen_z_input, self.gen_c_input, self.gen_u_input],
-                             outputs=[gan_output, gan_output_c, gan_output_u],
+            self.gan = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
+                             outputs=[gan_v_output, gan_c_output, gan_u_output],
                              name='infocgan')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
@@ -785,15 +794,13 @@ class InfoCGAN():
         ''' draws samples from the latent gaussian and categorical distributions '''
         if num_samples is None:
             num_samples = self.batch_size
-        # thermal parameters
-        t = np.concatenate((sample_uniform(-1.0, 1.0, num_samples, 1), sample_uniform(0.0, 1.0, num_samples, 1)), axis=-1)
         # noise
         z = sample_gaussian(num_samples, self.z_dim)
         # categorical control variable
         c = sample_categorical(num_samples, self.c_dim)
         # continuous control variable
         u = sample_uniform(-1.0, 1.0, num_samples, self.u_dim)
-        return t, z, c, u
+        return z, c, u
 
 
     def generate(self, num_samples=None, verbose=False):
@@ -801,23 +808,22 @@ class InfoCGAN():
         if num_samples is None:
             num_samples = self.batch_size
         # sample latent space
-        t, z, c, u = self.sample_latent_distribution(num_samples)
+        z, c, u = self.sample_latent_distribution(num_samples)
         # generate configurations
-        return self.generator.predict([t, z, c, u], batch_size=self.batch_size, verbose=verbose)
+        return self.generator.predict([z, c, u], batch_size=self.batch_size, verbose=verbose)
 
 
-    def generate_controlled(self, t, c, u, num_samples=None, verbose=False):
+    def generate_controlled(self, c, u, num_samples=None, verbose=False):
         ''' generate new configurations using control variables '''
         if num_samples is None:
             num_samples = self.batch_size
-        t = np.tile(t, (num_samples, 1))
         # sample latent space
         c = np.tile(c, (num_samples, 1))
         # u = np.tile(np.concatenate((m, np.log(np.square(s)))), (sample_count, 1))
         u = np.tile(u, (num_samples, 1))
         _, z, _, _ = self.sample_latent_distribution(num_samples)
         # generate configurations
-        return self.generator.predict([t, z, c, u], batch_size=self.batch_size, verbose=verbose)
+        return self.generator.predict([z, c, u], batch_size=self.batch_size, verbose=verbose)
 
 
     def discriminate(self, x_batch, t_batch, verbose=False):
@@ -1052,9 +1058,9 @@ class InfoCGAN():
     def train_infogan(self, x_batch, t_batch, n_critic):
         ''' train infoCGAN '''
         x_sample = self.sample_latent_distribution(num_samples=self.batch_size)
-        x_generated = self.generator.predict(x=x_sample)
+        x_generated, t_generated = self.generator.predict(x=x_sample)
         dsc_real_loss = self.train_discriminator(x_batch=x_batch, t_batch=t_batch, real=True)
-        dsc_fake_loss = self.train_discriminator(x_batch=x_generated, t_batch=x_sample[0], real=False)
+        dsc_fake_loss = self.train_discriminator(x_batch=x_generated, t_batch=t_generated, real=False)
         gan_loss = self.train_generator(x_sample=x_sample)
         self.dsc_real_loss_history.append(dsc_real_loss)
         self.dsc_fake_loss_history.append(dsc_fake_loss)
