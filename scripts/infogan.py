@@ -487,7 +487,7 @@ class InfoGAN():
                   self.krnl_init, self.act,
                   self.dsc_opt_n, self.gan_opt_n, self.dsc_lr, self.gan_lr,
                   self.lamb, self.batch_size, self.alpha, self.beta)
-        file_name = '{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
+        file_name = 'infogan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
         return file_name
 
 

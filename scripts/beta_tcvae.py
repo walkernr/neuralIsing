@@ -409,7 +409,7 @@ class VAE():
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = '{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{}.{}'.format(*params)
+        file_name = 'vae.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{}.{}'.format(*params)
         return file_name
     
 
