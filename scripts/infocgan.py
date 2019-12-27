@@ -505,10 +505,10 @@ class InfoCGAN():
 
     
     def _build_latent_connector(self):
-        self.lc_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='lc_z_input')
-        self.lc_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='lc_c_input')
-        self.lc_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='lc_u_input')
-        x = Concatenate(name='lc_latent_concat')([self.lc_z_input, self.lc_c_input, self.lc_u_input])
+        z = Input(batch_shape=(self.batch_size, self.z_dim), name='lc_z_input')
+        c = Input(batch_shape=(self.batch_size, self.c_dim), name='lc_c_input')
+        u = Input(batch_shape=(self.batch_size, self.u_dim), name='lc_u_input')
+        x = Concatenate(name='lc_latent_concat')([z, c, u])
         x = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
                   name='lc_dense_0')(x)
@@ -518,9 +518,8 @@ class InfoCGAN():
             x = Activation(activation='selu', name='lc_dense_selu_0')(x)
         h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='lc_field')(x)
         t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='lc_temp')(x)
-        self.lc_t_output = Concatenate(name='lc_t_output')([h, t])
-        self.latent_connector = Model(inputs=[self.lc_z_input, self.lc_c_input, self.lc_u_input],
-                                      outputs=[self.lc_t_output], name='latent_connector')
+        p = Concatenate(name='lc_t_output')([h, t])
+        self.latent_connector = Model(inputs=[z, c, u], outputs=[p], name='latent_connector')
 
 
     def _build_generator(self):
