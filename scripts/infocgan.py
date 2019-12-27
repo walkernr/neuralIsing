@@ -732,9 +732,9 @@ class InfoCGAN():
             dsc_loss = self.binary_crossentropy_loss
         self.discriminator.trainable = False
         # discriminated generator output
-        gan_v_output = self.discriminator([self.gen_output, self.gen_t_output])
+        gan_v_output = self.discriminator([self.gen_x_output, self.gen_t_output])
         # auxiliary output
-        gan_c_output, gan_u_output = self.auxiliary([self.gen_output, self.gen_t_output])
+        gan_c_output, gan_u_output = self.auxiliary([self.gen_x_output, self.gen_t_output])
         # build GAN
         if self.wasserstein:
             self.gan_dsc = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
