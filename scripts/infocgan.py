@@ -520,7 +520,7 @@ class InfoCGAN():
         t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='lc_temp')(x)
         self.lc_t_output = Concatenate(name='lc_t_output')([h, t])
         self.latent_connector = Model(inputs=[self.lc_z_input, self.lc_c_input, self.lc_u_input],
-                                      outputs=[self.lc_t_output], name='latent connection')
+                                      outputs=[self.lc_t_output], name='latent_connector')
 
 
     def _build_generator(self):
