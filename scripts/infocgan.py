@@ -514,7 +514,7 @@ class InfoCGAN():
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='gen_dense_0')(x)
+                  name='gen_dense_0')(l)
         if self.act == 'lrelu':
             x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
