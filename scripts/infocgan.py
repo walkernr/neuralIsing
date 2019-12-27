@@ -511,7 +511,7 @@ class InfoCGAN():
         x = Concatenate(name='lc_latent_concat')([self.lc_z_input, self.lc_c_input, self.lc_u_input])
         x = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
-                  name='lc_dense_0')(l)
+                  name='lc_dense_0')(x)
         if self.act == 'lrelu':
             x = LeakyReLU(alpha=0.2, name='lc_dense_lrelu_0')(x)
         if self.act == 'selu':
