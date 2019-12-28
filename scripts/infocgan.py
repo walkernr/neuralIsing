@@ -487,7 +487,6 @@ class InfoCGAN():
 
     def _build_model(self):
         ''' builds each component of the InfoGAN model '''
-        self._build_latent_connector()
         self._build_generator()
         self._build_discriminator()
         self._build_auxiliary()
@@ -876,7 +875,6 @@ class InfoCGAN():
 
     def model_summaries(self):
         ''' print model summaries '''
-        self.latent_connector.summary()
         self.generator.summary()
         self.discriminator.summary()
         self.auxiliary.summary()
