@@ -516,6 +516,8 @@ class InfoCGAN():
         t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
         # thermal output
         self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
+        # concatenate thermal output to features
+        x = Concatenate(name='gen_latent_t_concat')([x, self.gen_t_output])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
@@ -582,16 +584,17 @@ class InfoCGAN():
             loss = self.binary_crossentropy_loss
             conv_constraint = None
         # map thermal parameters to convolutional channel
-        x = Dense(units=np.prod(self.input_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='dsc_dense_0')(self.dsc_t_input)
-        if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
-        x = Reshape(target_shape=self.input_shape, name='dsc_rshp_0')(x)
-        # concatenate configuration and thermal data
-        conv = Concatenate(name='dsc_concat_0')([self.dsc_x_input, x])
+        # x = Dense(units=np.prod(self.input_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='dsc_dense_0')(self.dsc_t_input)
+        # if self.act == 'lrelu':
+        #     x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+        # x = Reshape(target_shape=self.input_shape, name='dsc_rshp_0')(x)
+        # # concatenate configuration and thermal data
+        # conv = Concatenate(name='dsc_concat_0')([self.dsc_x_input, x])
+        conv = self.dsc_x_input
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -630,6 +633,7 @@ class InfoCGAN():
             x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_2')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='dsc_dense_selu_2')(x)
+        x = Concatenate(name='dsc_latent_concat')([x, self.dsc_t_input])
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
@@ -659,16 +663,17 @@ class InfoCGAN():
             self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
             self.aux_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='aux_t_input')
             # map thermal parameters to convolutional channel
-            x = Dense(units=np.prod(self.input_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='aux_dense_0')(self.aux_t_input)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
-            if self.act == 'selu':
-                x = Activation(activation='selu', name='aux_dense_selu_0')(x)
-            x = Reshape(target_shape=self.input_shape, name='aux_rshp_0')(x)
-            # concatenate configuration and thermal data
-            conv = Concatenate(name='aux_concat_0')([self.aux_x_input, x])
+            # x = Dense(units=np.prod(self.input_shape),
+            #           kernel_initializer=self.krnl_init,
+            #           name='aux_dense_0')(self.aux_t_input)
+            # if self.act == 'lrelu':
+            #     x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+            # if self.act == 'selu':
+            #     x = Activation(activation='selu', name='aux_dense_selu_0')(x)
+            # x = Reshape(target_shape=self.input_shape, name='aux_rshp_0')(x)
+            # # concatenate configuration and thermal data
+            # conv = Concatenate(name='aux_concat_0')([self.aux_x_input, x])
+            conv = self.aux_x_input
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -705,6 +710,7 @@ class InfoCGAN():
                 x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_1')(x)
+            x = Concatenate(name='aux_latent_concat')([x, self.aux_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
@@ -724,6 +730,7 @@ class InfoCGAN():
                 x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_0')(x)
+            x = Concatenate(name='aux_latent_concat')([x, self.dsc_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
