@@ -705,7 +705,6 @@ class InfoCGAN():
                 x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_1')(x)
-            x = Concatenate(name='aux_latent_concat')([x, self.aux_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
@@ -725,7 +724,6 @@ class InfoCGAN():
                 x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_0')(x)
-            x = Concatenate(name='aux_latent_concat')([x, self.dsc_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
