@@ -519,8 +519,7 @@ class InfoCGAN():
         h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='lc_field')(x)
         t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='lc_temp')(x)
         p = Concatenate(name='lc_t_output')([h, t])
-        self.latent_connector = Model(inputs=[z, c, u],
-                                      outputs=[p], name='latent_connector')
+        self.latent_connector = Model(inputs=[z, c, u], outputs=[p], name='latent_connector')
 
 
     def _build_generator(self):
@@ -573,11 +572,30 @@ class InfoCGAN():
                 if self.gen_drop:
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
-        self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
+        convt = Conv2DTranspose(filters=2, kernel_size=self.filter_base_length,
+                                kernel_initializer=self.krnl_init,
+                                padding='same', strides=self.filter_stride,
+                                name='gen_convt_{}'.format(u))(convt)
+        if self.act == 'lrelu':
+            convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
+            convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
+        if self.act == 'selu':
+            convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
+        self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=1,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
-                                            padding='same', strides=self.filter_base_stride,
+                                            padding='same', strides=1,
                                             name='gen_x_output')(convt)
-        self.gen_t_output = self.latent_connector([self.gen_z_input, self.gen_c_input, self.gen_u_input])
+        x = Flatten(name='gen_fltn_0')(convt)
+        x = Dense(units=np.prod(self.input_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='gen_dense_2')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_2')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='gen_dense_selu_2')(x)
+        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
+        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
+        self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output, self.gen_t_output],
                                name='generator')
@@ -596,7 +614,15 @@ class InfoCGAN():
             out_act = 'sigmoid'
             loss = self.binary_crossentropy_loss
             conv_constraint = None
-        conv = self.dsc_x_input
+        x = Dense(units=np.prod(self.input_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='dsc_dense_0')(self.dsc_t_input)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+        x = Reshape(target_shape=self.input_shape, name='dsc_rshp_0')(x)
+        conv = Concatenate(name='dsc_concat_0')([self.dsc_x_input, x])
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -620,22 +646,21 @@ class InfoCGAN():
             # dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dsc_dense_0')(x)
+                      name='dsc_dense_1')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(x)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+                x = Activation(activation='selu', name='dsc_dense_selu_1')(x)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = x
         # dense layer
         x = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
-                  name='dsc_dense_1')(x)
+                  name='dsc_dense_2')(x)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(x)
+            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_2')(x)
         if self.act == 'selu':
-            x = Activation(activation='selu', name='dsc_dense_selu_1')(x)
-        x = Concatenate(name='dsc_latent_concat')([x, self.dsc_t_input])
+            x = Activation(activation='selu', name='dsc_dense_selu_2')(x)
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
@@ -664,7 +689,15 @@ class InfoCGAN():
             # takes sample (real or fake) as input
             self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
             self.aux_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='aux_t_input')
-            conv = self.aux_x_input
+            x = Dense(units=np.prod(self.final_conv_shape),
+                      kernel_initializer=self.krnl_init,
+                      name='aux_dense_0')(self.aux_t_input)
+            if self.act == 'lrelu':
+                x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+            if self.act == 'selu':
+                x = Activation(activation='selu', name='aux_dense_selu_0')(x)
+            x = Reshape(target_shape=self.final_conv_shape, name='aux_rshp_0')(x)
+            conv = Concatenate(name='aux_concat_0')([self.aux_x_input, x])
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -813,29 +846,6 @@ class InfoCGAN():
         u = sample_uniform(-1.0, 1.0, num_samples, self.u_dim)
         return z, c, u
     
-
-    def connect_latent(self, num_samples=None, verbose=False):
-        ''' generate new configurations using samples from the latent distributions '''
-        if num_samples is None:
-            num_samples = self.batch_size
-        # sample latent space
-        z, c, u = self.sample_latent_distribution(num_samples)
-        # generate configurations
-        return self.latent_connector.predict([z, c, u], batch_size=self.batch_size, verbose=verbose)
-
-
-    def connect_latent_controlled(self, c, u, num_samples=None, verbose=False):
-        ''' generate new configurations using control variables '''
-        if num_samples is None:
-            num_samples = self.batch_size
-        # sample latent space
-        c = np.tile(c, (num_samples, 1))
-        # u = np.tile(np.concatenate((m, np.log(np.square(s)))), (sample_count, 1))
-        u = np.tile(u, (num_samples, 1))
-        _, z, _, _ = self.sample_latent_distribution(num_samples)
-        # generate configurations
-        return self.latent_connector.predict([z, c, u], batch_size=self.batch_size, verbose=verbose)
-
 
     def generate(self, num_samples=None, verbose=False):
         ''' generate new configurations using samples from the latent distributions '''
