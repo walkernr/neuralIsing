@@ -585,14 +585,16 @@ class InfoCGAN():
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                             padding='same', strides=1,
                                             name='gen_x_output')(convt)
-        x = Flatten(name='gen_fltn_0')(convt)
-        x = Dense(units=np.prod(self.input_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='gen_dense_2')(x)
+        x = Conv2DTranspose(filters=1, kernel_size=1,
+                            kernel_initializer=self.krnl_init,
+                            padding='same', strides=1,
+                            name='gen_t_embed')(convt)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_2')(x)
+            x = BatchNormalization(name='gen_t_embed_batchnorm')(x)
+            x = LeakyReLU(alpha=0.2, name='gen_t_embed_lrelu')(x)
         if self.act == 'selu':
-            x = Activation(activation='selu', name='gen_dense_selu_2')(x)
+            x = Activation(activation='selu', name='gen_t_embed_selu')(x)
+        x = Flatten(name='gen_fltn_0')(x)
         h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
         t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
         self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
