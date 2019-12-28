@@ -511,6 +511,11 @@ class InfoCGAN():
         self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         # concatenate features
         x = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
+        # external field and temperature
+        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
+        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
+        # thermal output
+        self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
@@ -553,38 +558,11 @@ class InfoCGAN():
                 if self.gen_drop:
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
-        # two channel convolution to extract configuration and thermal outputs
-        convt = Conv2DTranspose(filters=2, kernel_size=self.filter_base_length,
-                                kernel_initializer=self.krnl_init,
-                                padding='same', strides=self.filter_stride,
-                                name='gen_convt_{}'.format(u))(convt)
-        if self.act == 'lrelu':
-            convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
-            convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
-        if self.act == 'selu':
-            convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
         # configuration output
-        self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=1,
+        self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
-                                            padding='same', strides=1,
+                                            padding='same', strides=self.filter_stride,
                                             name='gen_x_output')(convt)
-        # single channel convolution for thermal output
-        x = Conv2DTranspose(filters=1, kernel_size=1,
-                            kernel_initializer=self.krnl_init,
-                            padding='same', strides=1,
-                            name='gen_t_embed')(convt)
-        if self.act == 'lrelu':
-            x = BatchNormalization(name='gen_t_embed_batchnorm')(x)
-            x = LeakyReLU(alpha=0.2, name='gen_t_embed_lrelu')(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='gen_t_embed_selu')(x)
-        # flatten convolution output
-        x = Flatten(name='gen_fltn_0')(x)
-        # external field and temperature
-        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
-        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
-        # thermal output
-        self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output, self.gen_t_output],
                                name='generator')
