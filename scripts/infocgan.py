@@ -583,17 +583,6 @@ class InfoCGAN():
             out_act = 'sigmoid'
             loss = self.binary_crossentropy_loss
             conv_constraint = None
-        # map thermal parameters to convolutional channel
-        # x = Dense(units=np.prod(self.input_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='dsc_dense_0')(self.dsc_t_input)
-        # if self.act == 'lrelu':
-        #     x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
-        # x = Reshape(target_shape=self.input_shape, name='dsc_rshp_0')(x)
-        # # concatenate configuration and thermal data
-        # conv = Concatenate(name='dsc_concat_0')([self.dsc_x_input, x])
         conv = self.dsc_x_input
         # iterative convolutions over input
         for i in range(self.conv_number):
@@ -662,17 +651,6 @@ class InfoCGAN():
             # takes sample (real or fake) as input
             self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
             self.aux_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='aux_t_input')
-            # map thermal parameters to convolutional channel
-            # x = Dense(units=np.prod(self.input_shape),
-            #           kernel_initializer=self.krnl_init,
-            #           name='aux_dense_0')(self.aux_t_input)
-            # if self.act == 'lrelu':
-            #     x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
-            # if self.act == 'selu':
-            #     x = Activation(activation='selu', name='aux_dense_selu_0')(x)
-            # x = Reshape(target_shape=self.input_shape, name='aux_rshp_0')(x)
-            # # concatenate configuration and thermal data
-            # conv = Concatenate(name='aux_concat_0')([self.aux_x_input, x])
             conv = self.aux_x_input
             # iterative convolutions over input
             for i in range(self.conv_number):
