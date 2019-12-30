@@ -510,61 +510,61 @@ class InfoCGAN():
         self.gen_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='gen_c_input')
         self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         # concatenate features
-        x = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
+        f = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
         # external field and temperature
-        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(x)
-        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(x)
+        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(f)
+        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(f)
         # thermal output
         self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
         # concatenate thermal output to features
-        x = Concatenate(name='gen_latent_t_concat')([x, self.gen_t_output])
+        d = Concatenate(name='gen_latent_t_concat')([f, self.gen_t_output])
         # dense layer with same feature count as final convolution
-        x = Dense(units=np.prod(self.final_conv_shape),
+        d = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='gen_dense_0')(x)
+                  name='gen_dense_0')(d)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
+            d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(d)
         if self.act == 'selu':
-            x = Activation(activation='selu', name='gen_dense_selu_0')(x)
+            d = Activation(activation='selu', name='gen_dense_selu_0')(d)
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
+            d = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='gen_dense_1')(x)
+                      name='gen_dense_1')(d)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+                d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(d)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='gen_dense_selu_1')(x)
+                d = Activation(activation='selu', name='gen_dense_selu_1')(d)
         # reshape to final convolution shape
-        convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
+        c = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(d)
         if self.gen_drop:
             if self.act == 'lrelu':
-                convt = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(convt)
+                c = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(c)
             if self.act == 'selu':
-                convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='gen_dense_drop_0')(convt)
+                c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='gen_dense_drop_0')(c)
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
-            convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
-                                    kernel_initializer=self.krnl_init,
-                                    padding='same', strides=self.filter_stride,
-                                    name='gen_convt_{}'.format(u))(convt)
+            c = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
+                                kernel_initializer=self.krnl_init,
+                                padding='same', strides=self.filter_stride,
+                                name='gen_convt_{}'.format(u))(c)
             if self.act == 'lrelu':
-                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
-                convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
+                c = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(c)
+                c = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(c)
                 if self.gen_drop:
-                    convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
+                    c = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(c)
             if self.act == 'selu':
-                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
+                c = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(c)
                 if self.gen_drop:
-                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
+                    c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(c)
             u += 1
         # configuration output
         self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                             padding='same', strides=self.filter_stride,
-                                            name='gen_x_output')(convt)
+                                            name='gen_x_output')(c)
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output, self.gen_t_output],
                                name='generator')
@@ -583,50 +583,50 @@ class InfoCGAN():
             out_act = 'sigmoid'
             loss = self.binary_crossentropy_loss
             conv_constraint = None
-        conv = self.dsc_x_input
+        c = self.dsc_x_input
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
             filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
-            conv = Conv2D(filters=filter_number, kernel_size=filter_length,
-                          kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
-                          padding='valid', strides=filter_stride,
-                          name='dsc_conv_{}'.format(i))(conv)
+            c = Conv2D(filters=filter_number, kernel_size=filter_length,
+                       kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
+                       padding='valid', strides=filter_stride,
+                       name='dsc_conv_{}'.format(i))(c)
             if self.act == 'lrelu':
-                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
-                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(conv)
+                c = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(c)
+                c = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(c)
                 if self.dsc_drop:
-                    conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i))(conv)
+                    c = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i))(c)
             if self.act == 'selu':
-                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(conv)
+                c = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(c)
                 if self.dsc_drop:
-                    conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(conv)
+                    c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(c)
         # flatten final convolutional layer
-        x = Flatten(name='dsc_fltn_0')(conv)
+        d = Flatten(name='dsc_fltn_0')(c)
         if self.final_conv_shape[:2] != (1, 1):
             # dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
+            d = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dsc_dense_1')(x)
+                      name='dsc_dense_1')(d)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(x)
+                d = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(d)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='dsc_dense_selu_1')(x)
+                d = Activation(activation='selu', name='dsc_dense_selu_1')(d)
         # the dense layer is saved as a hidden layer
-        self.dsc_hidden = x
+        self.dsc_hidden = d
         # dense layer
-        x = Dense(units=self.d_q_dim,
+        f = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
-                  name='dsc_dense_2')(x)
+                  name='dsc_dense_2')(d)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_2')(x)
+            f = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_2')(f)
         if self.act == 'selu':
-            x = Activation(activation='selu', name='dsc_dense_selu_2')(x)
-        x = Concatenate(name='dsc_latent_concat')([x, self.dsc_t_input])
+            f = Activation(activation='selu', name='dsc_dense_selu_2')(f)
+        d = Concatenate(name='dsc_latent_concat')([f, self.dsc_t_input])
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
-                                  name='dsc_v_output')(x)
+                                  name='dsc_v_output')(d)
         # build discriminator
         self.discriminator = Model(inputs=[self.dsc_x_input, self.dsc_t_input], outputs=[self.dsc_v_output],
                                    name='discriminator')
@@ -651,71 +651,71 @@ class InfoCGAN():
             # takes sample (real or fake) as input
             self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
             self.aux_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='aux_t_input')
-            conv = self.aux_x_input
+            c = self.aux_x_input
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
                 filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
-                conv = Conv2D(filters=filter_number, kernel_size=filter_length,
-                              kernel_initializer=self.krnl_init,
-                              padding='valid', strides=filter_stride,
-                              name='aux_conv_{}'.format(i))(conv)
+                c = Conv2D(filters=filter_number, kernel_size=filter_length,
+                           kernel_initializer=self.krnl_init,
+                           padding='valid', strides=filter_stride,
+                           name='aux_conv_{}'.format(i))(c)
                 if self.act == 'lrelu':
-                    conv = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(conv)
-                    conv = LeakyReLU(alpha=0.2, name='aux_conv_lrelu_{}'.format(i))(conv)
+                    c = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(c)
+                    c = LeakyReLU(alpha=0.2, name='aux_conv_lrelu_{}'.format(i))(c)
                     if self.dsc_drop:
-                        conv = SpatialDropout2D(rate=0.5, name='aux_conv_drop_{}'.format(i))(conv)
+                        c = SpatialDropout2D(rate=0.5, name='aux_conv_drop_{}'.format(i))(c)
                 if self.act == 'selu':
-                    conv = Activation(activation='selu', name='aux_conv_selu_{}'.format(i))(conv)
+                    c = Activation(activation='selu', name='aux_conv_selu_{}'.format(i))(c)
                     if self.dsc_drop:
-                        conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(conv)
+                        c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(c)
             # flatten final convolutional layer
-            x = Flatten(name='aux_fltn_0')(conv)
+            d = Flatten(name='aux_fltn_0')(c)
             if self.final_conv_shape[:2] != (1, 1):
                 # dense layer
-                x = Dense(units=np.prod(self.final_conv_shape),
+                d = Dense(units=np.prod(self.final_conv_shape),
                           kernel_initializer=self.krnl_init,
-                          name='aux_dense_0')(x)
+                          name='aux_dense_0')(d)
                 if self.act == 'lrelu':
-                    x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+                    d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(d)
                 if self.act == 'selu':
-                    x = Activation(activation='selu', name='aux_dense_selu_0')(x)
+                    d = Activation(activation='selu', name='aux_dense_selu_0')(d)
             # dense layer
-            x = Dense(units=self.d_q_dim,
+            f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_1')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(x)
+                f = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(f)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='aux_dense_selu_1')(x)
-            x = Concatenate(name='aux_latent_concat')([x, self.aux_t_input])
+                f = Activation(activation='selu', name='aux_dense_selu_1')(f)
+            d = Concatenate(name='aux_latent_concat')([f, self.aux_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_output_c')(x)
+                                      name='aux_output_c')(d)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_mu')(x)
+                                      name='aux_mu')(d)
             # build auxiliary classifier
             self.auxiliary = Model(inputs=[self.aux_x_input, self.aux_t_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
         else:
             # initialize with dense layer taking the hidden generator layer as input
-            x = Dense(units=self.d_q_dim,
+            f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_0')(self.dsc_hidden)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+                f = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(f)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='aux_dense_selu_0')(x)
-            x = Concatenate(name='aux_latent_concat')([x, self.dsc_t_input])
+                f = Activation(activation='selu', name='aux_dense_selu_0')(f)
+            d = Concatenate(name='aux_latent_concat')([x, self.dsc_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_c_output')(x)
+                                      name='aux_c_output')(d)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_u_output')(x)
+                                      name='aux_u_output')(d)
             # build auxiliary classifier
             self.auxiliary = Model(inputs=[self.dsc_x_input, self.dsc_t_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
