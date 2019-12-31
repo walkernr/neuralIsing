@@ -722,7 +722,7 @@ class InfoCGAN():
             # initialize with dense layer taking the hidden generator layer as input
             d = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
-                      name='aux_dense_0')(d)
+                      name='aux_dense_0')(self.dsc_hidden)
             if self.act == 'lrelu':
                 d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(d)
             if self.act == 'selu':
