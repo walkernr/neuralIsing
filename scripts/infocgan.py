@@ -617,7 +617,6 @@ class InfoCGAN():
                 d = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(d)
             if self.act == 'selu':
                 d = Activation(activation='selu', name='dsc_dense_selu_0')(d)
-        d = Concatenate(name='dsc_latent_concat')([d, self.dsc_t_input])
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = d
         # dense layer
@@ -628,6 +627,7 @@ class InfoCGAN():
             d = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(d)
         if self.act == 'selu':
             d = Activation(activation='selu', name='dsc_dense_selu_1')(d)
+        d = Concatenate(name='dsc_latent_concat')([d, self.dsc_t_input])
         f = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
                   name='dsc_dense_2')(d)
@@ -692,7 +692,6 @@ class InfoCGAN():
                     d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(d)
                 if self.act == 'selu':
                     d = Activation(activation='selu', name='aux_dense_selu_0')(d)
-            d = Concatenate(name='aux_latent_concat')([d, self.aux_t_input])
             # dense layer
             d = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
@@ -701,6 +700,7 @@ class InfoCGAN():
                 d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(d)
             if self.act == 'selu':
                 d = Activation(activation='selu', name='aux_dense_selu_1')(d)
+            d = Concatenate(name='aux_latent_concat')([d, self.aux_t_input])
             f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_2')(d)
@@ -727,6 +727,7 @@ class InfoCGAN():
                 d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(d)
             if self.act == 'selu':
                 d = Activation(activation='selu', name='aux_dense_selu_0')(d)
+            d = Concatenate(name='aux_latent_concat')([d, self.aux_t_input])
             f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_1')(d)
