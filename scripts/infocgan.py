@@ -638,7 +638,7 @@ class InfoCGAN():
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
-                                  name='dsc_v_output')(d)
+                                  name='dsc_v_output')(f)
         # build discriminator
         self.discriminator = Model(inputs=[self.dsc_x_input, self.dsc_t_input], outputs=[self.dsc_v_output],
                                    name='discriminator')
@@ -711,10 +711,10 @@ class InfoCGAN():
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_output_c')(d)
+                                      name='aux_output_c')(f)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_mu')(d)
+                                      name='aux_mu')(f)
             # build auxiliary classifier
             self.auxiliary = Model(inputs=[self.aux_x_input, self.aux_t_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
@@ -738,10 +738,10 @@ class InfoCGAN():
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_c_output')(d)
+                                      name='aux_c_output')(f)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_u_output')(d)
+                                      name='aux_u_output')(f)
             # build auxiliary classifier
             self.auxiliary = Model(inputs=[self.dsc_x_input, self.dsc_t_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
