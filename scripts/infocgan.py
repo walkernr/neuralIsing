@@ -727,7 +727,7 @@ class InfoCGAN():
                 d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(d)
             if self.act == 'selu':
                 d = Activation(activation='selu', name='aux_dense_selu_0')(d)
-            d = Concatenate(name='aux_latent_concat')([d, self.aux_t_input])
+            d = Concatenate(name='aux_latent_concat')([d, self.dsc_t_input])
             f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_1')(d)
