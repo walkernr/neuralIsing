@@ -511,9 +511,14 @@ class InfoCGAN():
         self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         # concatenate features
         f = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
+        d = Dense(units=self.d_q_dim, kernel_initializer=self.krnl_init, name='gen_dense_0')(f)
+        if self.act == 'lrelu':
+            d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(d)
+        if self.act == 'selu':
+            d = Activation(activation='selu', name='gen_dense_selu_0')(d)
         # external field and temperature
-        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(f)
-        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(f)
+        h = Dense(1, kernel_initializer='glorot_uniform', activation='tanh', name='gen_field')(d)
+        t = Dense(1, kernel_initializer='glorot_uniform', activation='sigmoid', name='gen_temp')(d)
         # thermal output
         self.gen_t_output = Concatenate(name='gen_t_output')([h, t])
         # concatenate thermal output to features
@@ -521,20 +526,20 @@ class InfoCGAN():
         # dense layer with same feature count as final convolution
         d = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='gen_dense_0')(d)
+                  name='gen_dense_1')(d)
         if self.act == 'lrelu':
-            d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(d)
+            d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(d)
         if self.act == 'selu':
-            d = Activation(activation='selu', name='gen_dense_selu_0')(d)
+            d = Activation(activation='selu', name='gen_dense_selu_1')(d)
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
             d = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='gen_dense_1')(d)
+                      name='gen_dense_2')(d)
             if self.act == 'lrelu':
-                d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(d)
+                d = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_2')(d)
             if self.act == 'selu':
-                d = Activation(activation='selu', name='gen_dense_selu_1')(d)
+                d = Activation(activation='selu', name='gen_dense_selu_2')(d)
         # reshape to final convolution shape
         c = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(d)
         if self.gen_drop:
@@ -607,14 +612,22 @@ class InfoCGAN():
             # dense layer
             d = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dsc_dense_1')(d)
+                      name='dsc_dense_0')(d)
             if self.act == 'lrelu':
-                d = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(d)
+                d = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(d)
             if self.act == 'selu':
-                d = Activation(activation='selu', name='dsc_dense_selu_1')(d)
+                d = Activation(activation='selu', name='dsc_dense_selu_0')(d)
         # the dense layer is saved as a hidden layer
         self.dsc_hidden = d
         # dense layer
+        d = Dense(units=self.d_q_dim,
+                  kernel_initializer=self.krnl_init,
+                  name='dsc_dense_1')(d)
+        if self.act == 'lrelu':
+            d = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(d)
+        if self.act == 'selu':
+            d = Activation(activation='selu', name='dsc_dense_selu_1')(d)
+        d = Concatenate(name='dsc_latent_concat')([d, self.dsc_t_input])
         f = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
                   name='dsc_dense_2')(d)
@@ -622,7 +635,6 @@ class InfoCGAN():
             f = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_2')(f)
         if self.act == 'selu':
             f = Activation(activation='selu', name='dsc_dense_selu_2')(f)
-        d = Concatenate(name='dsc_latent_concat')([f, self.dsc_t_input])
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
@@ -681,14 +693,21 @@ class InfoCGAN():
                 if self.act == 'selu':
                     d = Activation(activation='selu', name='aux_dense_selu_0')(d)
             # dense layer
+            d = Dense(units=self.d_q_dim,
+                      kernel_initializer=self.krnl_init,
+                      name='aux_dense_1')(d)
+            if self.act == 'lrelu':
+                d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(d)
+            if self.act == 'selu':
+                d = Activation(activation='selu', name='aux_dense_selu_1')(d)
+            d = Concatenate(name='aux_latent_concat')([d, self.aux_t_input])
             f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
-                      name='aux_dense_1')(x)
+                      name='aux_dense_2')(d)
             if self.act == 'lrelu':
-                f = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(f)
+                f = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_2')(f)
             if self.act == 'selu':
-                f = Activation(activation='selu', name='aux_dense_selu_1')(f)
-            d = Concatenate(name='aux_latent_concat')([f, self.aux_t_input])
+                f = Activation(activation='selu', name='aux_dense_selu_2')(f)
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
@@ -701,14 +720,21 @@ class InfoCGAN():
                                    name='auxiliary')
         else:
             # initialize with dense layer taking the hidden generator layer as input
+            d = Dense(units=self.d_q_dim,
+                      kernel_initializer=self.krnl_init,
+                      name='aux_dense_0')(d)
+            if self.act == 'lrelu':
+                d = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(d)
+            if self.act == 'selu':
+                d = Activation(activation='selu', name='aux_dense_selu_0')(d)
+            d = Concatenate(name='aux_latent_concat')([d, self.dsc_t_input])
             f = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
-                      name='aux_dense_0')(self.dsc_hidden)
+                      name='aux_dense_1')(d)
             if self.act == 'lrelu':
-                f = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(f)
+                f = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(f)
             if self.act == 'selu':
-                f = Activation(activation='selu', name='aux_dense_selu_0')(f)
-            d = Concatenate(name='aux_latent_concat')([f, self.dsc_t_input])
+                f = Activation(activation='selu', name='aux_dense_selu_1')(f)
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
