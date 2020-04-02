@@ -15,7 +15,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import (Input, Flatten, Reshape, Lambda,
                                      Dense, BatchNormalization, Conv2D, Conv2DTranspose,
-                                     Activation, LeakyReLU)
+                                     SpatialDropout2D, AlphaDropout, Activation, LeakyReLU)
 from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
 from tensorflow.keras.models import Model, save_model, load_model
 from tensorflow.keras.utils import to_categorical
@@ -62,6 +62,8 @@ def parse_args():
                         type=int, default=3)
     parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters after base convolution',
                         type=int, default=9)
+    parser.add_argument('-do', '--dropout', help='toggle dropout layers',
+                        action='store_true')
     parser.add_argument('-zd', '--z_dimension', help='sample noise dimension',
                         type=int, default=5)
     parser.add_argument('-ra', '--alpha', help='total correlation alpha',
@@ -90,7 +92,7 @@ def parse_args():
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
             args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data,
             args.conv_number, args.filter_base_length, args.filter_base, args.filter_length, args.filter_factor,
-            args.z_dimension, args.alpha, args.beta, args.lamb,
+            args.dropout, args.z_dimension, args.alpha, args.beta, args.lamb,
             args.kernel_initializer, args.activation, args.optimizer, args.learning_rate,
             args.batch_size, args.random_sampling, args.epochs, args.random_seed)
 
@@ -215,8 +217,7 @@ def plot_batch_losses(losses, cmap, file_prfx, verbose=False):
     n_epochs, n_batches = losses[0].shape[:2]
     n_iters = n_epochs*n_batches
     # plot losses
-    loss_list = ['Discriminator (Fake) Loss', 'Discriminator (Real) Loss',
-                 'Generator Loss', 'Categorical Control Loss', 'Continuous Control Loss']
+    loss_list = ['Latent Loss', 'Reconstruction Loss']
     color_list = np.linspace(0.2, 0.8, len(losses))
     for i in trange(len(losses), desc='Plotting Batch Losses', disable=not verbose):
         ax.plot(np.arange(1, n_iters+1), losses[i].reshape(-1), color=cmap(color_list[i]), label=loss_list[i])
@@ -239,8 +240,7 @@ def plot_epoch_losses(losses, cmap, file_prfx, verbose=False):
     ax.xaxis.set_ticks_position('bottom')
     ax.yaxis.set_ticks_position('left')
     # plot losses
-    loss_list = ['Discriminator (Fake) Loss', 'Discriminator (Real) Loss',
-                 'Generator Loss', 'Categorical Control Loss', 'Continuous Control Loss']
+    loss_list = ['Latent Loss', 'Reconstruction Loss']
     color_list = np.linspace(0.2, 0.8, len(losses))
     for i in trange(len(losses), desc='Plotting Epoch Losses', disable=not verbose):
         ax.plot(np.arange(1, losses[i].shape[0]+1), losses[i].mean(1), color=cmap(color_list[i]), label=loss_list[i])
@@ -300,23 +300,23 @@ def plot_diagram(data, fields, temps, cmap, file_prfx, alias):
 
 def plot_diagrams(m_data, s_data, fields, temps, cmap,
                   name, lattice_length, interval, num_samples, scaled, seed,
-                  prfx, verbose=False):
+                  prfx, alias, verbose=False):
     params = (name, lattice_length, interval, num_samples, scaled, seed)
     file_prfx = '{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx
-    if s_data not None:
+    if s_data is not None:
         m_diag = m_data.mean(2)
         s_diag = s_data.mean(2)
         m_dim = m_diag.shape[-1]
         s_dim = s_diag.shape[-1]
         for i in trange(m_dim, desc='Plotting VAE Means', disable=not verbose):
-            plot_diagram(m_diag[:, :, i], fields, temps, cmap, file_prfx, 'm_{}'.format(i))
+            plot_diagram(m_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_{}'.format(alias[0], i))
         for i in trange(s_dim, desc='Plotting VAE Sigmas', disable=not verbose):
-            plot_diagram(s_diag[:, :, i], fields, temps, cmap, file_prfx, 's_{}'.format(i))
+            plot_diagram(s_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_{}'.format(alias[1], i))
     else:
         z_diag = m_data.mean(2)
         z_dim = z_diag.shape[-1]
         for i in trange(z_dim, desc='Plotting VAE Encodings', disable=not verbose):
-            plot_diagram(z_diag[:, :, i], fields, temps, cmap, file_prfx, 'z_{}'.format(i))
+            plot_diagram(z_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_{}'.format(alias, i))
 
 
 def get_final_conv_shape(input_shape, conv_number,
@@ -347,7 +347,7 @@ class VAE():
     '''
     def __init__(self, input_shape=(27, 27, 1), scaled=False, conv_number=3,
                  filter_base_length=3, filter_base=9, filter_length=3, filter_factor=9,
-                 z_dim=5, alpha=1.0, beta=8.0, lamb=1.0,
+                 dropout=False, z_dim=5, alpha=1.0, beta=8.0, lamb=1.0,
                  krnl_init='lecun_normal', act='selu',
                  opt='nadam', lr=1e-3, batch_size=169, dataset_size=4326400):
         self.eps = 1e-8
@@ -371,6 +371,7 @@ class VAE():
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
                                                      self.filter_base_length, self.filter_length,
                                                      self.filter_base, self.filter_factor)
+        self.dropout = dropout
         # latent and classification dimensions
         # latent dimension
         self.z_dim = z_dim
@@ -392,26 +393,26 @@ class VAE():
         self.dataset_size = dataset_size
         self.log_importance_weight = self.calculate_log_importance_weight()
         # loss history
-        self.latent_loss_history = []
-        self.reconstruction_loss_history = []
+        self.tc_loss_history = []
+        self.rc_loss_history = []
         # past epochs (changes if loading past trained model)
         self.past_epochs = 0
         # checkpoint managers
         self.vae_mngr = None
         # build full model
         self._build_model()
-    
+
 
     def get_file_prefix(self):
         ''' gets parameter tuple and filename string prefix '''
         params = (self.conv_number, self.filter_base_length, self.filter_base, self.filter_length, self.filter_factor,
-                  self.z_dim, self.alpha, self.beta, self.lamb,
+                  self.dropout, self.z_dim, self.alpha, self.beta, self.lamb,
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = 'vae.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{}.{}'.format(*params)
+        file_name = 'vae.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
         return file_name
-    
+
 
     def calculate_log_importance_weight(self):
         ''' logarithmic importance weights for minibatch stratified sampling '''
@@ -423,13 +424,13 @@ class VAE():
                            strw*K.ones((self.batch_size, 1)),
                            1/m*K.ones((self.batch_size, self.batch_size-2))), axis=1)
         return K.log(w)
-    
+
 
     def sample_gaussian(self, beta):
         ''' samples a point in a multivariate gaussian distribution '''
         mu, logvar = beta
         return mu+K.exp(0.5*logvar)*K.random_normal(shape=(self.batch_size, self.z_dim))
-    
+
 
     def gauss_log_prob(self, z, beta=None):
         ''' logarithmic probability for multivariate gaussian distribution given samples z and parameters beta = (mu, log(var)) '''
@@ -441,7 +442,7 @@ class VAE():
         norm = K.log(2*np.pi)
         zsc = (z-mu)*K.exp(-0.5*logvar)
         return -0.5*(zsc**2+logvar+norm)
-    
+
 
     def log_sum_exp(self, z):
         ''' numerically stable logarithmic sum of exponentials '''
@@ -449,7 +450,7 @@ class VAE():
         u = z-m
         m = K.squeeze(m, 1)
         return m+K.log(K.sum(K.exp(u), axis=1, keepdims=False))
-    
+
 
     def total_correlation_loss(self):
         # log p(z)
@@ -459,26 +460,25 @@ class VAE():
         # log q(z) ~ log (1/MN) sum_m q(z|x_m) = -log(MN)+log(sum_m(exp(q(z|x_m))))
         _logqz = self.gauss_log_prob(K.reshape(self.z, (self.batch_size, 1, self.z_dim)),
                                      (K.reshape(self.mu, (1, self.batch_size, self.z_dim)),
-                                     K.reshape(self.logvar, (1, self.batch_size, self.z_dim))))
+                                      K.reshape(self.logvar, (1, self.batch_size, self.z_dim))))
         logqz_prodmarginals = K.sum(self.log_sum_exp(K.reshape(self.log_importance_weight, (self.batch_size, self.batch_size, 1))+_logqz), 1)
         logqz = self.log_sum_exp(self.log_importance_weight+K.sum(_logqz, axis=2))
         # alpha controls index-code mutual information
         # beta controls total correlation
         # gamma controls dimension-wise kld
         melbo = -self.alpha*(logqz_x-logqz)-self.beta*(logqz-logqz_prodmarginals)-self.lamb*(logqz_prodmarginals-logpz)
-        return -K.mean(melbo)
+        return -K.mean(melbo)/self.z_dim**2
 
-    
+
     def kullback_leibler_divergence_loss(self):
-        if self.scaled:
-        return 0.5*self.beta*K.mean(K.sum(K.exp(self.logvar)+K.square(self.mu)-self.logvar-1, axis=-1))
+        return 0.5*self.beta*K.mean(K.mean(K.exp(self.logvar)+K.square(self.mu)-self.logvar-1, axis=-1))
 
 
     def reconstruction_loss(self, x, x_hat):
         if not self.scaled:
             x = scale_configurations(x)
             x_hat = scale_configurations(x_hat)
-        return -K.mean(K.sum(K.reshape(x*K.log(x_hat+self.eps)+(1-x)*K.log(1-x_hat+self.eps), (self.batch_size, -1)), 1))            
+        return -K.mean(K.mean(K.reshape(x*K.log(x_hat+self.eps)+(1-x)*K.log(1-x_hat+self.eps), (self.batch_size, -1)), 1))
 
 
     def _build_model(self):
@@ -486,7 +486,7 @@ class VAE():
         self._build_encoder()
         self._build_decoder()
         self._build_vae()
-    
+
 
     def _build_encoder(self):
         ''' builds encoder model '''
@@ -498,23 +498,40 @@ class VAE():
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
             filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
             conv = Conv2D(filters=filter_number, kernel_size=filter_length,
-                          kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
+                          kernel_initializer=self.krnl_init,
                           padding='valid', strides=filter_stride,
                           name='enc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
                 conv = BatchNormalization(name='enc_conv_batchnorm_{}'.format(i))(conv)
-                conv = LeakyReLU(alpha=0.2, name='encc_conv_lrelu_{}'.format(i))(conv)
+                conv = LeakyReLU(alpha=0.2, name='enc_conv_lrelu_{}'.format(i))(conv)
+                if self.dropout:
+                    conv = SpatialDropout2D(rate=0.5, name='enc_conv_drop_{}'.format(i))(conv)
+            if self.act == 'selu':
+                conv = Activation(activation='selu', name='enc_conv_selu_{}'.format(i))(conv)
+                if self.dropout:
+                    conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='enc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='enc_fltn_0')(conv)
+        u = 0
         if self.final_conv_shape[:2] != (1, 1):
+            u = 1
             # dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
                       name='enc_dense_0')(x)
             if self.act == 'lrelu':
+                x = BatchNormalization(name='enc_dense_batchnorm_0')(x)
                 x = LeakyReLU(alpha=0.2, name='enc_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='enc_dense_selu_0')(x)
+        # x = Dense(units=np.prod(self.final_conv_shape)//2,
+        #           kernel_initializer=self.krnl_init,
+        #           name='enc_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.2, name='enc_dense_lrelu_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             # mean
             self.mu = Dense(units=self.z_dim,
@@ -527,8 +544,8 @@ class VAE():
             # latent space
             self.z = Lambda(self.sample_gaussian, output_shape=(self.z_dim,), name='enc_z_output')([self.mu, self.logvar])
             # build encoder
-            self.encoder = Model(inputs=[self.enc_input], outputs=[self.mu, self.logvar, self.z],
-                                name='encoder')
+            self.encoder = Model(inputs=[self.enc_x_input], outputs=[self.mu, self.logvar, self.z],
+                                 name='encoder')
         else:
             # latent space
             self.z = Dense(self.z_dim, kernel_initializer='glorot_uniform', activation='sigmoid',
@@ -545,11 +562,18 @@ class VAE():
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='dec_dense_0')(dec_input)
+                  name='dec_dense_0')(dec_z_input)
         if self.act == 'lrelu':
             x = LeakyReLU(alpha=0.2, name='dec_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_0')(x)
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='dec_dense_1')(x)
+        # if self.act == 'lrelu':
+        #     x = LeakyReLU(alpha=0.2, name='dec_dense_lrelu_1')(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dec_dense_selu_1')(x)
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
@@ -561,6 +585,11 @@ class VAE():
                 x = Activation(activation='selu', name='dec_dense_selu_1')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='dec_rshp_0')(x)
+        if self.dropout:
+            if self.act == 'lrelu':
+                convt = SpatialDropout2D(rate=0.5, name='dec_rshp_drop_0')(convt)
+            if self.act == 'selu':
+                convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='dec_rshp_drop_0')(convt)
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
@@ -572,8 +601,12 @@ class VAE():
             if self.act == 'lrelu':
                 convt = BatchNormalization(name='dec_convt_batchnorm_{}'.format(u))(convt)
                 convt = LeakyReLU(alpha=0.2, name='dec_convt_lrelu_{}'.format(u))(convt)
+                if self.dropout:
+                    convt = SpatialDropout2D(rate=0.5, name='dec_convt_drop_{}'.format(u))(convt)
             if self.act == 'selu':
                 convt = Activation(activation='selu', name='dec_convt_selu_{}'.format(u))(convt)
+                if self.dropout:
+                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dec_convt_drop_{}'.format(u))(convt)
             u += 1
         self.dec_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_length,
                                             kernel_initializer='glorot_uniform', activation=self.dec_out_act,
@@ -587,29 +620,35 @@ class VAE():
     def _build_vae(self):
         ''' builds variational autoencoder network '''
         # build VAE
-        if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
+        if np.all(np.array([self.alpha, self.beta, self.lamb]) == 0):
+            self.vae = Model(inputs=[self.enc_x_input], outputs=[self.decoder(self.encoder(self.enc_x_input))],
+                             name='variational autoencoder')
+        elif self.alpha == self.beta == self.lamb:
+            self.vae = Model(inputs=[self.enc_x_input], outputs=[self.decoder(self.encoder(self.enc_x_input)[2])],
+                             name='variational autoencoder')
+            tc_loss = self.kullback_leibler_divergence_loss()
+            self.vae.add_loss(tc_loss)
+            self.vae.add_metric(tc_loss, name='tc_loss', aggregation='mean')
+        elif np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             self.vae = Model(inputs=[self.enc_x_input], outputs=[self.decoder(self.encoder(self.enc_x_input)[2])],
                              name='variational autoencoder')
             tc_loss = self.total_correlation_loss()
             self.vae.add_loss(tc_loss)
             self.vae.add_metric(tc_loss, name='tc_loss', aggregation='mean')
-        else:
-            self.vae = Model(inputs=[self.enc_x_input], outputs=[self.decoder(self.encoder(self.enc_x_input))],
-                             name='variational autoencoder')
         # define GAN optimizer
         if self.vae_opt_n == 'sgd':
             self.vae_opt = SGD(lr=self.lr)
         if self.vae_opt_n == 'rmsprop':
             self.vae_opt = RMSprop(lr=self.lr)
         if self.vae_opt_n == 'adam':
-            self.vae_opt = Adam(lr=self.lr, beta_1=0.5)
+            self.vae_opt = Adam(lr=self.lr)
         if self.vae_opt_n == 'adamax':
-            self.vae_opt = Adamax(lr=self.lr, beta_1=0.5)
+            self.vae_opt = Adamax(lr=self.lr)
         if self.vae_opt_n == 'nadam':
-            self.vae_opt = Nadam(lr=self.lr, beta_1=0.5)
+            self.vae_opt = Nadam(lr=self.lr)
         # compile GAN
         self.vae.compile(loss=self.reconstruction_loss, optimizer=self.vae_opt)
-    
+
 
     def encode(self, x_batch, verbose=False):
         ''' encoder input configurations '''
@@ -619,7 +658,10 @@ class VAE():
     def generate(self, beta, verbose=False):
         ''' generate new configurations using samples from the latent distribution '''
         # sample latent space
-        z = self.sample_gaussian(beta)
+        if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
+            z = self.sample_gaussian(beta)
+        else:
+            z = beta
         # generate configurations
         return self.decoder.predict(z, batch_size=self.batch_size, verbose=verbose)
 
@@ -629,7 +671,7 @@ class VAE():
         self.encoder.summary()
         self.decoder.summary()
         self.vae.summary()
-    
+
 
     def save_weights(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' save weights to file '''
@@ -648,7 +690,7 @@ class VAE():
         # load weights
         self.vae.load_weights(file_name, by_name=True)
 
-    
+
     def get_losses(self):
         ''' retrieve loss histories '''
         # reshape arrays into (epochs, batches)
@@ -679,7 +721,7 @@ class VAE():
         # change loss histories into lists
         self.tc_loss_history = list(losses[:, :, 0].reshape(-1))
         self.rc_loss_history = list(losses[:, :, 1].reshape(-1))
-    
+
 
     def initialize_checkpoint_managers(self, name, lattice_length, interval, num_samples, scaled, seed):
         ''' initialize training checkpoint managers '''
@@ -749,7 +791,7 @@ class VAE():
         ''' draws random batch from data '''
         indices = np.random.permutation(x_train.shape[0])[:self.batch_size]
         return x_train[indices]
-    
+
 
     def train_vae(self, x_batch):
         ''' train VAE '''
@@ -781,7 +823,7 @@ class VAE():
             tc_loss = np.mean(self.tc_loss_history[start:stop])
             rc_loss = np.mean(self.rc_loss_history[start:stop])
         return tc_loss, rc_loss
-    
+
 
     def fit(self, x_train, num_epochs=4, save_step=4, random_sampling=False, verbose=False):
         ''' fit model '''
@@ -803,7 +845,10 @@ class VAE():
                 desc = 'Epoch: {}/{} TCKLD Loss: {:.4f} RCNST Loss: {:.4f}'.format(i+1, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
-                x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
+                if random_sampling:
+                    x_batch = self.draw_random_batch(x_train)
+                else:
+                    x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
                 # train VAE
                 self.train_vae(x_batch=x_batch)
             # if checkpoint managers are initialized
@@ -820,7 +865,7 @@ if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS, SC,
      CN, FBL, FB, FL, FF,
-     ZD, ALPHA, BETA, LAMBDA,
+     DO, ZD, ALPHA, BETA, LAMBDA,
      KI, AN, OPT, LR,
      BS, RS, EP, SEED) = parse_args()
 
@@ -860,7 +905,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = VAE(IS, SC, CN, FBL, FB, FL, FF, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
+    MDL = VAE(IS, SC, CN, FBL, FB, FL, FF, DO, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
@@ -887,17 +932,29 @@ if __name__ == '__main__':
     L = MDL.get_losses()
     if np.any(np.array([ALPHA, BETA, LAMBDA]) > 0):
         MU, LOGVAR, Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
+        SIGMA = np.exp(0.5*LOGVAR)
+        PMMDL = PCA(n_components=ZD)
+        PMU = PMMDL.fit_transform(MU)
+        PSMDL = PCA(n_components=ZD)
+        PSIGMA = PSMDL.fit_transform(SIGMA)
         MU = MU.reshape(NH, NT, NS, ZD)
-        SIGMA = np.exp(0.5*LOGVAR).reshape(NH, NT, NS, ZD)
+        SIGMA = SIGMA.reshape(NH, NT, NS, ZD)
+        PMU = PMU.reshape(NH, NT, NS, ZD)
+        PSIGMA = PSIGMA.reshape(NH, NT, NS, ZD)
         save_output_data(MU, 'vae_mean', NAME, N, I, NS, SC, SEED, PRFX)
         save_output_data(SIGMA, 'vae_sigma', NAME, N, I, NS, SC, SEED, PRFX)
         if PLOT:
-            plot_diagrams(MU, SIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
+            plot_diagrams(MU, SIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m', 's'], VERBOSE)
+            plot_diagrams(PMU, PSIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['mp', 'sp'], VERBOSE)
     else:
         Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
+        PMDL = PCA(n_components=ZD)
+        PZ = PMDL.fit_transform(Z)
         Z = Z.reshape(NH, NT, NS, ZD)
+        PZ = PZ.reshape(NH, NT, NS, ZD)
         save_output_data(Z, 'vae_encoding', NAME, N, I, NS, SC, SEED, PRFX)
         if PLOT:
-            plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
+            plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
+            plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'zp', VERBOSE)
     if PLOT:
         plot_losses(L, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
