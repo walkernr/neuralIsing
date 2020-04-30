@@ -56,9 +56,13 @@ def parse_args():
                         type=int, default=3)
     parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
                         type=int, default=3)
+    parser.add_argument('-fbs', '--filter_base_stride', help='size of filter stride in base hidden convolutional layer',
+                        type=int, default=3)
     parser.add_argument('-fb', '--filter_base', help='base number of filters in base hidden convolutional layer',
                         type=int, default=9)
     parser.add_argument('-fl', '--filter_length', help='size of filters following base convolution',
+                        type=int, default=3)
+    parser.add_argument('-fs', '--filter_stride', help='size of filter strides following base convolution',
                         type=int, default=3)
     parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters after base convolution',
                         type=int, default=9)
@@ -91,7 +95,7 @@ def parse_args():
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
             args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data,
-            args.conv_number, args.filter_base_length, args.filter_base, args.filter_length, args.filter_factor,
+            args.conv_number, args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
             args.dropout, args.z_dimension, args.alpha, args.beta, args.lamb,
             args.kernel_initializer, args.activation, args.optimizer, args.learning_rate,
             args.batch_size, args.random_sampling, args.epochs, args.random_seed)
@@ -321,10 +325,14 @@ def plot_diagrams(m_data, s_data, fields, temps, cmap,
 
 def get_final_conv_shape(input_shape, conv_number,
                          filter_base_length, filter_length,
+                         filter_base_stride, filter_stride,
                          filter_base, filter_factor):
     ''' calculates final convolutional layer output shape '''
-    return tuple(np.array(input_shape[:2])//(filter_base_length*filter_length**(conv_number-1)))+\
-           (input_shape[2]*filter_base*filter_factor**(conv_number-1),)
+    out_filters = input_shape[2]*filter_base*filter_factor**(conv_number-1)
+    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length)//filter_base_stride+1
+    for i in range(1, conv_number):
+        out_dim = (out_dim-filter_length)//filter_stride+1
+    return tuple(out_dim)+(out_filters,)
 
 
 def get_filter_number(conv_iter, filter_base, filter_factor):
@@ -332,12 +340,12 @@ def get_filter_number(conv_iter, filter_base, filter_factor):
     return filter_base*filter_factor**(conv_iter)
 
 
-def get_filter_length_stride(conv_iter, filter_base_length, filter_length):
+def get_filter_length_stride(conv_iter, filter_base_length, filter_base_stride, filter_length, filter_stride):
     ''' calculates filter length and stride for a given convolutional iteration '''
     if conv_iter == 0:
-        return filter_base_length, filter_base_length
+        return filter_base_length, filter_base_stride
     else:
-        return filter_length, filter_length
+        return filter_length, filter_stride
 
 
 class VAE():
@@ -346,7 +354,7 @@ class VAE():
     Variational autoencoder modeling of the Ising spin configurations
     '''
     def __init__(self, input_shape=(27, 27, 1), scaled=False, conv_number=3,
-                 filter_base_length=3, filter_base=9, filter_length=3, filter_factor=9,
+                 filter_base_length=3, filter_base_stride=3, filter_base=9, filter_length=3, filter_stride=3, filter_factor=9,
                  dropout=False, z_dim=5, alpha=1.0, beta=8.0, lamb=1.0,
                  krnl_init='lecun_normal', act='selu',
                  opt='nadam', lr=1e-3, batch_size=169, dataset_size=4326400):
@@ -363,13 +371,14 @@ class VAE():
         # filter side length
         self.filter_base_length = filter_base_length
         self.filter_length = filter_length
-        # set stride to be same as filter size
-        self.filter_base_stride = self.filter_base_length
-        self.filter_stride = self.filter_length
+        # filter stride
+        self.filter_base_stride = filter_base_stride
+        self.filter_stride = filter_stride
         # convolutional input and output shapes
         self.input_shape = input_shape
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
                                                      self.filter_base_length, self.filter_length,
+                                                     self.filter_base_stride, self.filter_stride,
                                                      self.filter_base, self.filter_factor)
         self.dropout = dropout
         # latent and classification dimensions
@@ -405,12 +414,12 @@ class VAE():
 
     def get_file_prefix(self):
         ''' gets parameter tuple and filename string prefix '''
-        params = (self.conv_number, self.filter_base_length, self.filter_base, self.filter_length, self.filter_factor,
+        params = (self.conv_number, self.filter_base_length, self.filter_base_stride, self.filter_base, self.filter_stride, self.filter_length, self.filter_factor,
                   self.dropout, self.z_dim, self.alpha, self.beta, self.lamb,
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = 'vae.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
+        file_name = 'vae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
         return file_name
 
 
@@ -496,14 +505,14 @@ class VAE():
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
-            filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
+            filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
             conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                           kernel_initializer=self.krnl_init,
                           padding='valid', strides=filter_stride,
                           name='enc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
                 conv = BatchNormalization(name='enc_conv_batchnorm_{}'.format(i))(conv)
-                conv = LeakyReLU(alpha=0.2, name='enc_conv_lrelu_{}'.format(i))(conv)
+                conv = LeakyReLU(alpha=0.1, name='enc_conv_lrelu_{}'.format(i))(conv)
                 if self.dropout:
                     conv = SpatialDropout2D(rate=0.5, name='enc_conv_drop_{}'.format(i))(conv)
             if self.act == 'selu':
@@ -521,7 +530,7 @@ class VAE():
                       name='enc_dense_0')(x)
             if self.act == 'lrelu':
                 x = BatchNormalization(name='enc_dense_batchnorm_0')(x)
-                x = LeakyReLU(alpha=0.2, name='enc_dense_lrelu_0')(x)
+                x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='enc_dense_selu_0')(x)
         # x = Dense(units=np.prod(self.final_conv_shape)//2,
@@ -529,7 +538,7 @@ class VAE():
         #           name='enc_dense_{}'.format(u))(x)
         # if self.act == 'lrelu':
         #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.2, name='enc_dense_lrelu_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
         # if self.act == 'selu':
         #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
@@ -564,14 +573,14 @@ class VAE():
                   kernel_initializer=self.krnl_init,
                   name='dec_dense_0')(dec_z_input)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='dec_dense_lrelu_0')(x)
+            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_0')(x)
         # x = Dense(units=np.prod(self.final_conv_shape),
         #           kernel_initializer=self.krnl_init,
         #           name='dec_dense_1')(x)
         # if self.act == 'lrelu':
-        #     x = LeakyReLU(alpha=0.2, name='dec_dense_lrelu_1')(x)
+        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_1')(x)
         # if self.act == 'selu':
         #     x = Activation(activation='selu', name='dec_dense_selu_1')(x)
         if self.final_conv_shape[:2] != (1, 1):
@@ -580,7 +589,7 @@ class VAE():
                       kernel_initializer=self.krnl_init,
                       name='dec_dense_1')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='dec_dense_lrelu_1')(x)
+                x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_1')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='dec_dense_selu_1')(x)
         # reshape to final convolution shape
@@ -596,11 +605,11 @@ class VAE():
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
-                                    padding='same', strides=self.filter_stride,
+                                    padding='valid', strides=self.filter_stride,
                                     name='dec_convt_{}'.format(u))(convt)
             if self.act == 'lrelu':
                 convt = BatchNormalization(name='dec_convt_batchnorm_{}'.format(u))(convt)
-                convt = LeakyReLU(alpha=0.2, name='dec_convt_lrelu_{}'.format(u))(convt)
+                convt = LeakyReLU(alpha=0.1, name='dec_convt_lrelu_{}'.format(u))(convt)
                 if self.dropout:
                     convt = SpatialDropout2D(rate=0.5, name='dec_convt_drop_{}'.format(u))(convt)
             if self.act == 'selu':
@@ -608,9 +617,9 @@ class VAE():
                 if self.dropout:
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dec_convt_drop_{}'.format(u))(convt)
             u += 1
-        self.dec_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_length,
+        self.dec_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.dec_out_act,
-                                            padding='same', strides=self.filter_stride,
+                                            padding='valid', strides=self.filter_base_stride,
                                             name='dec_x_output')(convt)
         # build decoder
         self.decoder = Model(inputs=[dec_z_input], outputs=[self.dec_x_output],
@@ -864,7 +873,7 @@ class VAE():
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS, SC,
-     CN, FBL, FB, FL, FF,
+     CN, FBL, FBS, FB, FL, FS, FF,
      DO, ZD, ALPHA, BETA, LAMBDA,
      KI, AN, OPT, LR,
      BS, RS, EP, SEED) = parse_args()
@@ -905,7 +914,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = VAE(IS, SC, CN, FBL, FB, FL, FF, DO, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
+    MDL = VAE(IS, SC, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
