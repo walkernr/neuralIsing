@@ -480,11 +480,11 @@ class VAE():
         # beta controls total correlation
         # gamma controls dimension-wise kld
         melbo = -self.alpha*(logqz_x-logqz)-self.beta*(logqz-logqz_prodmarginals)-self.lamb*(logqz_prodmarginals-logpz)
-        return -melbo
+        return -melbo/self.z_dim
 
 
     def kullback_leibler_divergence_loss(self):
-        return 0.5*self.beta*K.sum(K.exp(self.logvar)+K.square(self.mu)-self.logvar-1., axis=-1)
+        return 0.5*self.beta*K.mean(K.exp(self.logvar)+K.square(self.mu)-self.logvar-1., axis=-1)
 
 
     def reconstruction_loss(self):
@@ -494,7 +494,7 @@ class VAE():
         else:
             x = self.enc_x_input
             x_hat = self.x_output
-        return -K.sum(K.reshape(x*K.log(x_hat+self.eps)+(1.-x)*K.log(1.-x_hat+self.eps), shape=(self.batch_size, -1)), axis=-1)
+        return -K.mean(K.reshape(x*K.log(x_hat+self.eps)+(1.-x)*K.log(1.-x_hat+self.eps), shape=(self.batch_size, -1)), axis=-1)
 
 
     def _build_model(self):
