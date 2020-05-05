@@ -540,14 +540,14 @@ class VAE():
                 x = LeakyReLU(alpha=0.01, name='enc_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='enc_dense_selu_0')(x)
-        # x = Dense(units=np.prod(self.final_conv_shape)//2,
-        #           kernel_initializer=self.krnl_init,
-        #           name='enc_dense_{}'.format(u))(x)
-        # if self.act == 'lrelu':
-        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.01, name='enc_dense_lrelu_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        x = Dense(units=np.prod(self.final_conv_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='enc_dense_{}'.format(u))(x)
+        if self.act == 'lrelu':
+            x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+            x = LeakyReLU(alpha=0.01, name='enc_dense_lrelu_{}'.format(u))(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             # mean
             self.mu = Dense(units=self.z_dim,
@@ -583,22 +583,22 @@ class VAE():
             x = LeakyReLU(alpha=0.01, name='dec_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_0')(x)
-        # x = Dense(units=np.prod(self.final_conv_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='dec_dense_1')(x)
-        # if self.act == 'lrelu':
-        #     x = LeakyReLU(alpha=0.01, name='dec_dense_lrelu_1')(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='dec_dense_selu_1')(x)
+        x = Dense(units=np.prod(self.final_conv_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='dec_dense_1')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.01, name='dec_dense_lrelu_1')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='dec_dense_selu_1')(x)
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dec_dense_1')(x)
+                      name='dec_dense_2')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.01, name='dec_dense_lrelu_1')(x)
+                x = LeakyReLU(alpha=0.01, name='dec_dense_lrelu_2')(x)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='dec_dense_selu_1')(x)
+                x = Activation(activation='selu', name='dec_dense_selu_2')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='dec_rshp_0')(x)
         if self.dropout:
@@ -862,14 +862,23 @@ class VAE():
         else:
             x_train = self.reorder_training_data(x_train)
         num_epochs += self.past_epochs
+        b = (0.1, 1.0)
+        hbr = 0.5*(b[1]-b[0])
+        lr = (hbr*np.sin(np.linspace(0, 1, self.num_batches))+b[0]+hbr)*self.lr
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
-            batch_range = trange(self.num_batches, desc='', disable=not verbose)
+            if random_sampling:
+                batch_range = trange(self.num_batches, desc='', disable=not verbose)
+            else:
+                b = np.arange(self.num_batches)
+                np.random.shuffle(b)
+                batch_range = tqdm(b, desc='', disable=not verbose)
             # loop through batches
+            u = 0
             for j in batch_range:
                 # set batch loss description
-                batch_loss = self.rolling_loss_average(i, j)
+                batch_loss = self.rolling_loss_average(i, u)
                 desc = 'Epoch: {}/{} VAE Loss: {:.4f} TCKLD Loss: {:.4f} RCNST Loss: {:.4f}'.format(i+1, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
@@ -878,7 +887,9 @@ class VAE():
                 else:
                     x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
                 # train VAE
+                self.vae_opt.learning_rate = lr[u]
                 self.train_vae(x_batch=x_batch)
+                u += 1
             # if checkpoint managers are initialized
             if self.vae_mngr is not None:
                 # increment checkpoint
