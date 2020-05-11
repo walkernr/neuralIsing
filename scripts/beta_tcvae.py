@@ -862,10 +862,10 @@ class VAE():
         else:
             x_train = self.reorder_training_data(x_train)
         num_epochs += self.past_epochs
-        elr = 10**(-np.linspace(0, 1, num_epochs))
+        elrm = 10**(-np.linspace(0, 1, num_epochs))
         b = (0.1, 1.0)
         hbr = 0.5*(b[1]-b[0])
-        blr = (hbr*np.sin(np.linspace(0, 1, self.num_batches))+b[0]+hbr)*self.lr
+        blrm = hbr*np.cos(np.linspace(0, 1, self.num_batches))+b[0]+hbr
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
@@ -888,7 +888,7 @@ class VAE():
                 else:
                     x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
                 # train VAE
-                self.vae_opt.learning_rate = elr[i]*blr[u]
+                self.vae_opt.learning_rate = elrm[i]*blrm[u]*self.lr
                 self.train_vae(x_batch=x_batch)
                 u += 1
             # if checkpoint managers are initialized
