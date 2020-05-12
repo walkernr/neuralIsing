@@ -118,13 +118,13 @@ def load_configurations(name, lattice_length):
 def scale_configurations(conf):
     ''' scales input configurations '''
     # (-1, 1) -> (0, 1)
-    return (conf+1)/2
+    return ((conf+1)/2).astype(np.int8)
 
 
 def unscale_configurations(conf):
     ''' unscales input configurations '''
     # (0, 1) -> (-1, 1)
-    return 2*conf-1
+    return (2*conf-1).astype(np.int8)
 
 
 def shuffle_samples(data, num_fields, num_temps, indices):
@@ -814,7 +814,12 @@ class VAE():
     def draw_random_batch(self, x_train):
         ''' draws random batch from data '''
         indices = np.random.permutation(x_train.shape[0])[:self.batch_size]
-        return x_train[indices]
+        return x_train[indices].astype(np.float32)
+
+
+    def draw_indexed_batch(self, x_train, j):
+        ''' draws batch j '''
+        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)
 
 
     def train_vae(self, x_batch):
@@ -886,7 +891,7 @@ class VAE():
                 if random_sampling:
                     x_batch = self.draw_random_batch(x_train)
                 else:
-                    x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
+                    x_batch = self.draw_indexed_batch(x_train, j)
                 # train VAE
                 self.vae_opt.learning_rate = elrm[i]*blrm[u]*self.lr
                 self.train_vae(x_batch=x_batch)

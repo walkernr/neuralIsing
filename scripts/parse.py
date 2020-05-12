@@ -36,10 +36,10 @@ DMPFLS = [PREF+'.%02d.dmp' % i for i in range(NH)]
 # parse data
 if VERBOSE:
     DAT = np.array([np.loadtxt(DATFLS[i], dtype=np.float32).reshape(NT, -1, 3) for i in tqdm(range(NH))])
-    DMP = np.array([np.loadtxt(DMPFLS[i], dtype=np.float32).reshape(NT, -1, N, N) for i in tqdm(range(NH))])
+    DMP = np.array([np.loadtxt(DMPFLS[i], dtype=np.int8).reshape(NT, -1, N, N) for i in tqdm(range(NH))])
 else:
     DAT = np.array([np.loadtxt(DATFLS[i], dtype=np.float32).reshape(NT, -1, 3) for i in range(NH)])
-    DMP = np.array([np.loadtxt(DMPFLS[i], dtype=np.float32).reshape(NT, -1, N, N) for i in range(NH)])
+    DMP = np.array([np.loadtxt(DMPFLS[i], dtype=np.int8).reshape(NT, -1, N, N) for i in range(NH)])
 np.save(PREF+'.dat.npy', DAT)
 np.save(PREF+'.dmp.npy', DMP)
 if VERBOSE:
