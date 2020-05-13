@@ -59,9 +59,13 @@ def parse_args():
                         type=int, default=3)
     parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
                         type=int, default=3)
+    parser.add_argument('-fbs', '--filter_base_stride', help='size of filter stride in base hidden convolutional layer',
+                        type=int, default=3)
     parser.add_argument('-fb', '--filter_base', help='base number of filters in base hidden convolutional layer',
                         type=int, default=9)
     parser.add_argument('-fl', '--filter_length', help='size of filters following base convolution',
+                        type=int, default=3)
+    parser.add_argument('-fs', '--filter_stride', help='size of filter strides following base convolution',
                         type=int, default=3)
     parser.add_argument('-ff', '--filter_factor', help='multiplicative factor of filters after base convolution',
                         type=int, default=9)
@@ -103,8 +107,8 @@ def parse_args():
                         type=int, default=128)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
-            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.wasserstein,
-            args.conv_number, args.filter_base_length, args.filter_base, args.filter_length, args.filter_factor,
+            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.wasserstein, args.conv_number,
+            args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
             args.generator_dropout, args.discriminator_dropout, args.z_dimension, args.c_dimension, args.u_dimension,
             args.kernel_initializer, args.activation,
             args.discriminator_optimizer, args.gan_optimizer, args.discriminator_learning_rate, args.gan_learning_rate,
@@ -129,13 +133,13 @@ def load_configurations(name, lattice_length):
 def scale_configurations(conf):
     ''' scales input configurations '''
     # (-1, 1) -> (0, 1)
-    return (conf+1)/2
+    return ((conf+1)/2).astype(np.int8)
 
 
 def unscale_configurations(conf):
     ''' unscales input configurations '''
     # (0, 1) -> (-1, 1)
-    return 2*conf-1
+    return (2*conf-1).astype(np.int8)
 
 
 def index_data_by_sample(data, num_fields, num_temps, indices):
@@ -340,10 +344,14 @@ def plot_diagrams(c_data, u_data, fields, temps, cmap,
 
 def get_final_conv_shape(input_shape, conv_number,
                          filter_base_length, filter_length,
+                         filter_base_stride, filter_stride,
                          filter_base, filter_factor):
     ''' calculates final convolutional layer output shape '''
-    return tuple(np.array(input_shape[:2])//(filter_base_length*filter_length**(conv_number-1)))+\
-           (input_shape[2]*filter_base*filter_factor**(conv_number-1),)
+    out_filters = input_shape[2]*filter_base*filter_factor**(conv_number-1)
+    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length)//filter_base_stride+1
+    for i in range(1, conv_number):
+        out_dim = (out_dim-filter_length)//filter_stride+1
+    return tuple(out_dim)+(out_filters,)
 
 
 def get_filter_number(conv_iter, filter_base, filter_factor):
@@ -351,12 +359,12 @@ def get_filter_number(conv_iter, filter_base, filter_factor):
     return filter_base*filter_factor**(conv_iter)
 
 
-def get_filter_length_stride(conv_iter, filter_base_length, filter_length):
+def get_filter_length_stride(conv_iter, filter_base_length, filter_base_stride, filter_length, filter_stride):
     ''' calculates filter length and stride for a given convolutional iteration '''
     if conv_iter == 0:
-        return filter_base_length, filter_base_length
+        return filter_base_length, filter_base_stride
     else:
-        return filter_length, filter_length
+        return filter_length, filter_stride
 
 
 def sample_gaussian(num_rows, dimension):
@@ -404,7 +412,7 @@ class InfoGAN():
     Generative adversarial modeling of the Ising spin configurations
     '''
     def __init__(self, input_shape=(27, 27, 1), scaled=False, wasserstein=False, conv_number=3,
-                 filter_base_length=3, filter_base=9, filter_length=3, filter_factor=9,
+                 filter_base_length=3, filter_base_stride=3, filter_base=9, filter_length=3, filter_stride=3, filter_factor=9,
                  gen_drop=False, dsc_drop=False,
                  z_dim=100, c_dim=5, u_dim=0,
                  krnl_init='lecun_normal', act='selu',
@@ -424,13 +432,14 @@ class InfoGAN():
         # filter side length
         self.filter_base_length = filter_base_length
         self.filter_length = filter_length
-        # set stride to be same as filter size
-        self.filter_base_stride = self.filter_base_length
-        self.filter_stride = self.filter_length
+        # filter stride
+        self.filter_base_stride = filter_base_stride
+        self.filter_stride = filter_stride
         # convolutional input and output shapes
         self.input_shape = input_shape
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
                                                      self.filter_base_length, self.filter_length,
+                                                     self.filter_base_stride, self.filter_stride,
                                                      self.filter_base, self.filter_factor)
         # generator and discriminator dropout
         self.gen_drop = gen_drop
@@ -529,7 +538,7 @@ class InfoGAN():
                   kernel_initializer=self.krnl_init,
                   name='gen_dense_0')(x)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_0')(x)
+            x = LeakyReLU(alpha=0.01, name='gen_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_0')(x)
         if self.final_conv_shape[:2] != (1, 1):
@@ -538,7 +547,7 @@ class InfoGAN():
                       kernel_initializer=self.krnl_init,
                       name='gen_dense_1')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='gen_dense_lrelu_1')(x)
+                x = LeakyReLU(alpha=0.01, name='gen_dense_lrelu_1')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='gen_dense_selu_1')(x)
         # reshape to final convolution shape
@@ -554,11 +563,11 @@ class InfoGAN():
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
-                                    padding='same', strides=self.filter_stride,
+                                    padding='valid', strides=self.filter_stride,
                                     name='gen_convt_{}'.format(u))(convt)
             if self.act == 'lrelu':
                 convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
-                convt = LeakyReLU(alpha=0.2, name='gen_convt_lrelu_{}'.format(u))(convt)
+                convt = LeakyReLU(alpha=0.01, name='gen_convt_lrelu_{}'.format(u))(convt)
                 if self.gen_drop:
                     convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
             if self.act == 'selu':
@@ -568,7 +577,7 @@ class InfoGAN():
             u += 1
         self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
-                                            padding='same', strides=self.filter_base_stride,
+                                            padding='valid', strides=self.filter_base_stride,
                                             name='gen_x_output')(convt)
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output],
@@ -591,14 +600,14 @@ class InfoGAN():
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
-            filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
+            filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
             conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                           kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
                           padding='valid', strides=filter_stride,
                           name='dsc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
                 conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
-                conv = LeakyReLU(alpha=0.2, name='dsc_conv_lrelu_{}'.format(i))(conv)
+                conv = LeakyReLU(alpha=0.01, name='dsc_conv_lrelu_{}'.format(i))(conv)
                 if self.dsc_drop:
                     conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i))(conv)
             if self.act == 'selu':
@@ -607,25 +616,27 @@ class InfoGAN():
                     conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
+        u = 0
         if self.final_conv_shape[:2] != (1, 1):
             # dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
                       name='dsc_dense_0')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_0')(x)
+                x = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='dsc_dense_selu_0')(x)
+            u += 1
         # the dense layer is saved as a hidden encoding layer
         self.dsc_enc = x
         # dense layer
         x = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
-                  name='dsc_dense_1')(x)
+                  name='dsc_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.2, name='dsc_dense_lrelu_1')(x)
+            x = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_{}'.format(u))(x)
         if self.act == 'selu':
-            x = Activation(activation='selu', name='dsc_dense_selu_1')(x)
+            x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
@@ -635,15 +646,15 @@ class InfoGAN():
                                    name='discriminator')
         # define optimizer
         if self.dsc_opt_n == 'sgd':
-            self.dsc_opt = SGD(lr=self.dsc_lr)
+            self.dsc_opt = SGD(learning_rate=self.dsc_lr)
         if self.dsc_opt_n == 'rmsprop':
-            self.dsc_opt = RMSprop(lr=self.dsc_lr)
+            self.dsc_opt = RMSprop(learning_rate=self.dsc_lr)
         if self.dsc_opt_n == 'adam':
-            self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = Adam(learning_rate=self.dsc_lr, beta_1=0.5)
         if self.dsc_opt_n == 'adamax':
-            self.dsc_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = Adamax(learning_rate=self.dsc_lr, beta_1=0.5)
         if self.dsc_opt_n == 'nadam':
-            self.dsc_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = Nadam(learning_rate=self.dsc_lr, beta_1=0.5)
         # compile discriminator
         self.discriminator.compile(loss=loss, optimizer=self.dsc_opt)
 
@@ -657,14 +668,14 @@ class InfoGAN():
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
-                filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_length)
+                filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
                 conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                               kernel_initializer=self.krnl_init,
                               padding='valid', strides=filter_stride,
                               name='aux_conv_{}'.format(i))(conv)
                 if self.act == 'lrelu':
                     conv = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(conv)
-                    conv = LeakyReLU(alpha=0.2, name='aux_conv_lrelu_{}'.format(i))(conv)
+                    conv = LeakyReLU(alpha=0.01, name='aux_conv_lrelu_{}'.format(i))(conv)
                     if self.dsc_drop:
                         conv = SpatialDropout2D(rate=0.5, name='aux_conv_drop_{}'.format(i))(conv)
                 if self.act == 'selu':
@@ -679,7 +690,7 @@ class InfoGAN():
                           kernel_initializer=self.krnl_init,
                           name='aux_dense_0')(x)
                 if self.act == 'lrelu':
-                    x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+                    x = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_0')(x)
                 if self.act == 'selu':
                     x = Activation(activation='selu', name='aux_dense_selu_0')(x)
             # dense layer
@@ -687,7 +698,7 @@ class InfoGAN():
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_1')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_1')(x)
+                x = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_1')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_1')(x)
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
@@ -706,7 +717,7 @@ class InfoGAN():
                       kernel_initializer=self.krnl_init,
                       name='aux_dense_0')(self.dsc_enc)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.2, name='aux_dense_lrelu_0')(x)
+                x = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_0')(x)
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
@@ -742,20 +753,20 @@ class InfoGAN():
                                  name='infogan_auxiliary')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
-                self.gan_dsc_opt = SGD(lr=self.gan_lr)
-                self.gan_aux_opt = SGD(lr=self.gan_lr)
+                self.gan_dsc_opt = SGD(learning_rate=self.gan_lr)
+                self.gan_aux_opt = SGD(learning_rate=self.gan_lr)
             if self.gan_opt_n == 'rmsprop':
-                self.gan_dsc_opt = RMSprop(lr=self.gan_lr)
-                self.gan_aux_opt = RMSprop(lr=self.gan_lr)
+                self.gan_dsc_opt = RMSprop(learning_rate=self.gan_lr)
+                self.gan_aux_opt = RMSprop(learning_rate=self.gan_lr)
             if self.gan_opt_n == 'adam':
-                self.gan_dsc_opt = Adam(lr=self.gan_lr, beta_1=0.5)
-                self.gan_aux_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_dsc_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5)
             if self.gan_opt_n == 'adamax':
-                self.gan_dsc_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
-                self.gan_aux_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+                self.gan_dsc_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5)
             if self.gan_opt_n == 'nadam':
-                self.gan_dsc_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
-                self.gan_aux_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_dsc_opt = Nadam(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Nadam(learning_rate=self.gan_lr, beta_1=0.5)
             # compile GAN
             self.gan_dsc.compile(loss=dsc_loss, optimizer=self.gan_dsc_opt)
             self.gan_aux.compile(loss={'auxiliary': 'categorical_crossentropy',
@@ -767,15 +778,15 @@ class InfoGAN():
                              name='infogan')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
-                self.gan_opt = SGD(lr=self.gan_lr)
+                self.gan_opt = SGD(learning_rate=self.gan_lr)
             if self.gan_opt_n == 'rmsprop':
-                self.gan_opt = RMSprop(lr=self.gan_lr)
+                self.gan_opt = RMSprop(learning_rate=self.gan_lr)
             if self.gan_opt_n == 'adam':
-                self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5)
             if self.gan_opt_n == 'adamax':
-                self.gan_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
+                self.gan_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5)
             if self.gan_opt_n == 'nadam':
-                self.gan_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_opt = Nadam(learning_rate=self.gan_lr, beta_1=0.5)
             # compile GAN
             self.gan.compile(loss={'discriminator': dsc_loss,
                                    'auxiliary': 'categorical_crossentropy',
@@ -1001,7 +1012,12 @@ class InfoGAN():
     def draw_random_batch(self, x_train):
         ''' draws random batch from data '''
         indices = np.random.permutation(x_train.shape[0])[:self.batch_size]
-        return x_train[indices]
+        return x_train[indices].astype(np.float32)
+
+
+    def draw_indexed_batch(self, x_train, j):
+        ''' draws batch j '''
+        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)
 
 
     def train_discriminator(self, x_batch, real=False):
@@ -1105,23 +1121,43 @@ class InfoGAN():
         else:
             x_train = self.reorder_training_data(x_train)
         num_epochs += self.past_epochs
+        lr_e = 2**(-2**-14*np.arange(num_epochs*self.num_batches))
+        b = (0.1, 1.0)
+        a = 0.5*(b[1]-b[0])
+        lr_b_g = a*np.cos(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
+        lr_b_d = a*np.sin(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
+        self.lr_g = (lr_e*lr_b_g*self.gan_lr).reshape(num_epochs, self.num_batches)
+        self.lr_d = (lr_e*lr_b_d*self.dsc_lr).reshape(num_epochs, self.num_batches)
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
-            batch_range = trange(self.num_batches, desc='', disable=not verbose)
+            if random_sampling:
+                batch_range = trange(self.num_batches, desc='', disable=not verbose)
+            else:
+                b = np.arange(self.num_batches)
+                np.random.shuffle(b)
+                batch_range = tqdm(b, desc='', disable=not verbose)
             # loop through batches
+            u = 0
             for j in batch_range:
                 # set batch loss description
-                batch_loss = self.rolling_loss_average(i, j)
+                batch_loss = self.rolling_loss_average(i, u)
                 desc = 'Epoch: {}/{} GAN Loss: {:.4f} DSCF Loss: {:.4f} DSCR Loss: {:.4f} CAT Loss: {:.4f} CON Loss: {:.4f}'.format(i+1, num_epochs, *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
                 if random_sampling:
                     x_batch = self.draw_random_batch(x_train)
                 else:
-                    x_batch = x_train[self.batch_size*j:self.batch_size*(j+1)]
+                    x_batch = self.draw_indexed_batch(x_train, j)
                 # train infogan on batch
+                if self.wasserstein:
+                    self.gan_dsc_opt.learning_rate = self.lr_g[i, u]
+                    self.gan_aux_opt.learning_rate = self.lr_g[i, u]
+                else:
+                    self.gan_opt.learning_rate = self.lr_g[i, u]
+                self.dsc_opt.learning_rate = self.lr_d[i, u]
                 self.train_infogan(x_batch, n_critic)
+                u += 1
             # if checkpoint managers are initialized
             if self.dsc_mngr is not None and self.gan_mngr is not None:
                 # increment checkpoints
@@ -1138,7 +1174,7 @@ class InfoGAN():
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS, SC, W,
-     CN, FBL, FB, FL, FF,
+     CN, FBL, FBS, FB, FL, FS, FF,
      GD, DD, ZD, CD, UD,
      KI, AN,
      DOPT, GOPT, DLR, GLR,
@@ -1181,7 +1217,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = InfoGAN(IS, SC, W, CN, FBL, FB, FL, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
+    MDL = InfoGAN(IS, SC, W, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
