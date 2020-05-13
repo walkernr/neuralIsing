@@ -118,13 +118,13 @@ def load_configurations(name, lattice_length):
 def scale_configurations(conf):
     ''' scales input configurations '''
     # (-1, 1) -> (0, 1)
-    return (conf+1)/2
+    return ((conf+1)/2).astype(np.int8)
 
 
 def unscale_configurations(conf):
     ''' unscales input configurations '''
     # (0, 1) -> (-1, 1)
-    return 2*conf-1
+    return (2*conf-1).astype(np.int8)
 
 
 def shuffle_samples(data, num_fields, num_temps, indices):
@@ -426,6 +426,10 @@ class VAE():
         return file_name
 
 
+    def scale_configurations(self, x):
+        return (x+1)/2
+
+
     def calculate_log_importance_weight(self):
         ''' logarithmic importance weights for minibatch stratified sampling '''
         n, m = self.dataset_size, self.batch_size-1
@@ -489,8 +493,8 @@ class VAE():
 
     def reconstruction_loss(self):
         if not self.scaled:
-            x = scale_configurations(self.enc_x_input)
-            x_hat = scale_configurations(self.x_output)
+            x = self.scale_configurations(self.enc_x_input)
+            x_hat = self.scale_configurations(self.x_output)
         else:
             x = self.enc_x_input
             x_hat = self.x_output
