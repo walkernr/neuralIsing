@@ -133,13 +133,13 @@ def load_configurations(name, lattice_length):
 def scale_configurations(conf):
     ''' scales input configurations '''
     # (-1, 1) -> (0, 1)
-    return ((conf+1)/2).astype(np.int8)
+    return (conf+1)/2
 
 
 def unscale_configurations(conf):
     ''' unscales input configurations '''
     # (0, 1) -> (-1, 1)
-    return (2*conf-1).astype(np.int8)
+    return 2*conf-1
 
 
 def shuffle_samples(data, num_fields, num_temps, indices):
