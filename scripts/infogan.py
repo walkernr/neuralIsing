@@ -125,7 +125,7 @@ def load_thermal_params(name, lattice_length):
 
 def load_configurations(name, lattice_length):
     ''' load configurations and thermal measurements '''
-    conf = np.load(os.getcwd()+'/{}.{}.dmp.npy'.format(name, lattice_length))
+    conf = np.load(os.getcwd()+'/{}.{}.dmp.npy'.format(name, lattice_length)).astype(np.int8)
     thrm = np.load(os.getcwd()+'/{}.{}.dat.npy'.format(name, lattice_length))
     return conf, thrm
 
@@ -1052,26 +1052,30 @@ class InfoGAN():
     def train_generator(self, x_sample):
         ''' train generator and auxiliary '''
         # inputs are true samples, so the discrimination targets are of unit value
-        target = np.ones(x_sample[0].shape[0], dtype=np.float32)
+        target = np.ones(self.batch_size, dtype=np.float32)
+        gan_loss = np.zeros((len(x_sample), 4))
          # GAN and entropy losses
         if self.wasserstein:
             target *= -1
-            gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample, target)
-            gan_aux_loss = self.gan_aux.train_on_batch(x_sample, x_sample[1:])
-            gan_loss = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
-            gan_loss.insert(0, np.sum(gan_loss))
+            for i in range(len(x_sample)):
+                gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample[i], target)
+                gan_aux_loss = self.gan_aux.train_on_batch(x_sample[i], x_sample[i][1:])
+                gan_loss[i, 1:] = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
+                gan_loss[i].insert(0, np.sum(gan_loss[i, 1:]))
         else:
-            gan_loss = self.gan.train_on_batch(x_sample, [target, *x_sample[1:]])
-        return gan_loss
+            for i in range(len(x_sample)):
+                gan_loss[i] = self.gan.train_on_batch(x_sample[i], (target, *x_sample[i][1:]))
+        return gan_loss.mean(0)
 
 
     def train_infogan(self, x_batch, n_critic):
         ''' train infoGAN '''
-        x_sample = self.sample_latent_distribution(num_samples=self.batch_size)
-        x_generated = self.generator.predict(x=x_sample)
+        x_sample_0 = self.sample_latent_distribution(num_samples=self.batch_size)
+        x_sample_1 = self.sample_latent_distribution(num_samples=self.batch_size)
+        x_generated = self.generator.predict(x=x_sample_0)
         dsc_real_loss = self.train_discriminator(x_batch=x_batch, real=True)
         dsc_fake_loss = self.train_discriminator(x_batch=x_generated, real=False)
-        gan_loss = self.train_generator(x_sample=x_sample)
+        gan_loss = self.train_generator(x_sample=(x_sample_0, x_sample_1))
         self.dsc_real_loss_history.append(dsc_real_loss)
         self.dsc_fake_loss_history.append(dsc_fake_loss)
         self.gan_loss_history.append(gan_loss[1])
@@ -1121,13 +1125,13 @@ class InfoGAN():
         else:
             x_train = self.reorder_training_data(x_train)
         num_epochs += self.past_epochs
-        lr_e = 2**(-2**-14*np.arange(num_epochs*self.num_batches))
-        b = (0.1, 1.0)
-        a = 0.5*(b[1]-b[0])
-        lr_b_g = a*np.cos(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
-        lr_b_d = a*np.sin(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
-        self.lr_g = (lr_e*lr_b_g*self.gan_lr).reshape(num_epochs, self.num_batches)
-        self.lr_d = (lr_e*lr_b_d*self.dsc_lr).reshape(num_epochs, self.num_batches)
+        # lr_e = 2**(-2**-14*np.arange(num_epochs*self.num_batches))
+        # b = (0.5, 1.5)
+        # a = 0.5*(b[1]-b[0])
+        # lr_b_g = -a*np.cos(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
+        # lr_b_d = a*np.cos(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
+        # self.lr_g = (lr_e*lr_b_g*self.gan_lr).reshape(num_epochs, self.num_batches)
+        # self.lr_d = (lr_e*lr_b_d*self.dsc_lr).reshape(num_epochs, self.num_batches)
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
@@ -1150,12 +1154,12 @@ class InfoGAN():
                 else:
                     x_batch = self.draw_indexed_batch(x_train, j)
                 # train infogan on batch
-                if self.wasserstein:
-                    self.gan_dsc_opt.learning_rate = self.lr_g[i, u]
-                    self.gan_aux_opt.learning_rate = self.lr_g[i, u]
-                else:
-                    self.gan_opt.learning_rate = self.lr_g[i, u]
-                self.dsc_opt.learning_rate = self.lr_d[i, u]
+                # if self.wasserstein:
+                #     self.gan_dsc_opt.learning_rate = self.lr_g[i, u]
+                #     self.gan_aux_opt.learning_rate = self.lr_g[i, u]
+                # else:
+                #     self.gan_opt.learning_rate = self.lr_g[i, u]
+                # self.dsc_opt.learning_rate = self.lr_d[i, u]
                 self.train_infogan(x_batch, n_critic)
                 u += 1
             # if checkpoint managers are initialized

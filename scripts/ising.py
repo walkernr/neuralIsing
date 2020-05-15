@@ -186,7 +186,7 @@ def write_dmp(output, state):
     dmp = output[1]
     config = state[0]
     with open(dmp, 'ab') as dmp_out:
-        np.savetxt(dmp_out, config.reshape(1,-1))
+        np.savetxt(dmp_out, config.reshape(1, -1), fmt='%d')
 
 
 def write_output(output, state):
@@ -279,7 +279,7 @@ def init_sample(k):
     i, _ = np.unravel_index(k, dims=(NH, NT), order='C')
     h = H[i]
     # generate random ising configuration
-    config = np.random.choice([-1, 1], size=(N,N))
+    config = np.random.choice([-1, 1], size=(N, N)).astype(np.int8)
     # extract energies and magnetizations
     ener, mag = extract(config, h)
     # set acceptations
