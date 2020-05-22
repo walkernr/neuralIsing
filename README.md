@@ -4,6 +4,7 @@ neuralIsing
 The 2-dimensional square Ising model is investigated using representation learning techniques to characterize the configurations with latent codes. The intention is that the critical point as well as the crossover region can be identified without the use of a priori information grounded in traditional statistical mechanics.
 
 https://drive.google.com/file/d/1Uw1Rjx8KsY70_0hqdfdeZwY975x8hED9/view
+
 https://arxiv.org/abs/2005.01682
 
 Requirements
