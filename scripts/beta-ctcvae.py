@@ -424,7 +424,7 @@ class VAE():
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = 'vae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
+        file_name = 'cvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
         return file_name
 
 
@@ -545,6 +545,7 @@ class VAE():
         ''' builds encoder model '''
         # takes sample (real or fake) as input
         self.enc_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='enc_x_input')
+        self.enc_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='enc_t_input')
         conv = self.enc_x_input
         # iterative convolutions over input
         for i in range(self.conv_number):
@@ -588,6 +589,17 @@ class VAE():
             x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        x = Concatenate(name='enc_concat')([x, self.enc_t_input])
+        u += 1
+        x = Dense(units=np.prod(self.final_conv_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='enc_dense_{}'.format(u))(x)
+        if self.act == 'lrelu':
+            # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+            x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
+            x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             # mean
             self.mu = Dense(units=self.z_dim,
@@ -607,7 +619,7 @@ class VAE():
             self.z = Dense(self.z_dim, kernel_initializer='glorot_uniform', activation='sigmoid',
                            name='enc_z_ouput')(x)
             # build encoder
-            self.encoder = Model(inputs=[self.enc_x_input], outputs=[self.z],
+            self.encoder = Model(inputs=[self.enc_x_input, self.enc_t_input], outputs=[self.z],
                                  name='encoder')
 
 
@@ -615,6 +627,7 @@ class VAE():
         ''' builds decoder model '''
         # latent unit gaussian and categorical inputs
         dec_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='dec_z_input')
+        dec_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='enc_t_input')
         # dense layer with same feature count as final convolution
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
@@ -623,22 +636,30 @@ class VAE():
             x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_0')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_0')(x)
+        x = Concatenate(name='dec_concat')([x, dec_t_input])
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='dec_dense_1')(x)
+                  name='dec_dense_1')(dec_z_input)
         if self.act == 'lrelu':
             x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_1')(x)
         if self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_1')(x)
+        x = Dense(units=np.prod(self.final_conv_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='dec_dense_2')(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_2')(x)
+        if self.act == 'selu':
+            x = Activation(activation='selu', name='dec_dense_selu_2')(x)
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dec_dense_2')(x)
+                      name='dec_dense_3')(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_2')(x)
+                x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_3')(x)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='dec_dense_selu_2')(x)
+                x = Activation(activation='selu', name='dec_dense_selu_3')(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='dec_rshp_0')(x)
         if self.dropout:
@@ -670,7 +691,7 @@ class VAE():
                                             padding='valid', strides=self.filter_base_stride,
                                             name='dec_x_output')(convt)
         # build decoder
-        self.decoder = Model(inputs=[dec_z_input], outputs=[self.dec_x_output],
+        self.decoder = Model(inputs=[dec_z_input, dec_t_input], outputs=[self.dec_x_output],
                              name='decoder')
 
 
@@ -679,19 +700,19 @@ class VAE():
         self.kl_anneal = Input(batch_shape=(self.batch_size,), name='kl_anneal')
         # build VAE
         if np.all(np.array([self.alpha, self.beta, self.lamb]) == 0):
-            self.x_output = self.decoder(self.encoder(self.enc_x_input))
-            self.vae = Model(inputs=[self.enc_x_input], outputs=[self.x_output],
+            self.x_output = self.decoder((self.encoder((self.enc_x_input, self.enc_t_input)), self.enc_t_input))
+            self.vae = Model(inputs=[self.enc_x_input, self.enc_t_input], outputs=[self.x_output],
                              name='variational_autoencoder')
         elif self.alpha == self.beta == self.lamb:
-            self.x_output = self.decoder(self.encoder(self.enc_x_input)[2])
-            self.vae = Model(inputs=[self.enc_x_input, self.kl_anneal], outputs=[self.x_output],
+            self.x_output = self.decoder((self.encoder((self.enc_x_input, self.enc_t_input))[2], self.enc_t_input))
+            self.vae = Model(inputs=[self.enc_x_input, self.enc_t_input, self.kl_anneal], outputs=[self.x_output],
                              name='variational_autoencoder')
             tc_loss = self.kl_anneal*self.kullback_leibler_divergence_loss()
             self.vae.add_loss(tc_loss)
             self.vae.add_metric(tc_loss, name='tc_loss', aggregation='mean')
         elif np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
-            self.x_output = self.decoder(self.encoder(self.enc_x_input)[2])
-            self.vae = Model(inputs=[self.enc_x_input, self.kl_anneal], outputs=[self.x_output],
+            self.x_output = self.decoder((self.encoder((self.enc_x_input, self.enc_t_input))[2], self.enc_t_input))
+            self.vae = Model(inputs=[self.enc_x_input, self.enc_t_input, self.kl_anneal], outputs=[self.x_output],
                              name='variational_autoencoder')
             tc_loss = self.kl_anneal*self.total_correlation_loss()
             self.vae.add_loss(tc_loss)
@@ -762,20 +783,20 @@ class VAE():
         self.vae.compile(optimizer=self.vae_opt)
 
 
-    def encode(self, x_batch, verbose=False):
+    def encode(self, x_batch, t_batch, verbose=False):
         ''' encoder input configurations '''
-        return self.encoder.predict(x_batch, batch_size=self.batch_size, verbose=verbose)
+        return self.encoder.predict((x_batch, t_batch), batch_size=self.batch_size, verbose=verbose)
 
 
-    def generate(self, beta, verbose=False):
+    def generate(self, beta_batch, t_batch, verbose=False):
         ''' generate new configurations using samples from the latent distribution '''
         # sample latent space
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
-            z = self.sample_gaussian(beta)
+            z_batch = self.sample_gaussian(beta_batch)
         else:
-            z = beta
+            z_batch = beta_batch
         # generate configurations
-        return self.decoder.predict(z, batch_size=self.batch_size, verbose=verbose)
+        return self.decoder.predict((z_batch, t_batch), batch_size=self.batch_size, verbose=verbose)
 
 
     def model_summaries(self):
@@ -883,45 +904,51 @@ class VAE():
         return shift_indices
 
 
-    def randomly_order_training_data(self, x_train):
+    def randomly_order_training_data(self, x_train, t_train):
         ''' reorder training data by random indices '''
         indices = np.random.permutation(self.num_fields*self.num_temps*self.num_samples)
-        return x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape)[indices]
+        return (x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape)[indices],
+                t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.t_dim)[indices])
 
 
     def reorder_training_data(self, x_train):
         ''' reorder training data by class-balancing indices '''
-        x_train = x_train.reshape(self.num_fields*self.num_temps, self.num_samples, *self.input_shape)[self.get_training_indices()]
-        return np.moveaxis(x_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape)
+        indices = self.get_training_indices()
+        x_train = x_train.reshape(self.num_fields*self.num_temps, self.num_samples, *self.input_shape)[indices]
+        t_train = t_train.reshape(self.num_fields*self.num_temps, self.num_samples, self.t_dim)[indices]
+        return (np.moveaxis(x_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape),
+                np.moveaxis(t_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, self.t_dim))
 
 
     def extract_unique_data(self, x_train):
         ''' extract unique samples from data '''
-        x_train = np.unique(x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape), axis=0)
-        return x_train
+        x_train, indices = np.unique(x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape), return_index=True, axis=0)
+        t_train = t_train.reshape(self.num_fields*self.num_temps*self.num_samples, self.t_dim)[indices]
+        return x_train, t_train
 
 
     def draw_random_batch(self, x_train):
         ''' draws random batch from data '''
         indices = np.random.permutation(x_train.shape[0])[:self.batch_size]
-        return x_train[indices].astype(np.float32)
+        return x_train[indices].astype(np.float32), t_train[indices].astype(np.float32)
 
 
     def draw_indexed_batch(self, x_train, j):
         ''' draws batch j '''
-        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[np.random.permutation(self.batch_size)]
+        ind = np.random.permutation(self.batch_size)
+        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[ind], t_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[ind]
 
 
-    def train_vae(self, x_batch, kl_anneal):
+    def train_vae(self, x_batch, t_batch, kl_anneal):
         ''' train VAE '''
         # VAE losses
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
-            vae_loss, tc_loss, rc_loss = self.vae.train_on_batch([x_batch, kl_anneal])
+            vae_loss, tc_loss, rc_loss = self.vae.train_on_batch([x_batch, t_batch, kl_anneal])
             self.vae_loss_history.append(vae_loss)
             self.tc_loss_history.append(tc_loss)
             self.rc_loss_history.append(rc_loss)
         else:
-            vae_loss, rc_loss = self.vae.train_on_batch(x_batch)
+            vae_loss, rc_loss = self.vae.train_on_batch(x_batch, t_batch)
             self.vae_loss_history.append(vae_loss)
             self.tc_loss_history.append(0)
             self.rc_loss_history.append(rc_loss)
@@ -948,14 +975,14 @@ class VAE():
         return vae_loss, tc_loss, rc_loss
 
 
-    def fit(self, x_train, num_epochs=4, save_step=4, random_sampling=False, verbose=False):
+    def fit(self, x_train, t_train, num_epochs=4, save_step=4, random_sampling=False, verbose=False):
         ''' fit model '''
         self.num_fields, self.num_temps, self.num_samples, _, _, = x_train.shape
         self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.batch_size
         if random_sampling:
-            x_train = self.extract_unique_data(x_train)
+            x_train, t_train = self.extract_unique_data(x_train, t_train)
         else:
-            x_train = self.reorder_training_data(x_train)
+            x_train, t_train = self.reorder_training_data(x_train, t_train)
         num_epochs += self.past_epochs
         t = np.linspace(0., 1., num_epochs*self.num_batches)
         k = 48.
@@ -987,13 +1014,13 @@ class VAE():
                 batch_range.set_description(desc)
                 # fetch batch
                 if random_sampling:
-                    x_batch = self.draw_random_batch(x_train)
+                    x_batch, t_batch = self.draw_random_batch(x_train, t_train)
                 else:
-                    x_batch = self.draw_indexed_batch(x_train, j)
+                    x_batch, t_batch = self.draw_indexed_batch(x_train, t_train, j)
                 # train VAE
                 kl_anneal = anneal[i, u]*np.ones(self.batch_size, dtype=np.float32)
                 self.vae_opt.learning_rate = supconv[i, u]*self.lr
-                self.train_vae(x_batch=x_batch, kl_anneal=kl_anneal)
+                self.train_vae(x_batch=x_batch, t_batch=t_batch, kl_anneal=kl_anneal)
                 u += 1
             # if checkpoint managers are initialized
             if self.vae_mngr is not None:
@@ -1035,6 +1062,14 @@ if __name__ == '__main__':
     H, T, CONF, THRM = load_data(NAME, N, I, NS, SC, SEED, VERBOSE)
     NH, NT = H.size, T.size
     IS = (N, N, 1)
+    TD = 2
+    SH = 2*(H-H.min())/(H.max()-H.min())-1
+    ST = (T-T.min())/(T.max()-T.min())
+    TPARAM = np.zeros((NH, NT, NS, TD))
+    for i in range(NH):
+        for j in range(NT):
+            TPARAM[i, j, :, 0] = SH[i]
+            TPARAM[i, j, :, 1] = ST[j]
 
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
@@ -1057,7 +1092,7 @@ if __name__ == '__main__':
         if VERBOSE:
             MDL.model_summaries()
         # MDL.load_latest_checkpoint(NAME, N, I, NS)
-        MDL.fit(CONF, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
+        MDL.fit(CONF, TPARAM, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
         MDL.save_losses(NAME, N, I, NS, SC, SEED)
         MDL.save_weights(NAME, N, I, NS, SC, SEED)
     else:
@@ -1070,12 +1105,12 @@ if __name__ == '__main__':
             if VERBOSE:
                 MDL.model_summaries()
             # MDL.initialize_checkpoint_managers(NAME, N, I, NS)
-            MDL.fit(CONF, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
+            MDL.fit(CONF, T_PARAM, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)
     L = MDL.get_losses()
     if np.any(np.array([ALPHA, BETA, LAMBDA]) > 0):
-        MU, LOGVAR, Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
+        MU, LOGVAR, Z = MDL.encode(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
         SIGMA = np.exp(0.5*LOGVAR)
         PMMDL = PCA(n_components=ZD)
         PMU = PMMDL.fit_transform(MU)
@@ -1091,7 +1126,7 @@ if __name__ == '__main__':
             plot_diagrams(MU, SIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m', 's'], VERBOSE)
             plot_diagrams(PMU, PSIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['mp', 'sp'], VERBOSE)
     else:
-        Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
+        Z = MDL.encode(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
         PMDL = PCA(n_components=ZD)
         PZ = PMDL.fit_transform(Z)
         Z = Z.reshape(NH, NT, NS, ZD)

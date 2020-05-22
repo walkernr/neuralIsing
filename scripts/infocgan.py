@@ -1042,7 +1042,8 @@ class InfoCGAN():
 
     def draw_indexed_batch(self, x_train, t_train, j):
         ''' draws batch j '''
-        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32), t_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)
+        ind = np.random.permutation(self.batch_size)
+        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[ind], t_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[ind]
 
 
     def train_discriminator(self, x_batch, t_batch, real=False):
@@ -1150,13 +1151,6 @@ class InfoCGAN():
         else:
             x_train, t_train = self.reorder_training_data(x_train, t_train)
         num_epochs += self.past_epochs
-        # lr_e = 2**(-2**-14*np.arange(num_epochs*self.num_batches))
-        # b = (0.5, 1.5)
-        # a = 0.5*(b[1]-b[0])
-        # lr_b_g = -a*np.cos(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
-        # lr_b_d = a*np.cos(np.linspace(0, num_epochs*2*np.pi, num_epochs*self.num_batches))+b[0]+a
-        # self.lr_g = (lr_e*lr_b_g*self.gan_lr).reshape(num_epochs, self.num_batches)
-        # self.lr_d = (lr_e*lr_b_d*self.dsc_lr).reshape(num_epochs, self.num_batches)
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
@@ -1179,12 +1173,6 @@ class InfoCGAN():
                 else:
                     x_batch, t_batch = self.draw_indexed_batch(x_train, t_train, j)
                 # train infogan on batch
-                # if self.wasserstein:
-                #     self.gan_dsc_opt.learning_rate = self.lr_g[i, u]
-                #     self.gan_aux_opt.learning_rate = self.lr_g[i, u]
-                # else:
-                #     self.gan_opt.learning_rate = self.lr_g[i, u]
-                # self.dsc_opt.learning_rate = self.lr_d[i, u]
                 self.train_infogan(x_batch, t_batch, n_critic)
                 u += 1
             # if checkpoint managers are initialized
