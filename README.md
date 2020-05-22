@@ -3,6 +3,9 @@ neuralIsing
 
 The 2-dimensional square Ising model is investigated using representation learning techniques to characterize the configurations with latent codes. The intention is that the critical point as well as the crossover region can be identified without the use of a priori information grounded in traditional statistical mechanics.
 
+https://drive.google.com/file/d/1Uw1Rjx8KsY70_0hqdfdeZwY975x8hED9/view
+https://arxiv.org/abs/2005.01682
+
 Requirements
 ------------
 
@@ -44,7 +47,7 @@ This script uses a variational autoencoder (VAE) to produce latent encodings and
 
 Use the help flag (-h) for more options.
 
-beta-tcvae.py
+beta-ctcvae.py
 -------------
 
 This script uses the conditional variant of the VAE conditioned on the external magnetic field and temperature.
