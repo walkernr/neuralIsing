@@ -55,6 +55,8 @@ def parse_args():
                         action='store_true')
     parser.add_argument('-w', '--wasserstein', help='wasserstein gan',
                         action='store_true')
+    parser.add_argument('-cp', '--conv_padding', help='convolutional zero-padding',
+                        action='store_true')
     parser.add_argument('-cn', '--conv_number', help='convolutional layer depth',
                         type=int, default=3)
     parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
@@ -107,7 +109,7 @@ def parse_args():
                         type=int, default=128)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
-            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.wasserstein, args.conv_number,
+            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.wasserstein, args.conv_padding, args.conv_number,
             args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
             args.generator_dropout, args.discriminator_dropout, args.z_dimension, args.c_dimension, args.u_dimension,
             args.kernel_initializer, args.activation,
@@ -330,27 +332,42 @@ def plot_diagrams(c_data, u_data, fields, temps, cmap,
                   prfx, verbose=False):
     params = (name, lattice_length, interval, num_samples, scaled, seed)
     file_prfx = '{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx
-    c_diag = c_data.mean(2)
-    u_diag = u_data.mean(2)
-    c_dim = c_diag.shape[-1]
-    u_dim = u_diag.shape[-1]
-    for i in trange(c_dim, desc='Plotting Discrete Controls', disable=not verbose):
-        plot_diagram(c_diag[:, :, i], fields, temps, cmap, file_prfx, 'c_{}'.format(i))
-    for i in trange(u_dim, desc='Plotting Continuous Controls', disable=not verbose):
-        # plot_diagram(u_diag[:, :, i], fields, temps, cmap, prfx, 'm_{}'.format(i))
-        # plot_diagram(u_diag[:, :, u_dim+i], fields, temps, cmap, prfx, 's_{}'.format(i))
-        plot_diagram(u_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_{}'.format(i))
+    c_m_diag = c_data.mean(2)
+    c_s_diag = c_data.std(2)
+    u_m_diag = u_data.mean(2)
+    u_s_diag = u_data.std(2)
+    c_m_dim = c_m_diag.shape[-1]
+    c_s_dim = c_s_diag.shape[-1]
+    u_m_dim = u_m_diag.shape[-1]
+    u_s_dim = u_s_diag.shape[-1]
+    d0, d1 = 'Means', 'StDvs'
+    for i in trange(c_m_dim, desc='Plotting Discrete Control {}'.format(d0), disable=not verbose):
+        plot_diagram(c_m_diag[:, :, i], fields, temps, cmap, file_prfx, 'c_m_{}'.format(i))
+    for i in trange(c_s_dim, desc='Plotting Discrete Control {}'.format(d1), disable=not verbose):
+        plot_diagram(c_s_diag[:, :, i], fields, temps, cmap, file_prfx, 'c_s_{}'.format(i))
+    for i in trange(u_m_dim, desc='Plotting Continuous Control {}'.format(d0), disable=not verbose):
+        # plot_diagram(u_m_diag[:, :, i], fields, temps, cmap, prfx, 'm_m_{}'.format(i))
+        # plot_diagram(u_m_diag[:, :, u_m_dim+i], fields, temps, cmap, prfx, 's_m_{}'.format(i))
+        plot_diagram(u_m_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_m_{}'.format(i))
+    for i in trange(u_s_dim, desc='Plotting Continuous Control {}'.format(d1), disable=not verbose):
+        # plot_diagram(u_s_diag[:, :, i], fields, temps, cmap, prfx, 'm_s_{}'.format(i))
+        # plot_diagram(u_s_diag[:, :, u_s_dim+i], fields, temps, cmap, prfx, 's_s_{}'.format(i))
+        plot_diagram(u_s_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_s_{}'.format(i))
 
 
 def get_final_conv_shape(input_shape, conv_number,
                          filter_base_length, filter_length,
                          filter_base_stride, filter_stride,
-                         filter_base, filter_factor):
+                         filter_base, filter_factor, padded):
     ''' calculates final convolutional layer output shape '''
+    if padded:
+        p = 1
+    else:
+        p = 0
     out_filters = input_shape[2]*filter_base*filter_factor**(conv_number-1)
-    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length)//filter_base_stride+1
+    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length+p)//filter_base_stride+1
     for i in range(1, conv_number):
-        out_dim = (out_dim-filter_length)//filter_stride+1
+        out_dim = (out_dim-filter_length+p)//filter_stride+1
     return tuple(out_dim)+(out_filters,)
 
 
@@ -411,7 +428,7 @@ class InfoGAN():
     InfoGAN Model
     Generative adversarial modeling of the Ising spin configurations
     '''
-    def __init__(self, input_shape=(27, 27, 1), scaled=False, wasserstein=False, conv_number=3,
+    def __init__(self, input_shape=(27, 27, 1), scaled=False, wasserstein=False, padded=False, conv_number=3,
                  filter_base_length=3, filter_base_stride=3, filter_base=9, filter_length=3, filter_stride=3, filter_factor=9,
                  gen_drop=False, dsc_drop=False,
                  z_dim=100, c_dim=5, u_dim=0,
@@ -422,6 +439,11 @@ class InfoGAN():
         ''' initialize model parameters '''
         self.eps = 1e-8
         self.wasserstein = wasserstein
+        self.padded = padded
+        if self.padded:
+            self.padding = 'same'
+        else:
+            self.padding = 'valid'
         # convolutional parameters
         # number of convolutions
         self.conv_number = conv_number
@@ -440,7 +462,7 @@ class InfoGAN():
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
                                                      self.filter_base_length, self.filter_length,
                                                      self.filter_base_stride, self.filter_stride,
-                                                     self.filter_base, self.filter_factor)
+                                                     self.filter_base, self.filter_factor, self.padded)
         # generator and discriminator dropout
         self.gen_drop = gen_drop
         self.dsc_drop = dsc_drop
@@ -563,7 +585,7 @@ class InfoGAN():
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
-                                    padding='valid', strides=self.filter_stride,
+                                    padding=self.padding, strides=self.filter_stride,
                                     name='gen_convt_{}'.format(u))(convt)
             if self.act == 'lrelu':
                 convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
@@ -577,7 +599,7 @@ class InfoGAN():
             u += 1
         self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
-                                            padding='valid', strides=self.filter_base_stride,
+                                            padding=self.padding, strides=self.filter_base_stride,
                                             name='gen_x_output')(convt)
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input], outputs=[self.gen_x_output],
@@ -603,7 +625,7 @@ class InfoGAN():
             filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
             conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                           kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
-                          padding='valid', strides=filter_stride,
+                          padding=self.padding, strides=filter_stride,
                           name='dsc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
                 conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
@@ -671,7 +693,7 @@ class InfoGAN():
                 filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
                 conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                               kernel_initializer=self.krnl_init,
-                              padding='valid', strides=filter_stride,
+                              padding=self.padding, strides=filter_stride,
                               name='aux_conv_{}'.format(i))(conv)
                 if self.act == 'lrelu':
                     conv = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(conv)
@@ -740,9 +762,9 @@ class InfoGAN():
         else:
             dsc_loss = self.binary_crossentropy_loss
         self.discriminator.trainable = False
-        gan_v_output = self.discriminator(self.generator([self.gen_z_input, self.gen_c_input, self.gen_u_input]))
+        gan_v_output = self.discriminator(self.gen_x_output)
         # auxiliary output
-        gan_c_output, gan_u_output = self.auxiliary(self.generator([self.gen_z_input, self.gen_c_input, self.gen_u_input]))
+        gan_c_output, gan_u_output = self.auxiliary(self.gen_x_output)
         # build GAN
         if self.wasserstein:
             self.gan_dsc = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input],
@@ -1049,33 +1071,33 @@ class InfoGAN():
         return dsc_loss
 
 
-    def train_generator(self, x_sample):
+    def train_generator(self, z_sample):
         ''' train generator and auxiliary '''
         # inputs are true samples, so the discrimination targets are of unit value
         target = np.ones(self.batch_size, dtype=np.float32)
-        gan_loss = np.zeros((len(x_sample), 4))
+        gan_loss = np.zeros((len(z_sample), 4))
          # GAN and entropy losses
         if self.wasserstein:
             target *= -1
-            for i in range(len(x_sample)):
-                gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample[i], target)
-                gan_aux_loss = self.gan_aux.train_on_batch(x_sample[i], x_sample[i][1:])
+            for i in range(len(z_sample)):
+                gan_dsc_loss = self.gan_dsc.train_on_batch(z_sample[i], target)
+                gan_aux_loss = self.gan_aux.train_on_batch(z_sample[i], z_sample[i][1:])
                 gan_loss[i, 1:] = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
                 gan_loss[i].insert(0, np.sum(gan_loss[i, 1:]))
         else:
-            for i in range(len(x_sample)):
-                gan_loss[i] = self.gan.train_on_batch(x_sample[i], (target, *x_sample[i][1:]))
+            for i in range(len(z_sample)):
+                gan_loss[i] = self.gan.train_on_batch(z_sample[i], (target, *z_sample[i][1:]))
         return gan_loss.mean(0)
 
 
     def train_infogan(self, x_batch, n_critic):
         ''' train infoGAN '''
-        x_sample_0 = self.sample_latent_distribution(num_samples=self.batch_size)
-        x_sample_1 = self.sample_latent_distribution(num_samples=self.batch_size)
-        x_generated = self.generator.predict(x=x_sample_0)
+        z_sample_0 = self.sample_latent_distribution(num_samples=self.batch_size)
+        z_sample_1 = self.sample_latent_distribution(num_samples=self.batch_size)
+        x_generated = self.generator.predict(x=z_sample_0)
         dsc_real_loss = self.train_discriminator(x_batch=x_batch, real=True)
         dsc_fake_loss = self.train_discriminator(x_batch=x_generated, real=False)
-        gan_loss = self.train_generator(x_sample=(x_sample_0, x_sample_1))
+        gan_loss = self.train_generator(z_sample=(z_sample_0, z_sample_1))
         self.dsc_real_loss_history.append(dsc_real_loss)
         self.dsc_fake_loss_history.append(dsc_fake_loss)
         self.gan_loss_history.append(gan_loss[1])
@@ -1164,7 +1186,7 @@ class InfoGAN():
 
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
-     NAME, N, I, NS, SC, W,
+     NAME, N, I, NS, SC, W, CP,
      CN, FBL, FBS, FB, FL, FS, FF,
      GD, DD, ZD, CD, UD,
      KI, AN,
@@ -1208,7 +1230,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = InfoGAN(IS, SC, W, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
+    MDL = InfoGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)

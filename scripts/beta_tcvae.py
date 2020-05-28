@@ -53,6 +53,8 @@ def parse_args():
                         type=int, default=1024)
     parser.add_argument('-sc', '--scale_data', help='scale data (-1, 1) -> (0, 1)',
                         action='store_true')
+    parser.add_argument('-cp', '--conv_padding', help='convolutional zero-padding',
+                        action='store_true')
     parser.add_argument('-cn', '--conv_number', help='convolutional layer depth',
                         type=int, default=3)
     parser.add_argument('-fbl', '--filter_base_length', help='size of filters in base hidden convolutional layer',
@@ -95,7 +97,7 @@ def parse_args():
                         type=int, default=128)
     args = parser.parse_args()
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
-            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data,
+            args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.conv_padding,
             args.conv_number, args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
             args.dropout, args.z_dimension, args.alpha, args.beta, args.lamb,
             args.kernel_initializer, args.activation, args.optimizer, args.learning_rate,
@@ -116,16 +118,40 @@ def load_configurations(name, lattice_length):
     return conf, thrm
 
 
+def sample_gaussian(beta):
+    ''' samples a point in a multivariate gaussian distribution '''
+    mu, logvar = beta
+    return np.random.normal(mu, np.exp(0.5*logvar))
+
+
 def scale_configurations(conf):
     ''' scales input configurations '''
     # (-1, 1) -> (0, 1)
-    return ((conf+1)/2).astype(np.int8)
+    return (conf+1)/2
 
 
 def unscale_configurations(conf):
     ''' unscales input configurations '''
     # (0, 1) -> (-1, 1)
-    return (2*conf-1).astype(np.int8)
+    return 2*conf-1
+
+
+def binary_crossentropy(x, x_hat, scaled):
+    ''' binary crossentropy error '''
+    eps = 1e-4
+    ns, _, _, _ = x.shape
+    if not scaled:
+        x = scale_configurations(x)
+        x_hat = scale_configurations(x_hat)
+    bc = -1*(x*np.log(x_hat+eps)+(1.-x)*np.log(1.-x_hat+eps)).reshape(ns, -1)
+    return bc
+
+
+def binary_crossentropy_accuracy(x, x_hat, scaled):
+    ''' binary accuracy '''
+    bc = binary_crossentropy(x, x_hat, scaled)
+    ba = np.exp(-bc)
+    return np.stack((bc.mean(1), bc.std(1)), axis=-1), np.stack((ba.mean(1), ba.std(1)), axis=-1)
 
 
 def shuffle_samples(data, num_fields, num_temps, indices):
@@ -159,7 +185,7 @@ def load_select_scale_data(name, lattice_length, interval, num_samples, scaled, 
     # construct selected data subset
     select_conf = shuffle_samples(interval_conf, num_fields, num_temps, indices)
     if scaled:
-        select_conf = scale_configurations(select_conf)
+        select_conf = scale_configurations(select_conf).astype(np.int8)
     select_thrm = shuffle_samples(interval_thrm, num_fields, num_temps, indices)
     # save selected data arrays
     np.save(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval), interval_fields)
@@ -207,6 +233,34 @@ def save_output_data(data, alias, name, lattice_length, interval, num_samples, s
     params = (name, lattice_length, interval, num_samples, scaled, seed)
     file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx+'.{}.npy'.format(alias)
     np.save(file_name, data)
+
+
+def plot_histogram(u, cmap, file_prfx, alias, domain_name, verbose=False):
+    file_name = os.getcwd()+'/'+file_prfx+'.{}.png'.format(alias)
+    # initialize figure and axes
+    fig, ax = plt.subplots()
+    # remove spines on top and right
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    # set axis ticks to left and bottom
+    ax.xaxis.set_ticks_position('bottom')
+    ax.yaxis.set_ticks_position('left')
+    ax.hist(u, bins=64, density=True, color=cmap(0.25))
+    ax.set_xlabel(domain_name)
+    ax.set_ylabel('Density')
+    # save figure
+    fig.savefig(file_name)
+    plt.close()
+
+
+def plot_bc_error_accuracy(error, accuracy, cmap,
+                           name, lattice_length, interval, num_samples, scaled, seed,
+                           prfx, verbose=False):
+    # file name parameters
+    params = (name, lattice_length, interval, num_samples, scaled, seed)
+    file_prfx = '{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx
+    plot_histogram(error[:, 0], cmap, file_prfx, 'bc_err_hist', 'Bernoulli Entropy (Reconstruction Loss)', verbose)
+    plot_histogram(accuracy[:, 0], cmap, file_prfx, 'bc_acc_hist', 'Classification Accuracy (Reconstruction)', verbose)
 
 
 def plot_batch_losses(losses, cmap, file_prfx, verbose=False):
@@ -309,30 +363,50 @@ def plot_diagrams(m_data, s_data, fields, temps, cmap,
     params = (name, lattice_length, interval, num_samples, scaled, seed)
     file_prfx = '{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx
     if s_data is not None:
-        m_diag = m_data.mean(2)
-        s_diag = s_data.mean(2)
-        m_dim = m_diag.shape[-1]
-        s_dim = s_diag.shape[-1]
-        for i in trange(m_dim, desc='Plotting VAE Means', disable=not verbose):
-            plot_diagram(m_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_{}'.format(alias[0], i))
-        for i in trange(s_dim, desc='Plotting VAE Sigmas', disable=not verbose):
-            plot_diagram(s_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_{}'.format(alias[1], i))
+        mm_diag = m_data.mean(2)
+        ms_diag = m_data.std(2)
+        sm_diag = s_data.mean(2)
+        ss_diag = s_data.std(2)
+        mm_dim = mm_diag.shape[-1]
+        ms_dim = ms_diag.shape[-1]
+        sm_dim = sm_diag.shape[-1]
+        ss_dim = ss_diag.shape[-1]
+        if alias == ['m', 's'] or alias == ['m_p', 's_p']:
+            d0, d1 = 'Means', 'Sigmas'
+        elif alias == ['bc_err', 'bc_acc']:
+            d0, d1 = 'BC Errors', 'BC Accuracies'
+        for i in trange(mm_dim, desc='Plotting Mean VAE {}'.format(d0), disable=not verbose):
+            plot_diagram(mm_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_m_{}'.format(alias[0], i))
+        for i in trange(sm_dim, desc='Plotting Mean VAE {}'.format(d1), disable=not verbose):
+            plot_diagram(sm_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_m_{}'.format(alias[1], i))
+        for i in trange(ms_dim, desc='Plotting StDv VAE {}'.format(d0), disable=not verbose):
+            plot_diagram(ms_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_s_{}'.format(alias[0], i))
+        for i in trange(ss_dim, desc='Plotting StDv VAE {}'.format(d1), disable=not verbose):
+            plot_diagram(ss_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_s_{}'.format(alias[1], i))
     else:
-        z_diag = m_data.mean(2)
-        z_dim = z_diag.shape[-1]
-        for i in trange(z_dim, desc='Plotting VAE Encodings', disable=not verbose):
-            plot_diagram(z_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_{}'.format(alias, i))
+        zm_diag = m_data.mean(2)
+        zs_diag = m_data.std(2)
+        zm_dim = zm_diag.shape[-1]
+        zs_dim = zs_diag.shape[-1]
+        for i in trange(zm_dim, desc='Plotting Mean VAE Encodings', disable=not verbose):
+            plot_diagram(zm_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_m_{}'.format(alias, i))
+        for i in trange(zs_dim, desc='Plotting StDv VAE Encodings', disable=not verbose):
+            plot_diagram(zs_diag[:, :, i], fields, temps, cmap, file_prfx, '{}_s_{}'.format(alias, i))
 
 
 def get_final_conv_shape(input_shape, conv_number,
                          filter_base_length, filter_length,
                          filter_base_stride, filter_stride,
-                         filter_base, filter_factor):
+                         filter_base, filter_factor, padded):
     ''' calculates final convolutional layer output shape '''
+    if padded:
+        p = 1
+    else:
+        p = 0
     out_filters = input_shape[2]*filter_base*filter_factor**(conv_number-1)
-    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length)//filter_base_stride+1
+    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length+p)//filter_base_stride+1
     for i in range(1, conv_number):
-        out_dim = (out_dim-filter_length)//filter_stride+1
+        out_dim = (out_dim-filter_length+p)//filter_stride+1
     return tuple(out_dim)+(out_filters,)
 
 
@@ -354,7 +428,7 @@ class VAE():
     VAE Model
     Variational autoencoder modeling of the Ising spin configurations
     '''
-    def __init__(self, input_shape=(27, 27, 1), scaled=False, conv_number=3,
+    def __init__(self, input_shape=(27, 27, 1), scaled=False, padded=False, conv_number=3,
                  filter_base_length=3, filter_base_stride=3, filter_base=9, filter_length=3, filter_stride=3, filter_factor=9,
                  dropout=False, z_dim=5, alpha=1.0, beta=8.0, lamb=1.0,
                  krnl_init='lecun_normal', act='selu',
@@ -362,6 +436,11 @@ class VAE():
         self.eps = 1e-8
         ''' initialize model parameters '''
         self.scaled = scaled
+        self.padded = padded
+        if self.padded:
+            self.padding = 'same'
+        else:
+            self.padding = 'valid'
         # convolutional parameters
         # number of convolutions
         self.conv_number = conv_number
@@ -380,7 +459,7 @@ class VAE():
         self.final_conv_shape = get_final_conv_shape(self.input_shape, self.conv_number,
                                                      self.filter_base_length, self.filter_length,
                                                      self.filter_base_stride, self.filter_stride,
-                                                     self.filter_base, self.filter_factor)
+                                                     self.filter_base, self.filter_factor, self.padded)
         self.dropout = dropout
         # latent and classification dimensions
         # latent dimension
@@ -394,6 +473,7 @@ class VAE():
             self.dec_out_act = 'sigmoid'
         else:
             self.dec_out_act = 'tanh'
+        self.out_init = 'glorot_uniform'
         # optimizer
         self.vae_opt_n = opt
         # learning rate
@@ -424,24 +504,12 @@ class VAE():
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = 'vae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
+        file_name = 'btcvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
         return file_name
 
 
     def scale_configurations(self, x):
         return (x+1)/2
-
-
-    # def calculate_log_importance_weight(self):
-    #     ''' logarithmic importance weights for minibatch stratified sampling '''
-    #     n, m = self.dataset_size, self.batch_size-1
-    #     strw = (n-m)/(n*m)
-    #     w = K.concatenate((K.concatenate((1/n*K.constant(np.ones(shape=(self.batch_size-2, 1)), dtype=tf.float32),
-    #                                       strw*K.constant(np.ones(shape=(1, 1)), dtype=tf.float32),
-    #                                       1/n*K.constant(np.ones(shape=(1, 1)), dtype=tf.float32)), axis=0),
-    #                        strw*K.constant(np.ones(shape=(self.batch_size, 1)), dtype=tf.float32),
-    #                        1/m*K.constant(np.ones(shape=(self.batch_size, self.batch_size-2)), dtype=tf.float32)), axis=1)
-    #     return K.log(w)
 
 
     def _set_log_importance_weight(self):
@@ -517,11 +585,11 @@ class VAE():
         # beta controls total correlation
         # gamma controls dimension-wise kld
         melbo = -self.alpha*(logqz_x-logqz)-self.beta*(logqz-logqz_prodmarginals)-self.lamb*(logqz_prodmarginals-logpz)
-        return self.kl_anneal*(-melbo/self.z_dim)
+        return -self.kl_anneal*melbo
 
 
     def kullback_leibler_divergence_loss(self):
-        return self.kl_anneal*(-0.5*self.beta*K.mean(1.+self.logvar-K.square(self.mu)-K.exp(self.logvar), axis=-1))
+        return -0.5*self.kl_anneal*self.beta*K.sum(1.+self.logvar-K.square(self.mu)-K.exp(self.logvar), axis=-1)
 
 
     def reconstruction_loss(self):
@@ -531,7 +599,7 @@ class VAE():
         else:
             x = self.enc_x_input
             x_hat = self.x_output
-        return -K.mean(K.reshape(x*K.log(x_hat+self.eps)+(1.-x)*K.log(1.-x_hat+self.eps), shape=(self.batch_size, -1)), axis=-1)
+        return -K.sum(K.reshape(x*K.log(x_hat+self.eps)+(1.-x)*K.log(1.-x_hat+self.eps), shape=(self.batch_size, -1)), axis=-1)
 
 
     def _build_model(self):
@@ -552,7 +620,7 @@ class VAE():
             filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
             conv = Conv2D(filters=filter_number, kernel_size=filter_length,
                           kernel_initializer=self.krnl_init,
-                          padding='valid', strides=filter_stride,
+                          padding=self.padding, strides=filter_stride,
                           name='enc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
                 # conv = BatchNormalization(name='enc_conv_batchnorm_{}'.format(i))(conv)
@@ -579,23 +647,53 @@ class VAE():
                 x = BatchNormalization(name='enc_dense_batchnorm_0')(x)
             if self.act == 'selu':
                 x = Activation(activation='selu', name='enc_dense_selu_0')(x)
-        x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='enc_dense_{}'.format(u))(x)
-        if self.act == 'lrelu':
-            # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-            x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
-            x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='enc_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        # u += 1
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='enc_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        # u += 1
+        # x = Dense(units=np.prod(self.final_conv_shape)//2,
+        #           kernel_initializer=self.krnl_init,
+        #           name='enc_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        # u += 1
+        # x = Dense(units=np.prod(self.final_conv_shape)//4,
+        #           kernel_initializer=self.krnl_init,
+        #           name='enc_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             # mean
             self.mu = Dense(units=self.z_dim,
-                            kernel_initializer='glorot_uniform', activation='linear',
+                            kernel_initializer=self.out_init, activation='linear',
                             name='enc_mu_ouput')(x)
             # logarithmic variance
             self.logvar = Dense(units=self.z_dim,
-                                kernel_initializer='glorot_uniform', activation='linear',
+                                kernel_initializer=self.out_init, activation='linear',
                                 name='enc_logvar_ouput')(x)
             # latent space
             self.z = Lambda(self.sample_gaussian, output_shape=(self.z_dim,), name='enc_z_output')([self.mu, self.logvar])
@@ -604,7 +702,7 @@ class VAE():
                                  name='encoder')
         else:
             # latent space
-            self.z = Dense(self.z_dim, kernel_initializer='glorot_uniform', activation='sigmoid',
+            self.z = Dense(self.z_dim, kernel_initializer=self.out_init, activation='sigmoid',
                            name='enc_z_ouput')(x)
             # build encoder
             self.encoder = Model(inputs=[self.enc_x_input], outputs=[self.z],
@@ -614,31 +712,71 @@ class VAE():
     def _build_decoder(self):
         ''' builds decoder model '''
         # latent unit gaussian and categorical inputs
-        dec_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='dec_z_input')
+        self.dec_z_input = Input(batch_shape=(self.batch_size, self.z_dim), name='dec_z_input')
+        x = self.dec_z_input
         # dense layer with same feature count as final convolution
+        u = 0
+        # x = Dense(units=np.prod(self.final_conv_shape)//4,
+        #           kernel_initializer=self.krnl_init,
+        #           name='dec_dense_{}'.format(u))(self.dec_z_input)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        # u += 1
+        # x = Dense(units=np.prod(self.final_conv_shape)//2,
+        #           kernel_initializer=self.krnl_init,
+        #           name='dec_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        # u += 1
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='dec_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        # u += 1
+        # x = Dense(units=np.prod(self.final_conv_shape),
+        #           kernel_initializer=self.krnl_init,
+        #           name='dec_dense_{}'.format(u))(x)
+        # if self.act == 'lrelu':
+        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        # if self.act == 'selu':
+        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        # u += 1
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='dec_dense_0')(dec_z_input)
+                  name='dec_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_0')(x)
+            # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+            x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
         if self.act == 'selu':
-            x = Activation(activation='selu', name='dec_dense_selu_0')(x)
-        x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='dec_dense_1')(x)
-        if self.act == 'lrelu':
-            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_1')(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='dec_dense_selu_1')(x)
+            x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        u += 1
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dec_dense_2')(x)
+                      name='dec_dense_{}'.format(u))(x)
             if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_2')(x)
+                # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+                x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+                x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
             if self.act == 'selu':
-                x = Activation(activation='selu', name='dec_dense_selu_2')(x)
+                x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='dec_rshp_0')(x)
         if self.dropout:
@@ -652,7 +790,7 @@ class VAE():
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
-                                    padding='valid', strides=self.filter_stride,
+                                    padding=self.padding, strides=self.filter_stride,
                                     name='dec_convt_{}'.format(u))(convt)
             if self.act == 'lrelu':
                 # convt = BatchNormalization(name='dec_convt_batchnorm_{}'.format(u))(convt)
@@ -666,11 +804,11 @@ class VAE():
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dec_convt_drop_{}'.format(u))(convt)
             u += 1
         self.dec_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
-                                            kernel_initializer='glorot_uniform', activation=self.dec_out_act,
-                                            padding='valid', strides=self.filter_base_stride,
+                                            kernel_initializer=self.out_init, activation=self.dec_out_act,
+                                            padding=self.padding, strides=self.filter_base_stride,
                                             name='dec_x_output')(convt)
         # build decoder
-        self.decoder = Model(inputs=[dec_z_input], outputs=[self.dec_x_output],
+        self.decoder = Model(inputs=[self.dec_z_input], outputs=[self.dec_x_output],
                              name='decoder')
 
 
@@ -713,10 +851,18 @@ class VAE():
             self.vae_opt = RMSprop(learning_rate=self.lr)
         elif self.vae_opt_n == 'larmsprop':
             self.vae_opt = Lookahead(RMSprop(learning_rate=self.lr))
+        elif self.vae_opt_n == 'crmsprop':
+            self.vae_opt = RMSprop(learning_rate=self.lr, centered=True)
+        elif self.vae_opt_n == 'lacrmsprop':
+            self.vae_opt = Lookahead(RMSprop(learning_rate=self.lr, centered=True))
         elif self.vae_opt_n == 'adam':
             self.vae_opt = Adam(learning_rate=self.lr)
         elif self.vae_opt_n == 'laadam':
-            self.vae_opt = Lookeahead(Adam(learning_rate=self.lr))
+            self.vae_opt = Lookahead(Adam(learning_rate=self.lr))
+        elif self.vae_opt_n == 'adamams':
+            self.vae_opt = Adam(learning_rate=self.lr, amsgrad=True)
+        elif self.vae_opt_n == 'laadamams':
+            self.vae_opt = Lookahead(Adam(learning_rate=self.lr, amsgrad=True))
         elif self.vae_opt_n == 'adamax':
             self.vae_opt = Adamax(learning_rate=self.lr)
         elif self.vae_opt_n == 'laadamax':
@@ -729,20 +875,38 @@ class VAE():
             self.vae_opt = AdamW(weight_decay=1e-4, learning_rate=self.lr)
         elif self.vae_opt_n == 'laadamw':
             self.vae_opt = Lookahead(AdamW(weight_decay=1e-4, learning_rate=self.lr))
+        elif self.vae_opt_n == 'adamwams':
+            self.vae_opt = AdamW(weight_decay=1e-4, learning_rate=self.lr, amsgrad=True)
+        elif self.vae_opt_n == 'laadamwams':
+            self.vae_opt = Lookahead(AdamW(weight_decay=1e-4, learning_rate=self.lr, amsgrad=True))
         elif self.vae_opt_n == 'lamb':
             self.vae_opt = LAMB(learning_rate=self.lr)
         elif self.vae_opt_n == 'lalamb':
             self.vae_opt = Lookahead(LAMB(learning_rate=self.lr))
         elif self.vae_opt_n == 'ladam':
             self.vae_opt = LazyAdam(learning_rate=self.lr)
+        elif self.vae_opt_n == 'laladam':
+            self.vae_opt = Lookahead(LazyAdam(learning_rate=self.lr))
+        elif self.vae_opt_n == 'ladamams':
+            self.vae_opt = LazyAdam(learning_rate=self.lr, amsgrad=True)
+        elif self.vae_opt_n == 'laladamams':
+            self.vae_opt = Lookahead(LazyAdam(learning_rate=self.lr, amsgrad=True))
         elif self.vae_opt_n == 'novograd':
             self.vae_opt = NovoGrad(learning_rate=self.lr)
         elif self.vae_opt_n == 'lanovograd':
             self.vae_opt = Lookahead(NovoGrad(learning_rate=self.lr))
+        elif self.vae_opt_n == 'novogradams':
+            self.vae_opt = NovoGrad(learning_rate=self.lr, asmgrad=True)
+        elif self.vae_opt_n == 'lanovogradams':
+            self.vae_opt = Lookahead(NovoGrad(learning_rate=self.lr, amsgrad=True))
         elif self.vae_opt_n == 'radam':
             self.vae_opt = RectifiedAdam(learning_rate=self.lr)
         elif self.vae_opt_n == 'ranger':
             self.vae_opt = Lookahead(RectifiedAdam(learning_rate=self.lr))
+        elif self.vae_opt_n == 'radamams':
+            self.vae_opt = RectifiedAdam(learning_rate=self.lr, amsgrad=True)
+        elif self.vae_opt_n == 'rangerams':
+            self.vae_opt = Lookahead(RectifiedAdam(learning_rate=self.lr, amsgrad=True))
         elif self.vae_opt_n == 'sgdw':
             self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr)
         elif self.vae_opt_n == 'lasgdw':
@@ -751,6 +915,10 @@ class VAE():
             self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9)
         elif self.vae_opt_n == 'lasgdwm':
             self.vae_opt = Lookahead(SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9))
+        elif self.vae_opt_n == 'nsgdw':
+            self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9, nesterov=True)
+        elif self.vae_opt_n == 'lansgdw':
+            self.vae_opt = Lookahead(SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9, nesterov=True))
         elif self.vae_opt_n == 'yogi':
             self.vae_opt = Yogi(learning_rate=self.lr)
         elif self.vae_opt_n == 'layogi':
@@ -767,15 +935,18 @@ class VAE():
         return self.encoder.predict(x_batch, batch_size=self.batch_size, verbose=verbose)
 
 
-    def generate(self, beta, verbose=False):
+    def generate(self, beta_batch, verbose=False):
         ''' generate new configurations using samples from the latent distribution '''
         # sample latent space
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
-            z = self.sample_gaussian(beta)
+            if len(beta_batch) == 2:
+                z_batch = sample_gaussian(beta_batch)
+            elif len(beta_batch) == 1:
+                z_batch = beta_batch
         else:
-            z = beta
+            z_batch = beta_batch
         # generate configurations
-        return self.decoder.predict(z, batch_size=self.batch_size, verbose=verbose)
+        return self.decoder.predict(z_batch, batch_size=self.batch_size, verbose=verbose)
 
 
     def model_summaries(self):
@@ -789,7 +960,7 @@ class VAE():
         ''' save weights to file '''
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.vae.weights.h5'
+        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.weights.h5'
         # save weights
         self.vae.save_weights(file_name)
 
@@ -798,7 +969,7 @@ class VAE():
         ''' load weights from file '''
         # file parameters
         params = (name, lattice_length, interval, num_samples, scaled, seed)
-        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.vae.weights.h5'
+        file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+self.get_file_prefix()+'.weights.h5'
         # load weights
         self.vae.load_weights(file_name, by_name=True)
 
@@ -958,17 +1129,30 @@ class VAE():
             x_train = self.reorder_training_data(x_train)
         num_epochs += self.past_epochs
         t = np.linspace(0., 1., num_epochs*self.num_batches)
-        k = 48.
-        anneal_0 = (4*np.exp(-k*(t-0.2))/np.square(1+np.exp(-k*(t-0.2)))).reshape(num_epochs, self.num_batches)
-        anneal_1 = (1./(1.+np.exp(-k*(t-0.5)))).reshape(num_epochs, self.num_batches)
-        anneal = anneal_0+anneal_1
-        supconv_0 = (4*np.exp(-k*(t-0.1))/np.square(1+np.exp(-k*(t-0.1)))).reshape(num_epochs, self.num_batches)
-        supconv_1 = (4*np.exp(-k*(t-0.3))/np.square(1+np.exp(-k*(t-0.3)))).reshape(num_epochs, self.num_batches)
-        supconv_2 = (4*np.exp(-k*(t-0.5))/np.square(1+np.exp(-k*(t-0.5)))).reshape(num_epochs, self.num_batches)
-        supconv = 0.9*(supconv_0+supconv_1+supconv_2)+0.1
-        plt.plot(t, anneal.reshape(-1))
-        plt.plot(t, supconv.reshape(-1))
-        plt.savefig('lr.png')
+        if np.all(np.array([self.alpha, self.beta, self.lamb]) == 0):
+            kl_anneal = np.zeros((num_epochs, self.num_batches))
+        else:
+            n_cycles = 4
+            linear_kl_anneal = np.linspace(0., 1., num_epochs*self.num_batches//(2*n_cycles))
+            constant_kl_anneal = np.ones(num_epochs*self.num_batches//(2*n_cycles))
+            cycle_kl_anneal = np.concatenate((linear_kl_anneal, constant_kl_anneal))
+            kl_anneal = np.tile(cycle_kl_anneal, n_cycles).reshape(num_epochs, self.num_batches)
+        if 'sgd' in self.vae_opt_n and 'n' not in self.vae_opt_n:
+            lr_rampu_supconv = np.linspace(0.1, 1.0, num_epochs*self.num_batches//2)
+            lr_rampd_supconv = np.linspace(1.0, 0.1, 3*num_epochs*self.num_batches//8)
+            lr_min_supconv = np.linspace(0.1, 0.01, num_epochs*self.num_batches//8)
+            lr_factor = np.concatenate((lr_rampu_supconv, lr_rampd_supconv, lr_min_supconv)).reshape(num_epochs, self.num_batches)
+            if 'm' in self.vae_opt_n and 'la' not in self.vae_opt_n:
+                m_rampd_supconv = np.linspace(0.95, 0.85, num_epochs*self.num_batches//2)
+                m_rampu_supconv = np.linspace(0.85, 0.95, 3*num_epochs*self.num_batches//8)
+                m_max_supconv = 0.95*np.ones(num_epochs*self.num_batches//8)
+                m_factor = np.concatenate((m_rampd_supconv, m_rampu_supconv, m_max_supconv)).reshape(num_epochs, self.num_batches)
+            else:
+                m_factor = np.ones((num_epochs, self.num_batches))
+        else:
+            lr_constant = np.ones(7*num_epochs*self.num_batches//8)
+            lr_decay = np.linspace(1.0, 0.1, num_epochs*self.num_batches//8)
+            lr_factor = np.concatenate((lr_constant, lr_decay)).reshape(num_epochs, self.num_batches)
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
@@ -983,7 +1167,7 @@ class VAE():
             for j in batch_range:
                 # set batch loss description
                 batch_loss = self.rolling_loss_average(i, u)
-                desc = 'Epoch: {}/{} SC Factor: {:.4f} KL Anneal: {:.4f} VAE Loss: {:.4f} TCKLD Loss: {:.4f} RCNST Loss: {:.4f}'.format(i+1, num_epochs, supconv[i, u], anneal[i, u], *batch_loss)
+                desc = 'Epoch: {}/{} LR Factor: {:.4f} KL Anneal: {:.4f} VAE Loss: {:.4f} TCKLD Loss: {:.4f} RCNST Loss: {:.4f}'.format(i+1, num_epochs, lr_factor[i, u], kl_anneal[i, u], *batch_loss)
                 batch_range.set_description(desc)
                 # fetch batch
                 if random_sampling:
@@ -991,9 +1175,10 @@ class VAE():
                 else:
                     x_batch = self.draw_indexed_batch(x_train, j)
                 # train VAE
-                kl_anneal = anneal[i, u]*np.ones(self.batch_size, dtype=np.float32)
-                self.vae_opt.learning_rate = supconv[i, u]*self.lr
-                self.train_vae(x_batch=x_batch, kl_anneal=kl_anneal)
+                if self.vae_opt_n == 'sgdm' or self.vae_opt_n == 'sgdwm':
+                    self.vae_opt.momentum = m_factor[i, u]
+                self.vae_opt.learning_rate = lr_factor[i, u]*self.lr
+                self.train_vae(x_batch=x_batch, kl_anneal=kl_anneal[i, u]*np.ones(self.batch_size))
                 u += 1
             # if checkpoint managers are initialized
             if self.vae_mngr is not None:
@@ -1007,7 +1192,7 @@ class VAE():
 
 if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
-     NAME, N, I, NS, SC,
+     NAME, N, I, NS, SC, CP,
      CN, FBL, FBS, FB, FL, FS, FF,
      DO, ZD, ALPHA, BETA, LAMBDA,
      KI, AN, OPT, LR,
@@ -1033,6 +1218,7 @@ if __name__ == '__main__':
     CM = plt.get_cmap('plasma')
 
     H, T, CONF, THRM = load_data(NAME, N, I, NS, SC, SEED, VERBOSE)
+    del THRM
     NH, NT = H.size, T.size
     IS = (N, N, 1)
 
@@ -1049,7 +1235,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = VAE(IS, SC, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
+    MDL = VAE(IS, SC, CP, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
@@ -1076,22 +1262,30 @@ if __name__ == '__main__':
     L = MDL.get_losses()
     if np.any(np.array([ALPHA, BETA, LAMBDA]) > 0):
         MU, LOGVAR, Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
+        X = MDL.generate(Z, VERBOSE).astype(np.float16)
         SIGMA = np.exp(0.5*LOGVAR)
         PMMDL = PCA(n_components=ZD)
         PMU = PMMDL.fit_transform(MU)
         PSMDL = PCA(n_components=ZD)
         PSIGMA = PSMDL.fit_transform(SIGMA)
+        PZMDL = PCA(n_components=ZD)
+        PZ = PZMDL.fit_transform(Z)
         MU = MU.reshape(NH, NT, NS, ZD)
         SIGMA = SIGMA.reshape(NH, NT, NS, ZD)
+        Z = Z.reshape(NH, NT, NS, ZD)
         PMU = PMU.reshape(NH, NT, NS, ZD)
         PSIGMA = PSIGMA.reshape(NH, NT, NS, ZD)
+        PZ = PZ.reshape(NH, NT, NS, ZD)
         save_output_data(MU, 'vae_mean', NAME, N, I, NS, SC, SEED, PRFX)
         save_output_data(SIGMA, 'vae_sigma', NAME, N, I, NS, SC, SEED, PRFX)
         if PLOT:
             plot_diagrams(MU, SIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m', 's'], VERBOSE)
-            plot_diagrams(PMU, PSIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['mp', 'sp'], VERBOSE)
+            plot_diagrams(PMU, PSIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m_p', 's_p'], VERBOSE)
+            plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
+            plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z_p', VERBOSE)
     else:
         Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
+        X = MDL.generate(Z, VERBOSE).astype(np.float16)
         PMDL = PCA(n_components=ZD)
         PZ = PMDL.fit_transform(Z)
         Z = Z.reshape(NH, NT, NS, ZD)
@@ -1099,6 +1293,14 @@ if __name__ == '__main__':
         save_output_data(Z, 'vae_encoding', NAME, N, I, NS, SC, SEED, PRFX)
         if PLOT:
             plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
-            plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'zp', VERBOSE)
+            plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z_p', VERBOSE)
+    BCERR, BCACC = binary_crossentropy_accuracy(CONF.reshape(-1, *IS), X, SC)
+    save_output_data(BCERR, 'bc_err', NAME, N, I, NS, SC, SEED, PRFX)
+    save_output_data(BCACC, 'bc_acc', NAME, N, I, NS, SC, SEED, PRFX)
+    if VERBOSE:
+        print('Mean Error: {} STD Error: {}'.format(*(BCERR.mean(0))))
+        print('Mean Accuracy: {} STD Accuracy: {}'.format(*(BCACC.mean(0))))
     if PLOT:
+        plot_diagrams(BCERR.reshape(NH, NT, NS, -1), BCACC.reshape(NH, NT, NS, -1), H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['bc_err', 'bc_acc'], VERBOSE)
+        plot_bc_error_accuracy(BCERR, BCACC, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
         plot_losses(L, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
