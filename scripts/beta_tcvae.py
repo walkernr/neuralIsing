@@ -1172,7 +1172,8 @@ class VAE():
             for j in batch_range:
                 # set batch loss description
                 batch_loss = self.rolling_loss_average(i, u)
-                desc = 'Epoch: {}/{} LR Factor: {:.4f} KL Anneal: {:.4f} VAE Loss: {:.4f} TCKLD Loss: {:.4f} RCNST Loss: {:.4f}'.format(i+1, num_epochs, lr_factor[i, u], kl_anneal[i, u], *batch_loss)
+                batch_acc = np.exp(-batch_loss[-1]/np.prod(self.input_shape))
+                desc = 'Epoch: {}/{} LR Fctr: {:.4f} KL Anl: {:.4f} VAE Lss: {:.4f} TCKLD Lss: {:.4f} RCNST Lss: {:.4f} RCNST Acc: {:.4f}'.format(i+1, num_epochs, lr_factor[i, u], kl_anneal[i, u], *batch_loss, batch_acc)
                 batch_range.set_description(desc)
                 # fetch batch
                 if random_sampling:
@@ -1267,7 +1268,6 @@ if __name__ == '__main__':
     L = MDL.get_losses()
     if np.any(np.array([ALPHA, BETA, LAMBDA]) > 0):
         MU, LOGVAR, Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
-        X = MDL.generate(Z, VERBOSE).astype(np.float16)
         SIGMA = np.exp(0.5*LOGVAR)
         PMMDL = PCA(n_components=ZD)
         PMU = PMMDL.fit_transform(MU)
@@ -1288,9 +1288,11 @@ if __name__ == '__main__':
             plot_diagrams(PMU, PSIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m_p', 's_p'], VERBOSE)
             plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
             plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z_p', VERBOSE)
+        del MU, LOGVAR, SIGMA, PMU, PSIGMA, PZ
+        X = MDL.generate(Z, VERBOSE).astype(np.float16)
+        del Z
     else:
         Z = MDL.encode(CONF.reshape(-1, *IS), VERBOSE)
-        X = MDL.generate(Z, VERBOSE).astype(np.float16)
         PMDL = PCA(n_components=ZD)
         PZ = PMDL.fit_transform(Z)
         Z = Z.reshape(NH, NT, NS, ZD)
@@ -1299,7 +1301,11 @@ if __name__ == '__main__':
         if PLOT:
             plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
             plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z_p', VERBOSE)
+        del PZ
+        X = MDL.generate(Z, VERBOSE).astype(np.float16)
+        del Z
     BCERR, BCACC = binary_crossentropy_accuracy(CONF.reshape(-1, *IS), X, SC)
+    del CONF, X
     save_output_data(BCERR, 'bc_err', NAME, N, I, NS, SC, SEED, PRFX)
     save_output_data(BCACC, 'bc_acc', NAME, N, I, NS, SC, SEED, PRFX)
     if VERBOSE:
