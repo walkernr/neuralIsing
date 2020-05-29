@@ -73,6 +73,8 @@ def parse_args():
                         action='store_true')
     parser.add_argument('-zd', '--z_dimension', help='sample noise dimension',
                         type=int, default=5)
+    parser.add_argument('-ka', '--kld_annealing', help='toggle kld annealing',
+                        action='store_true')
     parser.add_argument('-ra', '--alpha', help='total correlation alpha',
                         type=float, default=1.0)
     parser.add_argument('-rb', '--beta', help='total correlation beta',
@@ -99,7 +101,7 @@ def parse_args():
     return (args.verbose, args.restart, args.plot, args.parallel, args.gpu, args.threads,
             args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.conv_padding,
             args.conv_number, args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
-            args.dropout, args.z_dimension, args.alpha, args.beta, args.lamb,
+            args.dropout, args.z_dimension, args.kld_annealing, args.alpha, args.beta, args.lamb,
             args.kernel_initializer, args.activation, args.optimizer, args.learning_rate,
             args.batch_size, args.random_sampling, args.epochs, args.random_seed)
 
@@ -430,7 +432,7 @@ class VAE():
     '''
     def __init__(self, input_shape=(27, 27, 1), scaled=False, padded=False, conv_number=3,
                  filter_base_length=3, filter_base_stride=3, filter_base=9, filter_length=3, filter_stride=3, filter_factor=9,
-                 dropout=False, z_dim=5, alpha=1.0, beta=8.0, lamb=1.0,
+                 dropout=False, z_dim=5, kl_anneal=False, alpha=1.0, beta=8.0, lamb=1.0,
                  krnl_init='lecun_normal', act='selu',
                  opt='nadam', lr=1e-3, batch_size=169, dataset_size=4326400):
         self.eps = 1e-8
@@ -465,6 +467,7 @@ class VAE():
         # latent dimension
         self.z_dim = z_dim
         # total correlation weights
+        self.kl_anneal_b = kl_anneal
         self.alpha, self.beta, self.lamb = alpha, beta, lamb
         # kernel initializer and activation
         self.krnl_init = krnl_init
@@ -500,11 +503,11 @@ class VAE():
         params = (self.conv_number,
                   self.filter_base_length, self.filter_base_stride, self.filter_base,
                   self.filter_length, self.filter_stride, self.filter_factor,
-                  self.dropout, self.z_dim, self.alpha, self.beta, self.lamb,
+                  self.dropout, self.z_dim, self.kl_anneal_b, self.alpha, self.beta, self.lamb,
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = 'btcvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
+        file_name = 'btcvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
         return file_name
 
 
@@ -1131,6 +1134,8 @@ class VAE():
         t = np.linspace(0., 1., num_epochs*self.num_batches)
         if np.all(np.array([self.alpha, self.beta, self.lamb]) == 0):
             kl_anneal = np.zeros((num_epochs, self.num_batches))
+        elif not self.kl_anneal_b:
+            kl_anneal = np.ones((num_epochs, self.num_batches))
         else:
             n_cycles = 4
             linear_kl_anneal = np.linspace(0., 1., num_epochs*self.num_batches//(2*n_cycles))
@@ -1194,7 +1199,7 @@ if __name__ == '__main__':
     (VERBOSE, RSTRT, PLOT, PARALLEL, GPU, THREADS,
      NAME, N, I, NS, SC, CP,
      CN, FBL, FBS, FB, FL, FS, FF,
-     DO, ZD, ALPHA, BETA, LAMBDA,
+     DO, ZD, KA, ALPHA, BETA, LAMBDA,
      KI, AN, OPT, LR,
      BS, RS, EP, SEED) = parse_args()
 
@@ -1235,7 +1240,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = VAE(IS, SC, CP, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
+    MDL = VAE(IS, SC, CP, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, KA, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
