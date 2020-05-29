@@ -515,7 +515,7 @@ class VAE():
                   self.krnl_init, self.act,
                   self.vae_opt_n, self.lr,
                   self.batch_size)
-        file_name = 'btccvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
+        file_name = 'btccvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
         return file_name
 
 
@@ -963,7 +963,7 @@ class VAE():
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             if len(beta_batch) == 2:
                 z_batch = sample_gaussian(beta_batch)
-            elif len(beta_batch) == 1:
+            else:
                 z_batch = beta_batch
         else:
             z_batch = beta_batch
