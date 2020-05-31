@@ -18,6 +18,7 @@ from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate, Lambd
                                      Dense, BatchNormalization, Conv2D, Conv2DTranspose,
                                      SpatialDropout2D, AlphaDropout, Activation, LeakyReLU)
 from tensorflow.keras.optimizers import SGD, RMSprop, Adam, Adamax, Nadam
+from tensorflow_addons.optimizers import AdamW, LAMB, LazyAdam, NovoGrad, RectifiedAdam, SGDW, Yogi, Lookahead
 from tensorflow.keras.models import Model, save_model, load_model
 from tensorflow.keras.utils import to_categorical
 from tensorflow.python.training.tracking.util import Checkpoint
@@ -89,6 +90,10 @@ def parse_args():
                         type=str, default='sgd')
     parser.add_argument('-gop', '--gan_optimizer', help='optimizer for gan',
                         type=str, default='adam')
+    parser.add_argument('-dla', '--discriminator_lookahead', help='toggle discriminator lookahead optimization',
+                        action='store_true')
+    parser.add_argument('-gla', '--gan_lookahead', help='toggle gan lookahead optimization',
+                        action='store_true')
     parser.add_argument('-dlr', '--discriminator_learning_rate', help='learning rate for discriminator',
                         type=float, default=1e-2)
     parser.add_argument('-glr', '--gan_learning_rate', help='learning rate for generator',
@@ -113,7 +118,8 @@ def parse_args():
             args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
             args.generator_dropout, args.discriminator_dropout, args.z_dimension, args.c_dimension, args.u_dimension,
             args.kernel_initializer, args.activation,
-            args.discriminator_optimizer, args.gan_optimizer, args.discriminator_learning_rate, args.gan_learning_rate,
+            args.discriminator_optimizer, args.gan_optimizer, args.discriminator_lookahead, args.gan_lookahead,
+            args.discriminator_learning_rate, args.gan_learning_rate,
             args.gan_lambda, args.trainer_alpha, args.trainer_beta,
             args.batch_size, args.random_sampling, args.epochs, args.random_seed)
 
@@ -427,7 +433,7 @@ class InfoCGAN():
                  gen_drop=False, dsc_drop=False,
                  z_dim=100, t_dim=2, c_dim=5, u_dim=0,
                  krnl_init='lecun_normal', act='selu',
-                 dsc_opt_n='sgd', gan_opt_n='adam', dsc_lr=1e-2, gan_lr=1e-3, lamb=1.0,
+                 dsc_opt_n='sgd', gan_opt_n='adam', dsc_la=False, gan_la=False, dsc_lr=1e-2, gan_lr=1e-3, lamb=1.0,
                  batch_size=169,
                  alpha=0.0, beta=0.0):
         ''' initialize model parameters '''
@@ -476,6 +482,8 @@ class InfoCGAN():
         # discriminator and gan optimizers
         self.dsc_opt_n = dsc_opt_n
         self.gan_opt_n = gan_opt_n
+        self.dsc_la = dsc_la
+        self.gan_la = gan_la
         # discriminator and gan learning rates
         self.dsc_lr = dsc_lr
         self.gan_lr = gan_lr
@@ -512,9 +520,9 @@ class InfoCGAN():
                   self.conv_number, self.filter_base_length, self.filter_base, self.filter_length, self.filter_factor,
                   self.gen_drop, self.dsc_drop, self.z_dim, self.c_dim, self.u_dim,
                   self.krnl_init, self.act,
-                  self.dsc_opt_n, self.gan_opt_n, self.dsc_lr, self.gan_lr,
+                  self.dsc_opt_n, self.gan_opt_n, self.dsc_la, self.gan_la, self.dsc_lr, self.gan_lr,
                   self.lamb, self.batch_size, self.alpha, self.beta)
-        file_name = 'infocgan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
+        file_name = 'infogan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:d}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
         return file_name
 
 
@@ -544,54 +552,58 @@ class InfoCGAN():
         self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
         self.gen_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='gen_t_input')
         # concatenate features
-        d = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_input])
+        x = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_input])
         # dense layer with same feature count as final convolution
-        d = Dense(units=np.prod(self.final_conv_shape),
+        u = 0
+        x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
-                  name='gen_dense_1')(d)
+                  name='gen_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
-            d = LeakyReLU(alpha=0.01, name='gen_dense_lrelu_1')(d)
-        if self.act == 'selu':
-            d = Activation(activation='selu', name='gen_dense_selu_1')(d)
+            x = LeakyReLU(alpha=0.01, name='gen_dense_lrelu_{}'.format(u))(x)
+            x = BatchNormalization(name='gen_dense_batchnorm_{}'.format(u))(x)
+        elif self.act == 'selu':
+            x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
+        u += 1
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
-            d = Dense(units=np.prod(self.final_conv_shape),
+            x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='gen_dense_2')(d)
+                      name='gen_dense_{}'.format(u))(x)
             if self.act == 'lrelu':
-                d = LeakyReLU(alpha=0.01, name='gen_dense_lrelu_2')(d)
-            if self.act == 'selu':
-                d = Activation(activation='selu', name='gen_dense_selu_2')(d)
+                x = LeakyReLU(alpha=0.01, name='gen_dense_lrelu_{}'.format(u))(x)
+                x = BatchNormalization(name='gen_dense_batchnorm_{}'.format(u))(x)
+            elif self.act == 'selu':
+                x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
+            u += 1
         # reshape to final convolution shape
-        c = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(d)
+        convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         if self.gen_drop:
             if self.act == 'lrelu':
-                c = SpatialDropout2D(rate=0.5, name='gen_dense_drop_0')(c)
-            if self.act == 'selu':
-                c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='gen_dense_drop_0')(c)
+                convt = SpatialDropout2D(rate=0.5, name='gen_rshp_drop_0')(convt)
+            elif self.act == 'selu':
+                convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='gen_rshp_drop_0')(convt)
         u = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
-            c = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
-                                kernel_initializer=self.krnl_init,
-                                padding=self.padding, strides=self.filter_stride,
-                                name='gen_convt_{}'.format(u))(c)
+            convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
+                                    kernel_initializer=self.krnl_init,
+                                    padding=self.padding, strides=self.filter_stride,
+                                    name='gen_convt_{}'.format(u))(convt)
             if self.act == 'lrelu':
-                c = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(c)
-                c = LeakyReLU(alpha=0.01, name='gen_convt_lrelu_{}'.format(u))(c)
+                convt = LeakyReLU(alpha=0.01, name='gen_convt_lrelu_{}'.format(u))(convt)
+                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
                 if self.gen_drop:
-                    c = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(c)
-            if self.act == 'selu':
-                c = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(c)
+                    convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
+            elif self.act == 'selu':
+                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
                 if self.gen_drop:
-                    c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(c)
+                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
             u += 1
-        # configuration output
         self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                             padding=self.padding, strides=self.filter_base_stride,
-                                            name='gen_x_output')(c)
+                                            name='gen_x_output')(convt)
         self.gen_t_output = self.gen_t_input
         # build generator
         self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_output],
@@ -612,74 +624,105 @@ class InfoCGAN():
             out_act = 'sigmoid'
             loss = 'binary_crossentropy'
             conv_constraint = None
-        c = self.dsc_x_input
+        conv = self.dsc_x_input
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
             filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
-            c = Conv2D(filters=filter_number, kernel_size=filter_length,
-                       kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
-                       padding=self.padding, strides=filter_stride,
-                       name='dsc_conv_{}'.format(i))(c)
+            conv = Conv2D(filters=filter_number, kernel_size=filter_length,
+                          kernel_initializer=self.krnl_init, kernel_constraint=conv_constraint,
+                          padding=self.padding, strides=filter_stride,
+                          name='dsc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
-                c = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(c)
-                c = LeakyReLU(alpha=0.01, name='dsc_conv_lrelu_{}'.format(i))(c)
+                conv = LeakyReLU(alpha=0.01, name='dsc_conv_lrelu_{}'.format(i))(conv)
+                conv = BatchNormalization(name='dsc_conv_batchnorm_{}'.format(i))(conv)
                 if self.dsc_drop:
-                    c = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i))(c)
-            if self.act == 'selu':
-                c = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(c)
+                    conv = SpatialDropout2D(rate=0.5, name='dsc_conv_drop_{}'.format(i))(conv)
+            elif self.act == 'selu':
+                conv = Activation(activation='selu', name='dsc_conv_selu_{}'.format(i))(conv)
                 if self.dsc_drop:
-                    c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(c)
+                    conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dsc_conv_drop_{}'.format(i))(conv)
         # flatten final convolutional layer
-        d = Flatten(name='dsc_fltn_0')(c)
+        x = Flatten(name='dsc_fltn_0')(conv)
         u = 0
         if self.final_conv_shape[:2] != (1, 1):
             # dense layer
-            d = Dense(units=np.prod(self.final_conv_shape),
+            x = Dense(units=np.prod(self.final_conv_shape),
                       kernel_initializer=self.krnl_init,
-                      name='dsc_dense_{}'.format(u))(d)
+                      name='dsc_dense_{}'.format(u))(x)
             if self.act == 'lrelu':
-                d = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_{}'.format(u))(d)
-            if self.act == 'selu':
-                d = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(d)
+                x = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_{}'.format(u))(x)
+                x = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(x)
+            elif self.act == 'selu':
+                x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
             u += 1
-        # the dense layer is saved as a hidden layer
-        self.dsc_hidden = d
+        # the dense layer is saved as a hidden encoding layer
+        self.dsc_enc = x
         # dense layer
-        d = Dense(units=self.d_q_dim,
+        x = Dense(units=self.d_q_dim,
                   kernel_initializer=self.krnl_init,
-                  name='dsc_dense_{}'.format(u))(d)
+                  name='dsc_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
-            d = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_{}'.format(u))(d)
-        if self.act == 'selu':
-            d = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(d)
-        d = Concatenate(name='dsc_latent_concat')([d, self.dsc_t_input])
+            x = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_{}'.format(u))(x)
+            x = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(x)
+        elif self.act == 'selu':
+            x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
         u += 1
-        f = Dense(units=self.d_q_dim,
-                  kernel_initializer=self.krnl_init,
-                  name='dsc_dense_{}'.format(u))(d)
-        if self.act == 'lrelu':
-            f = LeakyReLU(alpha=0.01, name='dsc_dense_lrelu_{}'.format(u))(f)
-        if self.act == 'selu':
-            f = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(f)
+        x = Concatenate(name='dsc_concat_0')([x, self.dsc_t_input])
         # discriminator classification output (0, 1) -> (fake, real)
         self.dsc_v_output = Dense(units=1,
                                   kernel_initializer='glorot_uniform', activation=out_act,
-                                  name='dsc_v_output')(f)
+                                  name='dsc_v_output')(x)
         # build discriminator
         self.discriminator = Model(inputs=[self.dsc_x_input, self.dsc_t_input], outputs=[self.dsc_v_output],
                                    name='discriminator')
         # define optimizer
         if self.dsc_opt_n == 'sgd':
-            self.dsc_opt = SGD(lr=self.dsc_lr)
-        if self.dsc_opt_n == 'rmsprop':
-            self.dsc_opt = RMSprop(lr=self.dsc_lr)
-        if self.dsc_opt_n == 'adam':
-            self.dsc_opt = Adam(lr=self.dsc_lr, beta_1=0.5)
-        if self.dsc_opt_n == 'adamax':
-            self.dsc_opt = Adamax(lr=self.dsc_lr, beta_1=0.5)
-        if self.dsc_opt_n == 'nadam':
-            self.dsc_opt = Nadam(lr=self.dsc_lr, beta_1=0.5)
+            self.dsc_opt = SGD(learning_rate=self.dsc_lr)
+        elif self.dsc_opt_n == 'sgdm':
+            self.dsc_opt = SGD(learning_rate=self.dsc_lr, momentum=0.5)
+        elif self.dsc_opt_n == 'nsgd':
+            self.dsc_opt = SGD(learning_rate=self.dsc_lr, momentum=0.5, nesterov=True)
+        elif self.dsc_opt_n == 'sgdw':
+            self.dsc_opt = SGDW(weight_decay=1e-4, learning_rate=self.dsc_lr)
+        elif self.dsc_opt_n == 'sgdwm':
+            self.dsc_opt = SGDW(weight_decay=1e-4, learning_rate=self.dsc_lr, momentum=0.5)
+        elif self.dsc_opt_n == 'nsgdw':
+            self.dsc_opt = SGDW(weight_decay=1e-4, learning_rate=self.dsc_lr, momentum=0.5, nesterov=True)
+        elif self.dsc_opt_n == 'rmsprop':
+            self.dsc_opt = RMSprop(learning_rate=self.dsc_lr)
+        elif self.dsc_opt_n == 'c_rmsprop':
+            self.dsc_opt = RMSprop(learning_rate=self.dsc_lr, centered=True)
+        elif self.dsc_opt_n == 'adam':
+            self.dsc_opt = Adam(learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'adam_ams':
+            self.dsc_opt = Adam(learning_rate=self.dsc_lr, beta_1=0.5, amsgrad=True)
+        elif self.dsc_opt_n == 'adamw':
+            self.dsc_opt = AdamW(weight_decay=1e-4, learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'adamw_ams':
+            self.dsc_opt = AdamW(weight_decay=1e-4, learning_rate=self.dsc_lr, beta_1=0.5, amsgrad=True)
+        elif self.dsc_opt_n == 'adamax':
+            self.dsc_opt = Adamax(learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'adamax_ams':
+            self.dsc_opt = Adamax(learning_rate=self.dsc_lr, beta_1=0.5, amsgrad=True)
+        elif self.dsc_opt_n == 'nadam':
+            self.dsc_opt = Nadam(learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'novograd':
+            self.dsc_opt = NovoGrad(learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'novograd_ams':
+            self.dsc_opt = NovoGrad(learning_rate=self.dsc_lr, beta_1=0.5, amsgrad=True)
+        elif self.dsc_opt_n == 'lazyadam':
+            self.dsc_opt = LazyAdam(learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'lazyadam_ams':
+            self.dsc_opt = LazyAdam(learning_rate=self.dsc_lr, beta_1=0.5, amsgrad=True)
+        elif self.dsc_opt_n == 'rectifiedadam':
+            self.dsc_opt = RectifiedAdam(learning_rate=self.dsc_lr, beta_1=0.5)
+        elif self.dsc_opt_n == 'recitfiedadam_ams':
+            self.dsc_opt = RectifiedAdam(learning_rate=self.dsc_lr, beta_1=0.5, amsgrad=True)
+        elif self.dsc_opt_n == 'yogi':
+            self.dsc_opt = Yogi(learning_rate=self.dsc_lr, beta_1=0.5)
+        if self.dsc_la:
+            self.dsc_opt = Lookahead(self.dsc_opt)
         # compile discriminator
         self.discriminator.compile(loss=loss, optimizer=self.dsc_opt)
 
@@ -690,85 +733,79 @@ class InfoCGAN():
             # takes sample (real or fake) as input
             self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
             self.aux_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='aux_t_input')
-            c = self.aux_x_input
+            conv = self.aux_x_input
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
                 filter_length, filter_stride = get_filter_length_stride(i, self.filter_base_length, self.filter_base_stride, self.filter_length, self.filter_stride)
-                c = Conv2D(filters=filter_number, kernel_size=filter_length,
-                           kernel_initializer=self.krnl_init,
-                           padding=self.padding, strides=filter_stride,
-                           name='aux_conv_{}'.format(i))(c)
+                conv = Conv2D(filters=filter_number, kernel_size=filter_length,
+                              kernel_initializer=self.krnl_init,
+                              padding=self.padding, strides=filter_stride,
+                              name='aux_conv_{}'.format(i))(conv)
                 if self.act == 'lrelu':
-                    c = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(c)
-                    c = LeakyReLU(alpha=0.01, name='aux_conv_lrelu_{}'.format(i))(c)
+                    conv = LeakyReLU(alpha=0.01, name='aux_conv_lrelu_{}'.format(i))(conv)
+                    conv = BatchNormalization(name='aux_conv_batchnorm_{}'.format(i))(conv)
                     if self.dsc_drop:
-                        c = SpatialDropout2D(rate=0.5, name='aux_conv_drop_{}'.format(i))(c)
-                if self.act == 'selu':
-                    c = Activation(activation='selu', name='aux_conv_selu_{}'.format(i))(c)
+                        conv = SpatialDropout2D(rate=0.5, name='aux_conv_drop_{}'.format(i))(conv)
+                elif self.act == 'selu':
+                    conv = Activation(activation='selu', name='aux_conv_selu_{}'.format(i))(conv)
                     if self.dsc_drop:
-                        c = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(c)
+                        conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='aux_conv_drop_{}'.format(i))(conv)
             # flatten final convolutional layer
-            d = Flatten(name='aux_fltn_0')(c)
+            x = Flatten(name='aux_fltn_0')(conv)
+            u = 0
             if self.final_conv_shape[:2] != (1, 1):
                 # dense layer
-                d = Dense(units=np.prod(self.final_conv_shape),
+                x = Dense(units=np.prod(self.final_conv_shape),
                           kernel_initializer=self.krnl_init,
-                          name='aux_dense_0')(d)
+                          name='aux_dense_{}'.format(u))(x)
                 if self.act == 'lrelu':
-                    d = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_0')(d)
-                if self.act == 'selu':
-                    d = Activation(activation='selu', name='aux_dense_selu_0')(d)
+                    x = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_{}'.format(u))(x)
+                    x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
+                elif self.act == 'selu':
+                    x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
+                u += 1
             # dense layer
-            d = Dense(units=self.d_q_dim,
+            x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
-                      name='aux_dense_1')(d)
+                      name='aux_dense_{}'.format(u))(x)
             if self.act == 'lrelu':
-                d = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_1')(d)
-            if self.act == 'selu':
-                d = Activation(activation='selu', name='aux_dense_selu_1')(d)
-            d = Concatenate(name='aux_latent_concat')([d, self.aux_t_input])
-            f = Dense(units=self.d_q_dim,
-                      kernel_initializer=self.krnl_init,
-                      name='aux_dense_2')(d)
-            if self.act == 'lrelu':
-                f = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_2')(f)
-            if self.act == 'selu':
-                f = Activation(activation='selu', name='aux_dense_selu_2')(f)
+                x = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_{}'.format(u))(x)
+                x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
+            elif self.act == 'selu':
+                x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
+            u += 1
+            x = Concatenate(name='aux_concat_0')([x, self.aux_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_output_c')(f)
+                                      name='aux_c_output')(x)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_mu')(f)
+                                      name='aux_u_output')(x)
             # build auxiliary classifier
             self.auxiliary = Model(inputs=[self.aux_x_input, self.aux_t_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
         else:
             # initialize with dense layer taking the hidden generator layer as input
-            d = Dense(units=self.d_q_dim,
+            u = 0
+            x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
-                      name='aux_dense_0')(self.dsc_hidden)
+                      name='aux_dense_{}'.format(u))(self.dsc_enc)
             if self.act == 'lrelu':
-                d = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_0')(d)
-            if self.act == 'selu':
-                d = Activation(activation='selu', name='aux_dense_selu_0')(d)
-            d = Concatenate(name='aux_latent_concat')([d, self.dsc_t_input])
-            f = Dense(units=self.d_q_dim,
-                      kernel_initializer=self.krnl_init,
-                      name='aux_dense_1')(d)
-            if self.act == 'lrelu':
-                f = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_1')(f)
-            if self.act == 'selu':
-                f = Activation(activation='selu', name='aux_dense_selu_1')(f)
+                x = LeakyReLU(alpha=0.01, name='aux_dense_lrelu_{}'.format(u))(x)
+                x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
+            elif self.act == 'selu':
+                x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
+            u += 1
+            x = Concatenate(name='aux_concat_0')([x, self.dsc_t_input])
             # auxiliary output is a reconstruction of the categorical assignments fed into the generator
             self.aux_c_output = Dense(self.c_dim,
                                       kernel_initializer='glorot_uniform', activation='softmax',
-                                      name='aux_c_output')(f)
+                                      name='aux_c_output')(x)
             self.aux_u_output = Dense(self.u_dim,
                                       kernel_initializer='glorot_uniform', activation='tanh',
-                                      name='aux_u_output')(f)
+                                      name='aux_u_output')(x)
             # build auxiliary classifier
             self.auxiliary = Model(inputs=[self.dsc_x_input, self.dsc_t_input], outputs=[self.aux_c_output, self.aux_u_output],
                                    name='auxiliary')
@@ -783,9 +820,10 @@ class InfoCGAN():
             dsc_loss = 'binary_crossentropy'
         self.discriminator.trainable = False
         # discriminated generator output
-        gan_v_output = self.discriminator([self.gen_x_output, self.gen_t_output])
+        gen_output = self.generator([self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_input])
+        gan_v_output = self.discriminator(gen_output)
         # auxiliary output
-        gan_c_output, gan_u_output = self.auxiliary([self.gen_x_output, self.gen_t_output])
+        gan_c_output, gan_u_output = self.auxiliary(gen_output)
         # build GAN
         if self.wasserstein:
             self.gan_dsc = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_input],
@@ -796,20 +834,74 @@ class InfoCGAN():
                                  name='infocgan_auxiliary')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
-                self.gan_dsc_opt = SGD(lr=self.gan_lr)
-                self.gan_aux_opt = SGD(lr=self.gan_lr)
-            if self.gan_opt_n == 'rmsprop':
-                self.gan_dsc_opt = RMSprop(lr=self.gan_lr)
-                self.gan_aux_opt = RMSprop(lr=self.gan_lr)
-            if self.gan_opt_n == 'adam':
-                self.gan_dsc_opt = Adam(lr=self.gan_lr, beta_1=0.5)
-                self.gan_aux_opt = Adam(lr=self.gan_lr, beta_1=0.5)
-            if self.gan_opt_n == 'adamax':
-                self.gan_dsc_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
-                self.gan_aux_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
-            if self.gan_opt_n == 'nadam':
-                self.gan_dsc_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
-                self.gan_aux_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_dsc_opt = SGD(learning_rate=self.gan_lr)
+                self.gan_aux_opt = SGD(learning_rate=self.gan_lr)
+            elif self.gan_opt_n == 'sgdm':
+                self.gan_dsc_opt = SGD(learning_rate=self.gan_lr, momentum=0.5)
+                self.gan_aux_opt = SGD(learning_rate=self.gan_lr, momentum=0.5)
+            elif self.gan_opt_n == 'nsgd':
+                self.gan_dsc_opt = SGD(learning_rate=self.gan_lr, momentum=0.5, nesterov=True)
+                self.gan_aux_opt = SGD(learning_rate=self.gan_lr, momentum=0.5, nesterov=True)
+            elif self.gan_opt_n == 'sgdw':
+                self.gan_dsc_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr)
+                self.gan_aux_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr)
+            elif self.gan_opt_n == 'sgdwm':
+                self.gan_dsc_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr, momentum=0.5)
+                self.gan_aux_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr, momentum=0.5)
+            elif self.gan_opt_n == 'nsgdw':
+                self.gan_dsc_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr, momentum=0.5, nesterov=True)
+                self.gan_aux_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr, momentum=0.5, nesterov=True)
+            elif self.gan_opt_n == 'rmsprop':
+                self.gan_dsc_opt = RMSprop(learning_rate=self.gan_lr)
+                self.gan_aux_opt = RMSprop(learning_rate=self.gan_lr)
+            elif self.gan_opt_n == 'c_rmsprop':
+                self.gan_dsc_opt = RMSprop(learning_rate=self.gan_lr, centered=True)
+                self.gan_aux_opt = RMSprop(learning_rate=self.gan_lr, centered=True)
+            elif self.gan_opt_n == 'adam':
+                self.gan_dsc_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'adam_ams':
+                self.gan_dsc_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+                self.gan_aux_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'adamw':
+                self.gan_dsc_opt = AdamW(weight_decay=1e-4, learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = AdamW(weight_decay=1e-4, learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'adamw_ams':
+                self.gan_dsc_opt = AdamW(weight_decay=1e-4, learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+                self.gan_aux_opt = AdamW(weight_decay=1e-4, learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'adamax':
+                self.gan_dsc_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'adamax_ams':
+                self.gan_dsc_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+                self.gan_aux_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'nadam':
+                self.gan_dsc_opt = Nadam(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Nadam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'novograd':
+                self.gan_dsc_opt = NovoGrad(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = NovoGrad(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'novograd_ams':
+                self.gan_dsc_opt = NovoGrad(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+                self.gan_aux_opt = NovoGrad(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'lazyadam':
+                self.gan_dsc_opt = LazyAdam(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = LazyAdam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'lazyadam_ams':
+                self.gan_dsc_opt = LazyAdam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+                self.gan_aux_opt = LazyAdam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'rectifiedadam':
+                self.gan_dsc_opt = RectifiedAdam(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = RectifiedAdam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'recitfiedadam_ams':
+                self.gan_dsc_opt = RectifiedAdam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+                self.gan_aux_opt = RectifiedAdam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'yogi':
+                self.gan_dsc_opt = Yogi(learning_rate=self.gan_lr, beta_1=0.5)
+                self.gan_aux_opt = Yogi(learning_rate=self.gan_lr, beta_1=0.5)
+            if self.gan_la:
+                self.gan_dsc_opt = Lookahead(self.gan_dsc_opt)
+                self.gan_aux_opt = Lookahead(self.gan_aux_opt)
             # compile GAN
             self.gan_dsc.compile(loss=dsc_loss, optimizer=self.gan_dsc_opt)
             self.gan_aux.compile(loss={'auxiliary': 'categorical_crossentropy',
@@ -821,15 +913,51 @@ class InfoCGAN():
                              name='infocgan')
             # define GAN optimizer
             if self.gan_opt_n == 'sgd':
-                self.gan_opt = SGD(lr=self.gan_lr)
-            if self.gan_opt_n == 'rmsprop':
-                self.gan_opt = RMSprop(lr=self.gan_lr)
-            if self.gan_opt_n == 'adam':
-                self.gan_opt = Adam(lr=self.gan_lr, beta_1=0.5)
-            if self.gan_opt_n == 'adamax':
-                self.gan_opt = Adamax(lr=self.gan_lr, beta_1=0.5)
-            if self.gan_opt_n == 'nadam':
-                self.gan_opt = Nadam(lr=self.gan_lr, beta_1=0.5)
+                self.gan_opt = SGD(learning_rate=self.gan_lr)
+            elif self.gan_opt_n == 'sgdm':
+                self.gan_opt = SGD(learning_rate=self.gan_lr, momentum=0.5)
+            elif self.gan_opt_n == 'nsgd':
+                self.gan_opt = SGD(learning_rate=self.gan_lr, momentum=0.5, nesterov=True)
+            elif self.gan_opt_n == 'sgdw':
+                self.gan_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr)
+            elif self.gan_opt_n == 'sgdwm':
+                self.gan_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr, momentum=0.5)
+            elif self.gan_opt_n == 'nsgdw':
+                self.gan_opt = SGDW(weight_decay=1e-4, learning_rate=self.gan_lr, momentum=0.5, nesterov=True)
+            elif self.gan_opt_n == 'rmsprop':
+                self.gan_opt = RMSprop(learning_rate=self.gan_lr)
+            elif self.gan_opt_n == 'c_rmsprop':
+                self.gan_opt = RMSprop(learning_rate=self.gan_lr, centered=True)
+            elif self.gan_opt_n == 'adam':
+                self.gan_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'adam_ams':
+                self.gan_opt = Adam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'adamw':
+                self.gan_opt = AdamW(weight_decay=1e-4, learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'adamw_ams':
+                self.gan_opt = AdamW(weight_decay=1e-4, learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'adamax':
+                self.gan_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'adamax_ams':
+                self.gan_opt = Adamax(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'nadam':
+                self.gan_opt = Nadam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'novograd':
+                self.gan_opt = NovoGrad(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'novograd_ams':
+                self.gan_opt = NovoGrad(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'lazyadam':
+                self.gan_opt = LazyAdam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'lazyadam_ams':
+                self.gan_opt = LazyAdam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'rectifiedadam':
+                self.gan_opt = RectifiedAdam(learning_rate=self.gan_lr, beta_1=0.5)
+            elif self.gan_opt_n == 'recitfiedadam_ams':
+                self.gan_opt = RectifiedAdam(learning_rate=self.gan_lr, beta_1=0.5, amsgrad=True)
+            elif self.gan_opt_n == 'yogi':
+                self.gan_opt = Yogi(learning_rate=self.gan_lr, beta_1=0.5)
+            if self.gan_la:
+                self.gan_opt = Lookahead(self.gan_opt)
             # compile GAN
             self.gan.compile(loss={'discriminator': dsc_loss,
                                    'auxiliary': 'categorical_crossentropy',
@@ -1122,7 +1250,7 @@ class InfoCGAN():
         ''' train infoCGAN '''
         x_sample_0 = self.sample_latent_distribution(num_samples=self.batch_size)
         x_sample_1 = self.sample_latent_distribution(num_samples=self.batch_size)
-        x_generated, t_generated = self.generator.predict(x=x_sample_0)
+        x_generated, t_generated = self.generator.predict(x=x_sample_0, batch_size=self.batch_size)
         dsc_real_loss = self.train_discriminator(x_batch=x_batch, t_batch=t_batch, real=True)
         dsc_fake_loss = self.train_discriminator(x_batch=x_generated, t_batch=t_generated, real=False)
         gan_loss = self.train_generator(x_sample=(x_sample_0, x_sample_1))
@@ -1218,7 +1346,7 @@ if __name__ == '__main__':
      CN, FBL, FBS, FB, FL, FS, FF,
      GD, DD, ZD, CD, UD,
      KI, AN,
-     DOPT, GOPT, DLR, GLR,
+     DOPT, GOPT, DLA, GLA, DLR, GLR,
      GLAMB, TALPHA, TBETA,
      BS, RS, EP, SEED) = parse_args()
 
@@ -1253,8 +1381,11 @@ if __name__ == '__main__':
             TPARAM[i, j, :, 0] = SH[i]
             TPARAM[i, j, :, 1] = ST[j]
 
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
+    if SEED == -1:
+        np.random.seed(None)
+    else:
+        np.random.seed(SEED)
+        tf.random.set_seed(SEED)
     if GPU:
         DEVICE = '/GPU:0'
     else:
@@ -1266,14 +1397,14 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = InfoCGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, TD, CD, UD, KI, AN, DOPT, GOPT, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
+    MDL = InfoCGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, TD, CD, UD, KI, AN, DOPT, GOPT, DLA, GLA, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
         MDL.load_weights(NAME, N, I, NS, SC, SEED)
         if VERBOSE:
             MDL.model_summaries()
-        # MDL.load_latest_checkpoint(NAME, N, I, NS)
+        # MDL.load_latest_checkpoint(NAME, N, I, NS, SC, SEED)
         MDL.fit(CONF, TPARAM, num_epochs=EP, n_critic=4, save_step=EP, random_sampling=RS, verbose=VERBOSE)
         MDL.save_losses(NAME, N, I, NS, SC, SEED)
         MDL.save_weights(NAME, N, I, NS, SC, SEED)
@@ -1286,7 +1417,7 @@ if __name__ == '__main__':
         except:
             if VERBOSE:
                 MDL.model_summaries()
-            # MDL.initialize_checkpoint_managers(NAME, N, I, NS)
+            # MDL.initialize_checkpoint_managers(NAME, N, I, NS, SC, SEED)
             MDL.fit(CONF, TPARAM, num_epochs=EP, n_critic=4, save_step=EP, random_sampling=RS, verbose=VERBOSE)
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)

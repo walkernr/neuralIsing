@@ -626,12 +626,11 @@ class VAE():
                           padding=self.padding, strides=filter_stride,
                           name='enc_conv_{}'.format(i))(conv)
             if self.act == 'lrelu':
-                # conv = BatchNormalization(name='enc_conv_batchnorm_{}'.format(i))(conv)
                 conv = LeakyReLU(alpha=0.1, name='enc_conv_lrelu_{}'.format(i))(conv)
                 conv = BatchNormalization(name='enc_conv_batchnorm_{}'.format(i))(conv)
                 if self.dropout:
                     conv = SpatialDropout2D(rate=0.5, name='enc_conv_drop_{}'.format(i))(conv)
-            if self.act == 'selu':
+            elif self.act == 'selu':
                 conv = Activation(activation='selu', name='enc_conv_selu_{}'.format(i))(conv)
                 if self.dropout:
                     conv = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='enc_conv_drop_{}'.format(i))(conv)
@@ -644,51 +643,20 @@ class VAE():
                       kernel_initializer=self.krnl_init,
                       name='enc_dense_{}'.format(u))(x)
             if self.act == 'lrelu':
-                # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
                 x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
                 x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-            if self.act == 'selu':
+            elif self.act == 'selu':
                 x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
             u += 1
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
                   name='enc_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
-            # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
             x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
             x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        if self.act == 'selu':
+        elif self.act == 'selu':
             x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         u += 1
-        # x = Dense(units=np.prod(self.final_conv_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='enc_dense_{}'.format(u))(x)
-        # if self.act == 'lrelu':
-        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
-        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
-        # u += 1
-        # x = Dense(units=np.prod(self.final_conv_shape)//2,
-        #           kernel_initializer=self.krnl_init,
-        #           name='enc_dense_{}'.format(u))(x)
-        # if self.act == 'lrelu':
-        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
-        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
-        # u += 1
-        # x = Dense(units=np.prod(self.final_conv_shape)//4,
-        #           kernel_initializer=self.krnl_init,
-        #           name='enc_dense_{}'.format(u))(x)
-        # if self.act == 'lrelu':
-        #     # x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
-        #     x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             # mean
             self.mu = Dense(units=self.z_dim,
@@ -719,44 +687,13 @@ class VAE():
         x = self.dec_z_input
         # dense layer with same feature count as final convolution
         u = 0
-        # x = Dense(units=np.prod(self.final_conv_shape)//4,
-        #           kernel_initializer=self.krnl_init,
-        #           name='dec_dense_{}'.format(u))(self.dec_z_input)
-        # if self.act == 'lrelu':
-        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
-        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
-        # u += 1
-        # x = Dense(units=np.prod(self.final_conv_shape)//2,
-        #           kernel_initializer=self.krnl_init,
-        #           name='dec_dense_{}'.format(u))(x)
-        # if self.act == 'lrelu':
-        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
-        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
-        # u += 1
-        # x = Dense(units=np.prod(self.final_conv_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='dec_dense_{}'.format(u))(x)
-        # if self.act == 'lrelu':
-        #     # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        #     x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
-        #     x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        # if self.act == 'selu':
-        #     x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
-        # u += 1
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
                   name='dec_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
-            # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
             x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
             x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        if self.act == 'selu':
+        elif self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
         u += 1
         if self.final_conv_shape[:2] != (1, 1):
@@ -765,27 +702,17 @@ class VAE():
                       kernel_initializer=self.krnl_init,
                       name='dec_dense_{}'.format(u))(x)
             if self.act == 'lrelu':
-                # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
                 x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
                 x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-            if self.act == 'selu':
+            elif self.act == 'selu':
                 x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
-        u += 1
-        x = Dense(units=np.prod(self.final_conv_shape),
-                  kernel_initializer=self.krnl_init,
-                  name='dec_dense_{}'.format(u))(x)
-        if self.act == 'lrelu':
-            # x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
-            x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-        if self.act == 'selu':
-            x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+            u += 1
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='dec_rshp_0')(x)
         if self.dropout:
             if self.act == 'lrelu':
                 convt = SpatialDropout2D(rate=0.5, name='dec_rshp_drop_0')(convt)
-            if self.act == 'selu':
+            elif self.act == 'selu':
                 convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='dec_rshp_drop_0')(convt)
         u = 0
         # transform to sample shape with transposed convolutions
@@ -796,12 +723,11 @@ class VAE():
                                     padding=self.padding, strides=self.filter_stride,
                                     name='dec_convt_{}'.format(u))(convt)
             if self.act == 'lrelu':
-                # convt = BatchNormalization(name='dec_convt_batchnorm_{}'.format(u))(convt)
                 convt = LeakyReLU(alpha=0.1, name='dec_convt_lrelu_{}'.format(u))(convt)
                 convt = BatchNormalization(name='dec_convt_batchnorm_{}'.format(u))(convt)
                 if self.dropout:
                     convt = SpatialDropout2D(rate=0.5, name='dec_convt_drop_{}'.format(u))(convt)
-            if self.act == 'selu':
+            elif self.act == 'selu':
                 convt = Activation(activation='selu', name='dec_convt_selu_{}'.format(u))(convt)
                 if self.dropout:
                     convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='dec_convt_drop_{}'.format(u))(convt)
@@ -1228,8 +1154,11 @@ if __name__ == '__main__':
     NH, NT = H.size, T.size
     IS = (N, N, 1)
 
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
+    if SEED == -1:
+        np.random.seed(None)
+    else:
+        np.random.seed(SEED)
+        tf.random.set_seed(SEED)
     if GPU:
         DEVICE = '/GPU:0'
     else:
@@ -1248,7 +1177,7 @@ if __name__ == '__main__':
         MDL.load_weights(NAME, N, I, NS, SC, SEED)
         if VERBOSE:
             MDL.model_summaries()
-        # MDL.load_latest_checkpoint(NAME, N, I, NS)
+        # MDL.load_latest_checkpoint(NAME, N, I, NS, SC, SEED)
         MDL.fit(CONF, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
         MDL.save_losses(NAME, N, I, NS, SC, SEED)
         MDL.save_weights(NAME, N, I, NS, SC, SEED)
@@ -1261,7 +1190,7 @@ if __name__ == '__main__':
         except:
             if VERBOSE:
                 MDL.model_summaries()
-            # MDL.initialize_checkpoint_managers(NAME, N, I, NS)
+            # MDL.initialize_checkpoint_managers(NAME, N, I, NS, SC, SEED)
             MDL.fit(CONF, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)
