@@ -16,7 +16,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.layers import (Input, Flatten, Reshape, Lambda, Concatenate,
                                      Dense, BatchNormalization, Conv2D, Conv2DTranspose,
                                      SpatialDropout2D, AlphaDropout, Activation, LeakyReLU)
-from tensorflow.keras.optimizers import SGD, Adam, Adamax, Nadam
+from tensorflow.keras.optimizers import SGD, RMSprop, Adam, Adamax, Nadam
 from tensorflow_addons.optimizers import AdamW, LAMB, LazyAdam, NovoGrad, RectifiedAdam, SGDW, Yogi, Lookahead
 from tensorflow.keras.models import Model, save_model, load_model
 from tensorflow.keras.utils import to_categorical
@@ -87,6 +87,8 @@ def parse_args():
                         type=str, default='selu')
     parser.add_argument('-op', '--optimizer', help='optimizer',
                         type=str, default='nadam')
+    parser.add_argument('-la', '--lookahead', help='toggle lookahead optimizer',
+                        action='store_true')
     parser.add_argument('-lr', '--learning_rate', help='learning rate',
                         type=float, default=1e-3)
     parser.add_argument('-bs', '--batch_size', help='size of batches',
@@ -102,7 +104,7 @@ def parse_args():
             args.name, args.lattice_length, args.sample_interval, args.sample_number, args.scale_data, args.conv_padding,
             args.conv_number, args.filter_base_length, args.filter_base_stride, args.filter_base, args.filter_length, args.filter_stride, args.filter_factor,
             args.dropout, args.z_dimension, args.kld_annealing, args.alpha, args.beta, args.lamb,
-            args.kernel_initializer, args.activation, args.optimizer, args.learning_rate,
+            args.kernel_initializer, args.activation, args.optimizer, args.lookahead, args.learning_rate,
             args.batch_size, args.random_sampling, args.epochs, args.random_seed)
 
 
@@ -436,11 +438,10 @@ class VAE():
     '''
     def __init__(self, input_shape=(27, 27, 1), scaled=False, padded=False, conv_number=3,
                  filter_base_length=3, filter_base_stride=3, filter_base=9, filter_length=3, filter_stride=3, filter_factor=9,
-                 dropout=False, z_dim=5, kl_anneal=False, alpha=1.0, beta=8.0, lamb=1.0,
+                 dropout=False, z_dim=5, t_dim=2, kl_anneal=False, alpha=1.0, beta=8.0, lamb=1.0,
                  krnl_init='lecun_normal', act='selu',
-                 opt='nadam', lr=1e-3, batch_size=169, dataset_size=4326400, therm_range=(8, 8)):
+                 opt='nadam', la=False, lr=1e-3, batch_size=169, dataset_size=4326400, therm_range=(8, 8)):
         self.eps = 1e-8
-        self.t_dim = 2
         ''' initialize model parameters '''
         self.scaled = scaled
         self.padded = padded
@@ -471,6 +472,7 @@ class VAE():
         # latent and classification dimensions
         # latent dimension
         self.z_dim = z_dim
+        self.t_dim = t_dim
         # total correlation weights
         self.kl_anneal_b = kl_anneal
         self.alpha, self.beta, self.lamb = alpha, beta, lamb
@@ -484,6 +486,7 @@ class VAE():
         self.out_init = 'glorot_uniform'
         # optimizer
         self.vae_opt_n = opt
+        self.la = la
         # learning rate
         self.lr = lr
         # batch size, dataset size, and log importance weight
@@ -513,9 +516,9 @@ class VAE():
                   self.filter_length, self.filter_stride, self.filter_factor,
                   self.dropout, self.z_dim, self.kl_anneal_b, self.alpha, self.beta, self.lamb,
                   self.krnl_init, self.act,
-                  self.vae_opt_n, self.lr,
+                  self.vae_opt_n, self.la, self.lr,
                   self.batch_size)
-        file_name = 'btccvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:.0e}.{}'.format(*params)
+        file_name = 'btccvae.{}.{}.{}.{}.{}.{}.{}.{:d}.{}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{}.{}.{:d}.{:.0e}.{}'.format(*params)
         return file_name
 
 
@@ -662,8 +665,7 @@ class VAE():
             elif self.act == 'selu':
                 x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
             u += 1
-        x = Concatenate(name='enc_concat')([x, self.enc_t_input])
-        x = Dense(units=np.prod(self.final_conv_shape),
+        x = Dense(units=128,
                   kernel_initializer=self.krnl_init,
                   name='enc_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
@@ -672,6 +674,7 @@ class VAE():
         elif self.act == 'selu':
             x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
         u += 1
+        x = Concatenate(name='enc_concat')([x, self.enc_t_input])
         if np.any(np.array([self.alpha, self.beta, self.lamb]) > 0):
             # mean
             self.mu = Dense(units=self.z_dim,
@@ -702,7 +705,7 @@ class VAE():
         x = self.dec_z_input
         # dense layer with same feature count as final convolution
         u = 0
-        x = Dense(units=np.prod(self.final_conv_shape),
+        x = Dense(units=128+self.t_dim,
                   kernel_initializer=self.krnl_init,
                   name='dec_dense_{}'.format(u))(x)
         if self.act == 'lrelu':
@@ -711,6 +714,7 @@ class VAE():
         elif self.act == 'selu':
             x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
         u += 1
+        self.dec_t_output = Dense(units=2, kernel_initializer=self.out_init, activation='sigmoid', name='dec_t_output')(x)
         if self.final_conv_shape[:2] != (1, 1):
             # repeated dense layer
             x = Dense(units=np.prod(self.final_conv_shape),
@@ -722,8 +726,16 @@ class VAE():
             elif self.act == 'selu':
                 x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
             u += 1
+        x = Dense(units=np.prod(self.final_conv_shape),
+                  kernel_initializer=self.krnl_init,
+                  name='dec_dense_{}'.format(u))(x)
+        if self.act == 'lrelu':
+            x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+            x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        elif self.act == 'selu':
+            x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        u += 1
         # reshape to final convolution shape
-        self.dec_t_output = Dense(units=2, kernel_initializer=self.out_init, activation='sigmoid', name='dec_t_output')(x)
         convt = Reshape(target_shape=self.final_conv_shape, name='dec_rshp_0')(x)
         if self.dropout:
             if self.act == 'lrelu':
@@ -782,92 +794,50 @@ class VAE():
         # define VAE optimizer
         if self.vae_opt_n == 'sgd':
             self.vae_opt = SGD(learning_rate=self.lr)
-        elif self.vae_opt_n == 'lasgd':
-            self.vae_opt = Lookahead(SGD(learning_rate=self.lr))
         elif self.vae_opt_n == 'sgdm':
-            self.vae_opt = SGD(learning_rate=self.lr, momentum=0.9)
-        elif self.vae_opt_n == 'lasgdm':
-            self.vae_opt = Lookahead(SGD(learning_rate=self.lr, momentum=0.9))
+            self.vae_opt = SGD(learning_rate=self.lr, momentum=0.5)
         elif self.vae_opt_n == 'nsgd':
-            self.vae_opt = SGD(learning_rate=self.lr, momentum=0.9, nesterov=True)
-        elif self.vae_opt_n == 'lansgd':
-            self.vae_opt = Lookahead(SGD(learning_rate=self.lr, momentum=0.9, nesterov=True))
-        elif self.vae_opt_n == 'rmsprop':
-            self.vae_opt = RMSprop(learning_rate=self.lr)
-        elif self.vae_opt_n == 'larmsprop':
-            self.vae_opt = Lookahead(RMSprop(learning_rate=self.lr))
-        elif self.vae_opt_n == 'crmsprop':
-            self.vae_opt = RMSprop(learning_rate=self.lr, centered=True)
-        elif self.vae_opt_n == 'lacrmsprop':
-            self.vae_opt = Lookahead(RMSprop(learning_rate=self.lr, centered=True))
-        elif self.vae_opt_n == 'adam':
-            self.vae_opt = Adam(learning_rate=self.lr)
-        elif self.vae_opt_n == 'laadam':
-            self.vae_opt = Lookahead(Adam(learning_rate=self.lr))
-        elif self.vae_opt_n == 'adamams':
-            self.vae_opt = Adam(learning_rate=self.lr, amsgrad=True)
-        elif self.vae_opt_n == 'laadamams':
-            self.vae_opt = Lookahead(Adam(learning_rate=self.lr, amsgrad=True))
-        elif self.vae_opt_n == 'adamax':
-            self.vae_opt = Adamax(learning_rate=self.lr)
-        elif self.vae_opt_n == 'laadamax':
-            self.vae_opt = Lookahead(Adamax(learning_rate=self.lr))
-        elif self.vae_opt_n == 'nadam':
-            self.vae_opt = Nadam(learning_rate=self.lr)
-        elif self.vae_opt_n == 'lanadam':
-            self.vae_opt = Lookahead(Nadam(learning_rate=self.lr))
-        elif self.vae_opt_n == 'adamw':
-            self.vae_opt = AdamW(weight_decay=1e-4, learning_rate=self.lr)
-        elif self.vae_opt_n == 'laadamw':
-            self.vae_opt = Lookahead(AdamW(weight_decay=1e-4, learning_rate=self.lr))
-        elif self.vae_opt_n == 'adamwams':
-            self.vae_opt = AdamW(weight_decay=1e-4, learning_rate=self.lr, amsgrad=True)
-        elif self.vae_opt_n == 'laadamwams':
-            self.vae_opt = Lookahead(AdamW(weight_decay=1e-4, learning_rate=self.lr, amsgrad=True))
-        elif self.vae_opt_n == 'lamb':
-            self.vae_opt = LAMB(learning_rate=self.lr)
-        elif self.vae_opt_n == 'lalamb':
-            self.vae_opt = Lookahead(LAMB(learning_rate=self.lr))
-        elif self.vae_opt_n == 'ladam':
-            self.vae_opt = LazyAdam(learning_rate=self.lr)
-        elif self.vae_opt_n == 'laladam':
-            self.vae_opt = Lookahead(LazyAdam(learning_rate=self.lr))
-        elif self.vae_opt_n == 'ladamams':
-            self.vae_opt = LazyAdam(learning_rate=self.lr, amsgrad=True)
-        elif self.vae_opt_n == 'laladamams':
-            self.vae_opt = Lookahead(LazyAdam(learning_rate=self.lr, amsgrad=True))
-        elif self.vae_opt_n == 'novograd':
-            self.vae_opt = NovoGrad(learning_rate=self.lr)
-        elif self.vae_opt_n == 'lanovograd':
-            self.vae_opt = Lookahead(NovoGrad(learning_rate=self.lr))
-        elif self.vae_opt_n == 'novogradams':
-            self.vae_opt = NovoGrad(learning_rate=self.lr, asmgrad=True)
-        elif self.vae_opt_n == 'lanovogradams':
-            self.vae_opt = Lookahead(NovoGrad(learning_rate=self.lr, amsgrad=True))
-        elif self.vae_opt_n == 'radam':
-            self.vae_opt = RectifiedAdam(learning_rate=self.lr)
-        elif self.vae_opt_n == 'ranger':
-            self.vae_opt = Lookahead(RectifiedAdam(learning_rate=self.lr))
-        elif self.vae_opt_n == 'radamams':
-            self.vae_opt = RectifiedAdam(learning_rate=self.lr, amsgrad=True)
-        elif self.vae_opt_n == 'rangerams':
-            self.vae_opt = Lookahead(RectifiedAdam(learning_rate=self.lr, amsgrad=True))
+            self.vae_opt = SGD(learning_rate=self.lr, momentum=0.5, nesterov=True)
         elif self.vae_opt_n == 'sgdw':
             self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr)
-        elif self.vae_opt_n == 'lasgdw':
-            self.vae_opt = Lookahead(SGDW(weight_decay=1e-4, learning_rate=self.lr))
         elif self.vae_opt_n == 'sgdwm':
-            self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9)
-        elif self.vae_opt_n == 'lasgdwm':
-            self.vae_opt = Lookahead(SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9))
+            self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.5)
         elif self.vae_opt_n == 'nsgdw':
-            self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9, nesterov=True)
-        elif self.vae_opt_n == 'lansgdw':
-            self.vae_opt = Lookahead(SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.9, nesterov=True))
+            self.vae_opt = SGDW(weight_decay=1e-4, learning_rate=self.lr, momentum=0.5, nesterov=True)
+        elif self.vae_opt_n == 'rmsprop':
+            self.vae_opt = RMSprop(learning_rate=self.lr)
+        elif self.vae_opt_n == 'rmsprop_cent':
+            self.vae_opt = RMSprop(learning_rate=self.lr, centered=True)
+        elif self.vae_opt_n == 'adam':
+            self.vae_opt = Adam(learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'adam_ams':
+            self.vae_opt = Adam(learning_rate=self.lr, beta_1=0.5, amsgrad=True)
+        elif self.vae_opt_n == 'adamw':
+            self.vae_opt = AdamW(weight_decay=1e-4, learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'adamw_ams':
+            self.vae_opt = AdamW(weight_decay=1e-4, learning_rate=self.lr, beta_1=0.5, amsgrad=True)
+        elif self.vae_opt_n == 'adamax':
+            self.vae_opt = Adamax(learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'adamax_ams':
+            self.vae_opt = Adamax(learning_rate=self.lr, beta_1=0.5, amsgrad=True)
+        elif self.vae_opt_n == 'nadam':
+            self.vae_opt = Nadam(learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'novograd':
+            self.vae_opt = NovoGrad(learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'novograd_ams':
+            self.vae_opt = NovoGrad(learning_rate=self.lr, beta_1=0.5, amsgrad=True)
+        elif self.vae_opt_n == 'lazy_adam':
+            self.vae_opt = LazyAdam(learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'lazy_adam_ams':
+            self.vae_opt = LazyAdam(learning_rate=self.lr, beta_1=0.5, amsgrad=True)
+        elif self.vae_opt_n == 'rectified_adam':
+            self.vae_opt = RectifiedAdam(learning_rate=self.lr, beta_1=0.5)
+        elif self.vae_opt_n == 'rectified_adam_ams':
+            self.vae_opt = RectifiedAdam(learning_rate=self.lr, beta_1=0.5, amsgrad=True)
         elif self.vae_opt_n == 'yogi':
-            self.vae_opt = Yogi(learning_rate=self.lr)
-        elif self.vae_opt_n == 'layogi':
-            self.vae_opt = Lookahead(Yogi(learning_rate=self.lr))
+            self.vae_opt = Yogi(learning_rate=self.lr, beta_1=0.5)
+        if self.la:
+            self.vae_opt = Lookahead(self.vae_opt)
         # compile VAE
         rc_loss = self.reconstruction_loss()
         self.vae.add_loss(rc_loss)
@@ -1030,13 +1000,12 @@ class VAE():
     def draw_random_batch(self, x_train, t_train):
         ''' draws random batch from data '''
         indices = np.random.permutation(x_train.shape[0])[:self.batch_size]
-        return x_train[indices].astype(np.float32), t_train[indices].astype(np.float32)
+        return x_train[indices], t_train[indices]
 
 
     def draw_indexed_batch(self, x_train, t_train, j):
         ''' draws batch j '''
-        ind = np.random.permutation(self.batch_size)
-        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[ind], t_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[ind]
+        return x_train[self.batch_size*j:self.batch_size*(j+1)], t_train[self.batch_size*j:self.batch_size*(j+1)]
 
 
     def train_vae(self, x_batch, t_batch, kl_anneal):
@@ -1104,7 +1073,7 @@ class VAE():
             lr_rampd_supconv = np.linspace(1.0, 0.1, 3*num_epochs*self.num_batches//8)
             lr_min_supconv = np.linspace(0.1, 0.01, num_epochs*self.num_batches//8)
             lr_factor = np.concatenate((lr_rampu_supconv, lr_rampd_supconv, lr_min_supconv)).reshape(num_epochs, self.num_batches)
-            if 'm' in self.vae_opt_n and 'la' not in self.vae_opt_n:
+            if 'm' in self.vae_opt_n and not self.la:
                 m_rampd_supconv = np.linspace(0.95, 0.85, num_epochs*self.num_batches//2)
                 m_rampu_supconv = np.linspace(0.85, 0.95, 3*num_epochs*self.num_batches//8)
                 m_max_supconv = 0.95*np.ones(num_epochs*self.num_batches//8)
@@ -1112,9 +1081,10 @@ class VAE():
             else:
                 m_factor = np.ones((num_epochs, self.num_batches))
         else:
-            lr_constant = np.ones(7*num_epochs*self.num_batches//8)
-            lr_decay = np.linspace(1.0, 0.1, num_epochs*self.num_batches//8)
-            lr_factor = np.concatenate((lr_constant, lr_decay)).reshape(num_epochs, self.num_batches)
+            # lr_constant = np.ones(7*num_epochs*self.num_batches//8)
+            # lr_decay = np.linspace(1.0, 0.1, num_epochs*self.num_batches//8)
+            # lr_factor = np.concatenate((lr_constant, lr_decay)).reshape(num_epochs, self.num_batches)
+            lr_factor = np.ones((num_epochs, self.num_batches))
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
@@ -1158,7 +1128,7 @@ if __name__ == '__main__':
      NAME, N, I, NS, SC, CP,
      CN, FBL, FBS, FB, FL, FS, FF,
      DO, ZD, KA, ALPHA, BETA, LAMBDA,
-     KI, AN, OPT, LR,
+     KI, AN, OPT, LA, LR,
      BS, RS, EP, SEED) = parse_args()
 
     plt.rc('font', family='sans-serif')
@@ -1209,7 +1179,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = VAE(IS, SC, CP, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, KA, ALPHA, BETA, LAMBDA, KI, AN, OPT, LR, BS, NH*NT*NS, (HR, TR))
+    MDL = VAE(IS, SC, CP, CN, FBL, FBS, FB, FL, FS, FF, DO, ZD, TD, KA, ALPHA, BETA, LAMBDA, KI, AN, OPT, LA, LR, BS, NH*NT*NS, (HR, TR))
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
@@ -1243,7 +1213,6 @@ if __name__ == '__main__':
         PSIGMA = PSMDL.fit_transform(SIGMA)
         PZMDL = PCA(n_components=ZD)
         PZ = PZMDL.fit_transform(Z)
-        P = P.reshape(NH, NT, NS, 2)
         MU = MU.reshape(NH, NT, NS, ZD)
         SIGMA = SIGMA.reshape(NH, NT, NS, ZD)
         Z = Z.reshape(NH, NT, NS, ZD)
@@ -1253,30 +1222,31 @@ if __name__ == '__main__':
         save_output_data(MU, 'vae_mean', NAME, N, I, NS, SC, SEED, PRFX)
         save_output_data(SIGMA, 'vae_sigma', NAME, N, I, NS, SC, SEED, PRFX)
         if PLOT:
-            plot_diagrams(P, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 't', VERBOSE)
             plot_diagrams(MU, SIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m', 's'], VERBOSE)
             plot_diagrams(PMU, PSIGMA, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, ['m_p', 's_p'], VERBOSE)
             plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
             plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z_p', VERBOSE)
         del MU, LOGVAR, SIGMA, PMU, PSIGMA, PZ
-        X, P = MDL.generate(Z, VERBOSE)
+        X, P = MDL.generate(Z.reshape(-1, ZD), VERBOSE)
         X = X.astype(np.float16)
+        if PLOT:
+            plot_diagrams(P.reshape(NH, NT, NS, ZD), None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 't', VERBOSE)
         del Z, P
     else:
         Z = MDL.encode(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
         PMDL = PCA(n_components=ZD)
         PZ = PMDL.fit_transform(Z)
-        P = P.reshape(NH, NT, NS, 2)
         Z = Z.reshape(NH, NT, NS, ZD)
         PZ = PZ.reshape(NH, NT, NS, ZD)
         save_output_data(Z, 'vae_encoding', NAME, N, I, NS, SC, SEED, PRFX)
         if PLOT:
-            plot_diagrams(P, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 't', VERBOSE)
             plot_diagrams(Z, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z', VERBOSE)
             plot_diagrams(PZ, None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 'z_p', VERBOSE)
         del PZ
-        X, P = MDL.generate(Z, VERBOSE)
+        X, P = MDL.generate(Z.reshape(-1, ZD), VERBOSE)
         X = X.astype(np.float16)
+        if PLOT:
+            plot_diagrams(P.reshape(NH, NT, NS, ZD), None, H, T, CM, NAME, N, I, NS, SC, SEED, PRFX, 't', VERBOSE)
         del Z, P
     BCERR, BCACC = binary_crossentropy_accuracy(CONF.reshape(-1, *IS), X, SC)
     del CONF, X
