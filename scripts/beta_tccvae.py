@@ -1068,23 +1068,24 @@ class VAE():
             constant_kl_anneal = np.ones(num_epochs*self.num_batches//(2*n_cycles))
             cycle_kl_anneal = np.concatenate((linear_kl_anneal, constant_kl_anneal))
             kl_anneal = np.tile(cycle_kl_anneal, n_cycles).reshape(num_epochs, self.num_batches)
-        if 'sgd' in self.vae_opt_n and 'n' not in self.vae_opt_n:
-            lr_rampu_supconv = np.linspace(0.1, 1.0, num_epochs*self.num_batches//2)
-            lr_rampd_supconv = np.linspace(1.0, 0.1, 3*num_epochs*self.num_batches//8)
-            lr_min_supconv = np.linspace(0.1, 0.01, num_epochs*self.num_batches//8)
-            lr_factor = np.concatenate((lr_rampu_supconv, lr_rampd_supconv, lr_min_supconv)).reshape(num_epochs, self.num_batches)
-            if 'm' in self.vae_opt_n and not self.la:
-                m_rampd_supconv = np.linspace(0.95, 0.85, num_epochs*self.num_batches//2)
-                m_rampu_supconv = np.linspace(0.85, 0.95, 3*num_epochs*self.num_batches//8)
-                m_max_supconv = 0.95*np.ones(num_epochs*self.num_batches//8)
-                m_factor = np.concatenate((m_rampd_supconv, m_rampu_supconv, m_max_supconv)).reshape(num_epochs, self.num_batches)
-            else:
-                m_factor = np.ones((num_epochs, self.num_batches))
-        else:
+        # if 'sgd' in self.vae_opt_n and 'n' not in self.vae_opt_n:
+        #     lr_rampu_supconv = np.linspace(0.1, 1.0, num_epochs*self.num_batches//2)
+        #     lr_rampd_supconv = np.linspace(1.0, 0.1, 3*num_epochs*self.num_batches//8)
+        #     lr_min_supconv = np.linspace(0.1, 0.01, num_epochs*self.num_batches//8)
+        #     lr_factor = np.concatenate((lr_rampu_supconv, lr_rampd_supconv, lr_min_supconv)).reshape(num_epochs, self.num_batches)
+        #     if 'm' in self.vae_opt_n and not self.la:
+        #         m_rampd_supconv = np.linspace(0.95, 0.85, num_epochs*self.num_batches//2)
+        #         m_rampu_supconv = np.linspace(0.85, 0.95, 3*num_epochs*self.num_batches//8)
+        #         m_max_supconv = 0.95*np.ones(num_epochs*self.num_batches//8)
+        #         m_factor = np.concatenate((m_rampd_supconv, m_rampu_supconv, m_max_supconv)).reshape(num_epochs, self.num_batches)
+        #     else:
+        #         m_factor = np.ones((num_epochs, self.num_batches))
+        # else:
             # lr_constant = np.ones(7*num_epochs*self.num_batches//8)
             # lr_decay = np.linspace(1.0, 0.1, num_epochs*self.num_batches//8)
             # lr_factor = np.concatenate((lr_constant, lr_decay)).reshape(num_epochs, self.num_batches)
-            lr_factor = np.ones((num_epochs, self.num_batches))
+            # lr_factor = np.ones((num_epochs, self.num_batches))
+        lr_factor = np.ones((num_epochs, self.num_batches))
         # loop through epochs
         for i in range(self.past_epochs, num_epochs):
             # construct progress bar for current epoch
@@ -1108,8 +1109,8 @@ class VAE():
                 else:
                     x_batch, t_batch = self.draw_indexed_batch(x_train, t_train, j)
                 # train VAE
-                if self.vae_opt_n == 'sgdm' or self.vae_opt_n == 'sgdwm':
-                    self.vae_opt.momentum = m_factor[i, u]
+                # if self.vae_opt_n == 'sgdm' or self.vae_opt_n == 'sgdwm':
+                #     self.vae_opt.momentum = m_factor[i, u]
                 self.vae_opt.learning_rate = lr_factor[i, u]*self.lr
                 self.train_vae(x_batch=x_batch, t_batch=t_batch, kl_anneal=kl_anneal[i, u]*np.ones(self.batch_size))
                 u += 1
