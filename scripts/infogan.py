@@ -1233,7 +1233,7 @@ class InfoGAN():
                 gan_dsc_loss = self.gan_dsc.train_on_batch(z_samples[i], target)
                 gan_aux_loss = self.gan_aux.train_on_batch(z_samples[i], z_samples[i][1:])
                 gan_loss[i, 1:] = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
-                gan_loss[i].insert(0, np.sum(gan_loss[i, 1:]))
+                gan_loss[i, 0] = np.sum(gan_loss[i, 1:])
         else:
             for i in range(len(z_samples)):
                 gan_loss[i] = self.gan.train_on_batch(z_samples[i], (target, *z_samples[i][1:]))

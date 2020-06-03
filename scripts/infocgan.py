@@ -582,32 +582,32 @@ class InfoCGAN():
                 convt = SpatialDropout2D(rate=0.5, name='gen_rshp_drop_0')(convt)
             elif self.act == 'selu':
                 convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='gen_rshp_drop_0')(convt)
-        u = 0
+        v = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
                                     padding=self.padding, strides=self.filter_stride,
-                                    name='gen_convt_{}'.format(u))(convt)
+                                    name='gen_convt_{}'.format(v))(convt)
             if self.act == 'lrelu':
-                convt = LeakyReLU(alpha=0.1, name='gen_convt_lrelu_{}'.format(u))(convt)
-                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
+                convt = LeakyReLU(alpha=0.1, name='gen_convt_lrelu_{}'.format(v))(convt)
+                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(v))(convt)
                 if self.gen_drop:
-                    convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
+                    convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(v))(convt)
             elif self.act == 'selu':
-                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
+                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(v))(convt)
                 if self.gen_drop:
-                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
-            u += 1
+                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(v))(convt)
+            v += 1
         self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                             padding=self.padding, strides=self.filter_base_stride,
                                             name='gen_x_output')(convt)
         self.gen_t_output = self.gen_t_input
         # build generator
-        self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_output],
-                               outputs=[self.gen_x_output, self.gen_t_input],
+        self.generator = Model(inputs=[self.gen_z_input, self.gen_c_input, self.gen_u_input, self.gen_t_input],
+                               outputs=[self.gen_x_output, self.gen_t_output],
                                name='generator')
 
 
@@ -979,8 +979,7 @@ class InfoCGAN():
         c = sample_categorical(num_samples, self.c_dim)
         # continuous control variable
         u = sample_uniform(-1.0, 1.0, num_samples, self.u_dim)
-        t = np.concatenate((sample_uniform(-1.0, 1.0, num_samples, 1),
-                            sample_uniform(0, 1.0, num_samples, 1)), axis=1)
+        t = sample_uniform(0.0, 1.0, num_samples, self.t_dim)
         return z, c, u, t
 
 
@@ -1239,7 +1238,7 @@ class InfoCGAN():
                 gan_dsc_loss = self.gan_dsc.train_on_batch(x_sample[i], target)
                 gan_aux_loss = self.gan_aux.train_on_batch(x_sample[i], x_sample[i][1:-1])
                 gan_loss[i, 1:] = [gan_dsc_loss, gan_aux_loss[1], gan_aux_loss[2]]
-                gan_loss[i].insert(0, np.sum(gan_loss[i, 1:]))
+                gan_loss[i, 0] = np.sum(gan_loss[i, 1:])
         else:
             for i in range(len(x_sample)):
                 gan_loss[i] = self.gan.train_on_batch(x_sample[i], (target, *x_sample[i][1:-1]))
@@ -1378,7 +1377,7 @@ if __name__ == '__main__':
     NH, NT = H.size, T.size
     IS = (N, N, 1)
     TD = 2
-    SH = 2*(H-H.min())/(H.max()-H.min())-1
+    SH = (H-H.min())/(H.max()-H.min())
     ST = (T-T.min())/(T.max()-T.min())
     TPARAM = np.zeros((NH, NT, NS, TD))
     for i in range(NH):
