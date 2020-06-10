@@ -654,17 +654,17 @@ class VAE():
         # flatten final convolutional layer
         x = Flatten(name='enc_fltn_0')(conv)
         u = 0
-        if self.final_conv_shape[:2] != (1, 1):
-            # dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='enc_dense_{}'.format(u))(x)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
-                x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
-            elif self.act == 'selu':
-                x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
-            u += 1
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='enc_dense_{}'.format(u))(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.1, name='enc_dense_lrelu_{}'.format(u))(x)
+        #         x = BatchNormalization(name='enc_dense_batchnorm_{}'.format(u))(x)
+        #     elif self.act == 'selu':
+        #         x = Activation(activation='selu', name='enc_dense_selu_{}'.format(u))(x)
+        #     u += 1
         x = Dense(units=128,
                   kernel_initializer=self.krnl_init,
                   name='enc_dense_{}'.format(u))(x)
@@ -715,17 +715,17 @@ class VAE():
             x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
         u += 1
         self.dec_t_output = Dense(units=2, kernel_initializer=self.out_init, activation='sigmoid', name='dec_t_output')(x)
-        if self.final_conv_shape[:2] != (1, 1):
-            # repeated dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='dec_dense_{}'.format(u))(x)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
-                x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
-            elif self.act == 'selu':
-                x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
-            u += 1
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # repeated dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='dec_dense_{}'.format(u))(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.1, name='dec_dense_lrelu_{}'.format(u))(x)
+        #         x = BatchNormalization(name='dec_dense_batchnorm_{}'.format(u))(x)
+        #     elif self.act == 'selu':
+        #         x = Activation(activation='selu', name='dec_dense_selu_{}'.format(u))(x)
+        #     u += 1
         x = Dense(units=np.prod(self.final_conv_shape),
                   kernel_initializer=self.krnl_init,
                   name='dec_dense_{}'.format(u))(x)
