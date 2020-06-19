@@ -20,13 +20,15 @@ from tensorflow.keras.layers import (Input, Flatten, Reshape, Concatenate, Lambd
 from tensorflow.keras.optimizers import SGD, RMSprop, Adam, Adamax, Nadam
 from tensorflow_addons.optimizers import AdamW, LAMB, LazyAdam, NovoGrad, RectifiedAdam, SGDW, Yogi, Lookahead
 from tensorflow.keras.models import Model, save_model, load_model
-from tensorflow.keras.utils import to_categorical
 from tensorflow.python.training.tracking.util import Checkpoint
 from tensorflow.python.training.checkpoint_management import CheckpointManager
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from data_utils import *
+from conv_utils import *
+from dist_utils import *
 
 
 def parse_args():
@@ -122,113 +124,6 @@ def parse_args():
             args.discriminator_learning_rate, args.gan_learning_rate,
             args.gan_lambda, args.trainer_alpha, args.trainer_beta,
             args.batch_size, args.random_sampling, args.epochs, args.random_seed)
-
-
-def load_thermal_params(name, lattice_length):
-    ''' load thermal parameters '''
-    fields = np.load(os.getcwd()+'/{}.{}.h.npy'.format(name, lattice_length))
-    temps = np.load(os.getcwd()+'/{}.{}.t.npy'.format(name, lattice_length))
-    return fields, temps
-
-
-def load_configurations(name, lattice_length):
-    ''' load configurations and thermal measurements '''
-    conf = np.load(os.getcwd()+'/{}.{}.dmp.npy'.format(name, lattice_length)).astype(np.int8)
-    thrm = np.load(os.getcwd()+'/{}.{}.dat.npy'.format(name, lattice_length))
-    return conf, thrm
-
-
-def scale_configurations(conf):
-    ''' scales input configurations '''
-    # (-1, 1) -> (0, 1)
-    return ((conf+1)/2).astype(np.int8)
-
-
-def unscale_configurations(conf):
-    ''' unscales input configurations '''
-    # (0, 1) -> (-1, 1)
-    return (2*conf-1).astype(np.int8)
-
-
-def index_data_by_sample(data, num_fields, num_temps, indices):
-    ''' indexes data '''
-    # reorders samples independently for each (h, t) according to indices
-    return np.array([[data[i, j, indices[i, j]] for j in range(num_temps)] for i in range(num_fields)])
-
-
-def load_select_scale_data(name, lattice_length, interval, num_samples, scaled, seed, verbose=False):
-    ''' selects random subset of data according to phase point interval and sample count '''
-    # apply interval to fields, temperatures, configurations, and thermal data
-    fields, temps = load_thermal_params(name, lattice_length)
-    interval_fields = fields[::interval]
-    interval_temps = temps[::interval]
-    del fields, temps
-    conf, thrm = load_configurations(name, lattice_length)
-    interval_conf = conf[::interval, ::interval]
-    interval_thrm = thrm[::interval, ::interval]
-    del conf, thrm
-    # field and temperature counts
-    num_fields, num_temps = interval_fields.size, interval_temps.size
-    # sample count
-    total_num_samples = interval_thrm.shape[2]
-    # selected sample indices
-    indices = np.zeros((num_fields, num_temps, num_samples), dtype=np.uint16)
-    if verbose:
-        print(100*'_')
-    for i in trange(num_fields, desc='Selecting Samples', disable=not verbose):
-        for j in range(num_temps):
-                indices[i, j] = np.random.permutation(total_num_samples)[:num_samples]
-    # construct selected data subset
-    select_conf = index_data_by_sample(interval_conf, num_fields, num_temps, indices)
-    if scaled:
-        select_conf = scale_configurations(select_conf)
-    select_thrm = index_data_by_sample(interval_thrm, num_fields, num_temps, indices)
-    # save selected data arrays
-    np.save(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval), interval_fields)
-    np.save(os.getcwd()+'/{}.{}.{}.t.npy'.format(name, lattice_length, interval), interval_temps)
-    np.save(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.conf.npy'.format(name, lattice_length,
-                                                               interval, num_samples,
-                                                               scaled, seed), select_conf)
-    np.save(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.thrm.npy'.format(name, lattice_length,
-                                                               interval, num_samples,
-                                                               scaled, seed), select_thrm)
-    return interval_fields, interval_temps, select_conf, select_thrm
-
-
-def load_data(name, lattice_length, interval, num_samples, scaled, seed, verbose=False):
-    try:
-        # try loading selected data arrays
-        fields = np.load(os.getcwd()+'/{}.{}.{}.h.npy'.format(name, lattice_length, interval))
-        temps = np.load(os.getcwd()+'/{}.{}.{}.t.npy'.format(name, lattice_length, interval))
-        conf = np.load(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.conf.npy'.format(name, lattice_length,
-                                                                          interval, num_samples,
-                                                                          scaled, seed))
-        thrm = np.load(os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.thrm.npy'.format(name, lattice_length,
-                                                                          interval, num_samples,
-                                                                          scaled, seed))
-        if verbose:
-            print(100*'_')
-            print('Scaled/selected Ising configurations and thermal parameters/measurements loaded from file')
-            print(100*'_')
-    except:
-        # generate selected data arrays
-        (fields, temps,
-         conf, thrm) = load_select_scale_data(name, lattice_length,
-                                              interval, num_samples,
-                                              scaled, seed, verbose)
-        if verbose:
-            print(100*'_')
-            print('Ising configurations selected/scaled and thermal parameters/measurements selected')
-            print(100*'_')
-    return fields, temps, conf, thrm
-
-
-def save_output_data(data, alias, name, lattice_length, interval, num_samples, scaled, seed, prfx):
-    ''' save output data from model '''
-    # file parameters
-    params = (name, lattice_length, interval, num_samples, scaled, seed)
-    file_name = os.getcwd()+'/{}.{}.{}.{}.{:d}.{}.'.format(*params)+prfx+'.{}.npy'.format(alias)
-    np.save(file_name, data)
 
 
 def plot_batch_losses(losses, cmap, file_prfx, verbose=False):
@@ -359,55 +254,6 @@ def plot_diagrams(c_data, u_data, fields, temps, cmap,
         # plot_diagram(u_s_diag[:, :, i], fields, temps, cmap, prfx, 'm_s_{}'.format(i))
         # plot_diagram(u_s_diag[:, :, u_s_dim+i], fields, temps, cmap, prfx, 's_s_{}'.format(i))
         plot_diagram(u_s_diag[:, :, i], fields, temps, cmap, file_prfx, 'u_s_{}'.format(i))
-
-
-def get_final_conv_shape(input_shape, conv_number,
-                         filter_base_length, filter_length,
-                         filter_base_stride, filter_stride,
-                         filter_base, filter_factor, padded):
-    ''' calculates final convolutional layer output shape '''
-    if padded:
-        p = 1
-    else:
-        p = 0
-    out_filters = input_shape[2]*filter_base*filter_factor**(conv_number-1)
-    out_dim = (np.array(input_shape[:2], dtype=int)-filter_base_length+p)//filter_base_stride+1
-    for i in range(1, conv_number):
-        out_dim = (out_dim-filter_length+p)//filter_stride+1
-    return tuple(out_dim)+(out_filters,)
-
-
-def get_filter_number(conv_iter, filter_base, filter_factor):
-    ''' calculates the filter count for a given convolutional iteration '''
-    return filter_base*filter_factor**(conv_iter)
-
-
-def get_filter_length_stride(conv_iter, filter_base_length, filter_base_stride, filter_length, filter_stride):
-    ''' calculates filter length and stride for a given convolutional iteration '''
-    if conv_iter == 0:
-        return filter_base_length, filter_base_stride
-    else:
-        return filter_length, filter_stride
-
-
-def sample_gaussian(num_rows, dimension):
-    ''' unit gaussian sampling '''
-    return np.random.normal(size=(num_rows, dimension))
-
-
-def sample_categorical(num_rows, num_categories):
-    ''' categorical sampling '''
-    if num_categories > 0:
-        sample = to_categorical(np.random.randint(0, num_categories, num_rows).reshape(-1, 1),
-                                num_classes=num_categories)
-    else:
-        sample = np.empty(shape=(num_rows, num_categories))
-    return sample
-
-
-def sample_uniform(low, high, num_rows, dimension):
-    ''' uniform sampling '''
-    return np.random.uniform(low=low, high=high, size=(num_rows, dimension))
 
 
 class ClipConstraint(Constraint):
@@ -1140,58 +986,6 @@ class InfoGAN():
             self.gan_ckpt.restore(self.gan_mngr.latest_checkpoint).assert_consumed()
 
 
-    def get_training_indices(self):
-        ''' retrieve class-balancing training indices '''
-        # number of square subsectors in (h, t) space
-        n_sr = np.int32(self.num_fields*self.num_temps/self.batch_size)
-        # side length of (h, t) space in subsectors
-        n_sr_l = np.int32(np.sqrt(n_sr))
-        # side length of subsector
-        sr_l = np.int32(np.sqrt(self.batch_size))
-        # indices for top left subsector
-        sr_indices = np.stack(np.meshgrid(np.arange(sr_l),
-                                          np.arange(sr_l)), axis=-1).reshape(-1, 2)[:, ::-1]
-        # all indices for subsectors
-        indices = np.array([[sr_indices+sr_l*np.array([i,j]).reshape(1, -1) for i in range(n_sr_l)] for j in range(n_sr_l)])
-        # flattened subsector indices
-        flat_indices = np.ravel_multi_index(indices.reshape(-1, 2).T, dims=(self.num_fields, self.num_temps))
-        # shuffle indices within each subsector
-        for i in range(n_sr):
-            flat_indices[self.batch_size*i:self.batch_size*(i+1)] = np.random.permutation(flat_indices[self.batch_size*i:self.batch_size*(i+1)])
-        # shift indices to balance batches by subsector
-        shift_indices = np.concatenate([flat_indices[i::self.batch_size] for i in range(self.batch_size)])
-        return shift_indices
-
-
-    def randomly_order_training_data(self, x_train):
-        ''' reorder training data by random indices '''
-        indices = np.random.permutation(self.num_fields*self.num_temps*self.num_samples)
-        return x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape)[indices]
-
-
-    def reorder_training_data(self, x_train):
-        ''' reorder training data by class-balancing indices '''
-        x_train = x_train.reshape(self.num_fields*self.num_temps, self.num_samples, *self.input_shape)[self.get_training_indices()]
-        return np.moveaxis(x_train, 0, 1).reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape)
-
-
-    def extract_unique_data(self, x_train):
-        ''' extract unique samples from data '''
-        x_train = np.unique(x_train.reshape(self.num_fields*self.num_temps*self.num_samples, *self.input_shape), axis=0)
-        return x_train
-
-
-    def draw_random_batch(self, x_train):
-        ''' draws random batch from data '''
-        indices = np.random.permutation(x_train.shape[0])[:self.batch_size]
-        return x_train[indices].astype(np.float32)
-
-
-    def draw_indexed_batch(self, x_train, j):
-        ''' draws batch j '''
-        return x_train[self.batch_size*j:self.batch_size*(j+1)].astype(np.float32)[np.random.permutation(self.batch_size)]
-
-
     def train_discriminator(self, x_batch, real=False):
         ''' train discriminator '''
         if real:
@@ -1293,9 +1087,9 @@ class InfoGAN():
         self.num_fields, self.num_temps, self.num_samples, _, _, = x_train.shape
         self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.batch_size
         if random_sampling:
-            x_train = self.extract_unique_data(x_train)
+            x_train = extract_unique_data(x_train, self.num_fields, self.num_temps, self.num_samples, self.input_shape)
         else:
-            x_train = self.reorder_training_data(x_train)
+            x_train = reorder_training_data(x_train, self.num_fields, self.num_temps, self.num_samples, self.input_shape)
         num_epochs += self.past_epochs
         # loop through epochs
         mode = 'loss'
@@ -1320,9 +1114,9 @@ class InfoGAN():
                 batch_range.set_description(desc)
                 # fetch batch
                 if random_sampling:
-                    x_batch = self.draw_random_batch(x_train)
+                    x_batch = draw_random_batch(x_train, self.batch_size)
                 else:
-                    x_batch = self.draw_indexed_batch(x_train, j)
+                    x_batch = draw_indexed_batch(x_train, self.batch_size, j)
                 # train infogan on batch
                 self.train_infogan(x_batch, n_critic)
                 u += 1

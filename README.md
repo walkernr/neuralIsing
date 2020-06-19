@@ -34,13 +34,6 @@ This script simply parses the output from 'ising.py' into numpy arrays. There ar
 
 Use the help flag (-h) to see options.
 
-TanhScaler.py
--------------
-
-This script implements a scikit-learn-style hyperbolic tangent feature scaler. This scaler uses the hyperbolic tangent of the standard scores that would be given by a standard scaler in order to enforce a common feature range across the feature space. This method is far less vulnerable to outliers than the minmax or standard scaling methods.
-
-This is no longer used by the scripts included in this repository, but is included for the interest of the reader.
-
 beta-tcvae.py
 -------------
 
@@ -68,3 +61,18 @@ infocgan.py
 This script uses the conditional variant of the InfoGAN network conditioned on the external magnetic field and temperature.
 
 Use the help flag (-h) to see options.
+
+data_utils.py
+-------------
+
+This script contains utility functions for handling the simulation data.
+
+conv_utils.py
+-------------
+
+This script contains utility functions for handling convolutions.
+
+dist_utils.py
+-------------
+
+This script contains utility functions for sampling distributions used with InfoGAN and InfoCGAN models.
