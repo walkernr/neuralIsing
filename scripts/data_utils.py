@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from tqdm import tqdm, trange
 
 
 def load_thermal_params(name, lattice_length):
@@ -162,7 +163,7 @@ def randomly_order_training_data(x_train, num_fields, num_temps, num_samples, in
     return x_train.reshape(num_fields*num_temps*num_samples, *input_shape)[indices]
 
 
-def reorder_training_data(x_train, num_fields, num_temps, num_samples, input_shape):
+def reorder_training_data(x_train, num_fields, num_temps, num_samples, input_shape, batch_size):
     ''' reorder training data by class-balancing indices '''
     x_train = x_train.reshape(num_fields*num_temps, num_samples, *input_shape)[get_training_indices(num_fields, num_temps, batch_size)]
     return np.moveaxis(x_train, 0, 1).reshape(num_fields*num_temps*num_samples, *input_shape)
@@ -192,9 +193,9 @@ def randomly_order_training_data_thermal(x_train, t_train, num_fields, num_temps
             t_train.reshape(num_fields*num_temps*num_samples, t_dim)[indices])
 
 
-def reorder_training_data_thermal(x_train, t_train, num_fields, num_temps, num_samples, input_shape, t_dim):
+def reorder_training_data_thermal(x_train, t_train, num_fields, num_temps, num_samples, input_shape, t_dim, batch_size):
     ''' reorder training data by class-balancing indices '''
-    indices = get_training_indices()
+    indices = get_training_indices(num_fields, num_temps, batch_size)
     x_train = x_train.reshape(num_fields*num_temps, num_samples, *input_shape)[indices]
     t_train = t_train.reshape(num_fields*num_temps, num_samples, t_dim)[indices]
     return (np.moveaxis(x_train, 0, 1).reshape(num_fields*num_temps*num_samples, *input_shape),
