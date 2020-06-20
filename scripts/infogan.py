@@ -1291,14 +1291,21 @@ if __name__ == '__main__':
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)
     L = MDL.get_losses()
-    C, U = MDL.get_aux_dist(CONF.reshape(-1, *IS), VERBOSE)
-    C = C.reshape(NH, NT, NS, CD)
-    # U[:, UD:] = np.exp(0.5*U[:, UD:])
-    # U = U.reshape(NH, NT, NS, 2*UD)
-    U = U.reshape(NH, NT, NS, UD)
-    if CD > 0:
+    if CD > 0 and UD > 0:
+        C, U = MDL.get_aux_dist(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
+        C = C.reshape(NH, NT, NS, CD)
+        U = U.reshape(NH, NT, NS, UD)
         save_output_data(C, 'categorical_control', NAME, N, I, NS, SC, SEED, PRFX)
-    if UD > 0:
+        save_output_data(U, 'continuous_control', NAME, N, I, NS, SC, SEED, PRFX)
+    elif CD > 0:
+        C = MDL.get_aux_dist(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
+        U = np.zeros((NH, NT, NS, UD))
+        C = C.reshape(NH, NT, NS, CD)
+        save_output_data(C, 'categorical_control', NAME, N, I, NS, SC, SEED, PRFX)
+    elif UD > 0:
+        U = MDL.get_aux_dist(CONF.reshape(-1, *IS), TPARAM.reshape(-1, 2), VERBOSE)
+        C = np.zeros((NH, NT, NS, UD))
+        U = U.reshape(NH, NT, NS, UD)
         save_output_data(U, 'continuous_control', NAME, N, I, NS, SC, SEED, PRFX)
     if PLOT:
         plot_losses(L, CM, NAME, N, I, NS, SC, SEED, PRFX, VERBOSE)
