@@ -423,17 +423,17 @@ class InfoCGAN():
         elif self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
         u += 1
-        if self.final_conv_shape[:2] != (1, 1):
-            # repeated dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='gen_dense_{}'.format(u))(x)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='gen_dense_lrelu_{}'.format(u))(x)
-                x = BatchNormalization(name='gen_dense_batchnorm_{}'.format(u))(x)
-            elif self.act == 'selu':
-                x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
-            u += 1
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # repeated dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='gen_dense_{}'.format(u))(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.1, name='gen_dense_lrelu_{}'.format(u))(x)
+        #         x = BatchNormalization(name='gen_dense_batchnorm_{}'.format(u))(x)
+        #     elif self.act == 'selu':
+        #         x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
+        #     u += 1
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         if self.gen_drop:
@@ -483,19 +483,7 @@ class InfoCGAN():
             out_act = 'sigmoid'
             loss = 'binary_crossentropy'
             conv_constraint = None
-        # u = 0
-        # t = Dense(units=np.prod(self.input_shape),
-        #           kernel_initializer=self.krnl_init,
-        #           name='dsc_dense_{}'.format(u))(self.dsc_t_input)
-        # if self.act == 'lrelu':
-        #     t = LeakyReLU(alpha=0.1, name='dsc_dense_lrelu_{}'.format(u))(t)
-        #     t = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(t)
-        # elif self.act == 'selu':
-        #     t = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(t)
-        # u += 1
-        # tconv = Reshape(target_shape=self.input_shape, name='dsc_rshp_0')(t)
         conv = self.dsc_x_input
-        # conv = Concatenate(axis=-1, name='dsc_concat_0')([self.dsc_x_input, tconv])
         # iterative convolutions over input
         for i in range(self.conv_number):
             filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -516,17 +504,17 @@ class InfoCGAN():
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         u = 0
-        if self.final_conv_shape[:2] != (1, 1):
-            # dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='dsc_dense_{}'.format(u))(x)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='dsc_dense_lrelu_{}'.format(u))(x)
-                x = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(x)
-            elif self.act == 'selu':
-                x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
-            u += 1
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='dsc_dense_{}'.format(u))(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.1, name='dsc_dense_lrelu_{}'.format(u))(x)
+        #         x = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(x)
+        #     elif self.act == 'selu':
+        #         x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
+        #     u += 1
         # the dense layer is saved as a hidden encoding layer
         self.dsc_enc = x
         # dense layer
@@ -605,19 +593,7 @@ class InfoCGAN():
             self.aux_x_input = Input(batch_shape=(self.batch_size,)+self.input_shape, name='aux_x_input')
             self.aux_t_input = Input(batch_shape=(self.batch_size, self.t_dim), name='aux_t_input')
             self.aux_inputs = [self.aux_x_input, self.aux_t_input]
-            # u = 0
-            # t = Dense(units=np.prod(self.input_shape),
-            #         kernel_initializer=self.krnl_init,
-            #         name='aux_dense_{}'.format(u))(self.dsc_t_input)
-            # if self.act == 'lrelu':
-            #     t = LeakyReLU(alpha=0.1, name='aux_dense_lrelu_{}'.format(u))(t)
-            #     t = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(t)
-            # elif self.act == 'selu':
-            #     t = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(t)
-            # u += 1
-            # tconv = Reshape(target_shape=self.input_shape, name='aux_rshp_0')(t)
             conv = self.aux_x_input
-            # conv = Concatenate(axis=-1, name='aux_concat_0')([self.aux_x_input, tconv])
             # iterative convolutions over input
             for i in range(self.conv_number):
                 filter_number = get_filter_number(i, self.filter_base, self.filter_factor)
@@ -638,17 +614,17 @@ class InfoCGAN():
             # flatten final convolutional layer
             x = Flatten(name='aux_fltn_0')(conv)
             u = 0
-            if self.final_conv_shape[:2] != (1, 1):
-                # dense layer
-                x = Dense(units=np.prod(self.final_conv_shape),
-                          kernel_initializer=self.krnl_init,
-                          name='aux_dense_{}'.format(u))(x)
-                if self.act == 'lrelu':
-                    x = LeakyReLU(alpha=0.1, name='aux_dense_lrelu_{}'.format(u))(x)
-                    x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
-                elif self.act == 'selu':
-                    x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
-                u += 1
+            # if self.final_conv_shape[:2] != (1, 1):
+            #     # dense layer
+            #     x = Dense(units=np.prod(self.final_conv_shape),
+            #               kernel_initializer=self.krnl_init,
+            #               name='aux_dense_{}'.format(u))(x)
+            #     if self.act == 'lrelu':
+            #         x = LeakyReLU(alpha=0.1, name='aux_dense_lrelu_{}'.format(u))(x)
+            #         x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
+            #     elif self.act == 'selu':
+            #         x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
+            #     u += 1
             # dense layer
             x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
@@ -693,7 +669,7 @@ class InfoCGAN():
             elif self.act == 'selu':
                 x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
             u += 1
-            # x = Concatenate(name='aux_concat_0')([x, self.dsc_t_input])
+            x = Concatenate(name='aux_concat_0')([x, self.dsc_t_input])
             if self.c_dim > 0 and self.u_dim > 0:
                 self.aux_c_output = Dense(self.c_dim,
                                           kernel_initializer='glorot_uniform', activation='softmax',
