@@ -285,7 +285,7 @@ class InfoCGAN():
                  krnl_init='lecun_normal', act='selu',
                  dsc_opt_n='sgd', gan_opt_n='adam', dsc_la=False, gan_la=False, dsc_lr=1e-2, gan_lr=1e-3, lamb=1.0,
                  batch_size=169,
-                 alpha=0.0, beta=0.0):
+                 alpha=0.0, beta=0.0, n_dsc=1, n_gan=2):
         ''' initialize model parameters '''
         self.eps = 1e-8
         self.wasserstein = wasserstein
@@ -349,6 +349,9 @@ class InfoCGAN():
         # training alpha and beta
         self.alpha = alpha
         self.beta = beta
+        # training cycles
+        self.n_dsc = n_dsc
+        self.n_gan = n_gan
         # loss histories
         self.dsc_fake_loss_history = []
         self.dsc_real_loss_history = []
@@ -371,8 +374,8 @@ class InfoCGAN():
                   self.gen_drop, self.dsc_drop, self.z_dim, self.c_dim, self.u_dim,
                   self.krnl_init, self.act,
                   self.dsc_opt_n, self.gan_opt_n, self.dsc_la, self.gan_la, self.dsc_lr, self.gan_lr,
-                  self.lamb, self.batch_size, self.alpha, self.beta)
-        file_name = 'infocgan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:d}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
+                  self.lamb, self.batch_size, self.alpha, self.beta, self.n_dsc, self.n_gan)
+        file_name = 'infocgan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:d}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}.{}.{}'.format(*params)
         return file_name
 
 
@@ -1162,7 +1165,7 @@ class InfoCGAN():
         return gan_loss, dscf_loss, dscr_loss, ent_cat_loss, ent_con_loss
 
 
-    def fit(self, x_train, t_train, num_epochs=4, n_dsc=1, n_gan=2, save_step=None, random_sampling=False, verbose=False):
+    def fit(self, x_train, t_train, num_epochs=4, save_step=None, random_sampling=False, verbose=False):
         ''' fit model '''
         self.num_fields, self.num_temps, self.num_samples, _, _, = x_train.shape
         self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.batch_size
@@ -1198,7 +1201,7 @@ class InfoCGAN():
                 else:
                     x_batch, t_batch = draw_indexed_batch_thermal(x_train, t_train, self.batch_size, j)
                 # train infogan on batch
-                self.train_infogan(x_batch, t_batch, n_dsc, n_gan)
+                self.train_infogan(x_batch, t_batch, self.n_dsc, self.n_gan)
                 u += 1
             # if checkpoint managers are initialized
             if self.dsc_mngr is not None and self.gan_mngr is not None:
@@ -1270,7 +1273,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = InfoCGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, TD, CD, UD, KI, AN, DOPT, GOPT, DLA, GLA, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
+    MDL = InfoCGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, TD, CD, UD, KI, AN, DOPT, GOPT, DLA, GLA, DLR, GLR, GLAMB, BS, TALPHA, TBETA, DC, GC)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
@@ -1278,7 +1281,7 @@ if __name__ == '__main__':
         if VERBOSE:
             MDL.model_summaries()
         # MDL.load_latest_checkpoint(NAME, N, I, NS, SC, SEED)
-        MDL.fit(CONF, TPARAM, num_epochs=EP, n_dsc=DC, n_gan=GC, save_step=EP, random_sampling=RS, verbose=VERBOSE)
+        MDL.fit(CONF, TPARAM, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
         MDL.save_losses(NAME, N, I, NS, SC, SEED)
         MDL.save_weights(NAME, N, I, NS, SC, SEED)
     else:
@@ -1291,7 +1294,7 @@ if __name__ == '__main__':
             if VERBOSE:
                 MDL.model_summaries()
             # MDL.initialize_checkpoint_managers(NAME, N, I, NS, SC, SEED)
-            MDL.fit(CONF, TPARAM, num_epochs=EP, n_dsc=DC, n_gan=GC, save_step=EP, random_sampling=RS, verbose=VERBOSE)
+            MDL.fit(CONF, TPARAM, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)
     L = MDL.get_losses()

@@ -291,7 +291,7 @@ class InfoGAN():
                  krnl_init='lecun_normal', act='selu',
                  dsc_opt_n='sgd', gan_opt_n='adam', dsc_la=False, gan_la=False, dsc_lr=1e-2, gan_lr=1e-3, lamb=1.0,
                  batch_size=169,
-                 alpha=0.0, beta=0.0):
+                 alpha=0.0, beta=0.0, n_dsc=1, n_gan=2):
         ''' initialize model parameters '''
         self.eps = 1e-8
         self.wasserstein = wasserstein
@@ -353,6 +353,9 @@ class InfoGAN():
         # training alpha and beta
         self.alpha = alpha
         self.beta = beta
+        # training cycles
+        self.n_dsc = n_dsc
+        self.n_gan = n_gan
         # loss histories
         self.dsc_fake_loss_history = []
         self.dsc_real_loss_history = []
@@ -375,8 +378,8 @@ class InfoGAN():
                   self.gen_drop, self.dsc_drop, self.z_dim, self.c_dim, self.u_dim,
                   self.krnl_init, self.act,
                   self.dsc_opt_n, self.gan_opt_n, self.dsc_la, self.gan_la, self.dsc_lr, self.gan_lr,
-                  self.lamb, self.batch_size, self.alpha, self.beta)
-        file_name = 'infogan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:d}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}'.format(*params)
+                  self.lamb, self.batch_size, self.alpha, self.beta, self.n_dsc, self.n_gan)
+        file_name = 'infogan.{:d}.{}.{}.{}.{}.{}.{:d}.{:d}.{}.{}.{}.{}.{}.{}.{}.{:d}.{:d}.{:.0e}.{:.0e}.{:.0e}.{}.{:.0e}.{:.0e}.{}.{}'.format(*params)
         return file_name
 
 
@@ -433,17 +436,17 @@ class InfoGAN():
         elif self.act == 'selu':
             x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
         u += 1
-        if self.final_conv_shape[:2] != (1, 1):
-            # repeated dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='gen_dense_{}'.format(u))(x)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='gen_dense_lrelu_{}'.format(u))(x)
-                x = BatchNormalization(name='gen_dense_batchnorm_{}'.format(u))(x)
-            elif self.act == 'selu':
-                x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
-            u += 1
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # repeated dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='gen_dense_{}'.format(u))(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.1, name='gen_dense_lrelu_{}'.format(u))(x)
+        #         x = BatchNormalization(name='gen_dense_batchnorm_{}'.format(u))(x)
+        #     elif self.act == 'selu':
+        #         x = Activation(activation='selu', name='gen_dense_selu_{}'.format(u))(x)
+        #     u += 1
         # reshape to final convolution shape
         convt = Reshape(target_shape=self.final_conv_shape, name='gen_rshp_0')(x)
         if self.gen_drop:
@@ -451,24 +454,24 @@ class InfoGAN():
                 convt = SpatialDropout2D(rate=0.5, name='gen_rshp_drop_0')(convt)
             elif self.act == 'selu':
                 convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, self.final_conv_shape[-1]), name='gen_rshp_drop_0')(convt)
-        u = 0
+        v = 0
         # transform to sample shape with transposed convolutions
         for i in range(self.conv_number-1, 0, -1):
             filter_number = get_filter_number(i-1, self.filter_base, self.filter_factor)
             convt = Conv2DTranspose(filters=filter_number, kernel_size=self.filter_length,
                                     kernel_initializer=self.krnl_init,
                                     padding=self.padding, strides=self.filter_stride,
-                                    name='gen_convt_{}'.format(u))(convt)
+                                    name='gen_convt_{}'.format(v))(convt)
             if self.act == 'lrelu':
-                convt = LeakyReLU(alpha=0.1, name='gen_convt_lrelu_{}'.format(u))(convt)
-                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(u))(convt)
+                convt = LeakyReLU(alpha=0.1, name='gen_convt_lrelu_{}'.format(v))(convt)
+                convt = BatchNormalization(name='gen_convt_batchnorm_{}'.format(v))(convt)
                 if self.gen_drop:
-                    convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(u))(convt)
+                    convt = SpatialDropout2D(rate=0.5, name='gen_convt_drop_{}'.format(v))(convt)
             elif self.act == 'selu':
-                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(u))(convt)
+                convt = Activation(activation='selu', name='gen_convt_selu_{}'.format(v))(convt)
                 if self.gen_drop:
-                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(u))(convt)
-            u += 1
+                    convt = AlphaDropout(rate=0.5, noise_shape=(self.batch_size, 1, 1, filter_number), name='gen_convt_drop_{}'.format(v))(convt)
+            v += 1
         self.gen_x_output = Conv2DTranspose(filters=1, kernel_size=self.filter_base_length,
                                             kernel_initializer='glorot_uniform', activation=self.gen_out_act,
                                             padding=self.padding, strides=self.filter_base_stride,
@@ -512,17 +515,17 @@ class InfoGAN():
         # flatten final convolutional layer
         x = Flatten(name='dsc_fltn_0')(conv)
         u = 0
-        if self.final_conv_shape[:2] != (1, 1):
-            # dense layer
-            x = Dense(units=np.prod(self.final_conv_shape),
-                      kernel_initializer=self.krnl_init,
-                      name='dsc_dense_{}'.format(u))(x)
-            if self.act == 'lrelu':
-                x = LeakyReLU(alpha=0.1, name='dsc_dense_lrelu_{}'.format(u))(x)
-                x = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(x)
-            elif self.act == 'selu':
-                x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
-            u += 1
+        # if self.final_conv_shape[:2] != (1, 1):
+        #     # dense layer
+        #     x = Dense(units=np.prod(self.final_conv_shape),
+        #               kernel_initializer=self.krnl_init,
+        #               name='dsc_dense_{}'.format(u))(x)
+        #     if self.act == 'lrelu':
+        #         x = LeakyReLU(alpha=0.1, name='dsc_dense_lrelu_{}'.format(u))(x)
+        #         x = BatchNormalization(name='dsc_dense_batchnorm_{}'.format(u))(x)
+        #     elif self.act == 'selu':
+        #         x = Activation(activation='selu', name='dsc_dense_selu_{}'.format(u))(x)
+        #     u += 1
         # the dense layer is saved as a hidden encoding layer
         self.dsc_enc = x
         # dense layer
@@ -619,17 +622,17 @@ class InfoGAN():
             # flatten final convolutional layer
             x = Flatten(name='aux_fltn_0')(conv)
             u = 0
-            if self.final_conv_shape[:2] != (1, 1):
-                # dense layer
-                x = Dense(units=np.prod(self.final_conv_shape),
-                          kernel_initializer=self.krnl_init,
-                          name='aux_dense_{}'.format(u))(x)
-                if self.act == 'lrelu':
-                    x = LeakyReLU(alpha=0.1, name='aux_dense_lrelu_{}'.format(u))(x)
-                    x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
-                elif self.act == 'selu':
-                    x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
-                u += 1
+            # if self.final_conv_shape[:2] != (1, 1):
+            #     # dense layer
+            #     x = Dense(units=np.prod(self.final_conv_shape),
+            #               kernel_initializer=self.krnl_init,
+            #               name='aux_dense_{}'.format(u))(x)
+            #     if self.act == 'lrelu':
+            #         x = LeakyReLU(alpha=0.1, name='aux_dense_lrelu_{}'.format(u))(x)
+            #         x = BatchNormalization(name='aux_dense_batchnorm_{}'.format(u))(x)
+            #     elif self.act == 'selu':
+            #         x = Activation(activation='selu', name='aux_dense_selu_{}'.format(u))(x)
+            #     u += 1
             # dense layer
             x = Dense(units=self.d_q_dim,
                       kernel_initializer=self.krnl_init,
@@ -1166,7 +1169,7 @@ class InfoGAN():
         return gan_loss, dscf_loss, dscr_loss, ent_cat_loss, ent_con_loss
 
 
-    def fit(self, x_train, num_epochs=4, n_dsc=1, n_gan=2, save_step=None, random_sampling=False, verbose=False):
+    def fit(self, x_train, num_epochs=4, save_step=None, random_sampling=False, verbose=False):
         ''' fit model '''
         self.num_fields, self.num_temps, self.num_samples, _, _, = x_train.shape
         self.num_batches = (self.num_fields*self.num_temps*self.num_samples)//self.batch_size
@@ -1202,7 +1205,7 @@ class InfoGAN():
                 else:
                     x_batch = draw_indexed_batch(x_train, self.batch_size, j)
                 # train infogan on batch
-                self.train_infogan(x_batch, n_dsc, n_gan)
+                self.train_infogan(x_batch, self.n_dsc, self.n_gan)
                 u += 1
             # if checkpoint managers are initialized
             if self.dsc_mngr is not None and self.gan_mngr is not None:
@@ -1266,7 +1269,7 @@ if __name__ == '__main__':
     tf.device(DEVICE)
 
     K.clear_session()
-    MDL = InfoGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLA, GLA, DLR, GLR, GLAMB, BS, TALPHA, TBETA)
+    MDL = InfoGAN(IS, SC, W, CP, CN, FBL, FBS, FB, FL, FS, FF, GD, DD, ZD, CD, UD, KI, AN, DOPT, GOPT, DLA, GLA, DLR, GLR, GLAMB, BS, TALPHA, TBETA, DC, GC)
     PRFX = MDL.get_file_prefix()
     if RSTRT:
         MDL.load_losses(NAME, N, I, NS, SC, SEED)
@@ -1274,7 +1277,7 @@ if __name__ == '__main__':
         if VERBOSE:
             MDL.model_summaries()
         # MDL.load_latest_checkpoint(NAME, N, I, NS, SC, SEED)
-        MDL.fit(CONF, num_epochs=EP, n_dsc=DC, n_gan=GC, save_step=EP, random_sampling=RS, verbose=VERBOSE)
+        MDL.fit(CONF, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
         MDL.save_losses(NAME, N, I, NS, SC, SEED)
         MDL.save_weights(NAME, N, I, NS, SC, SEED)
     else:
@@ -1287,7 +1290,7 @@ if __name__ == '__main__':
             if VERBOSE:
                 MDL.model_summaries()
             # MDL.initialize_checkpoint_managers(NAME, N, I, NS, SC, SEED)
-            MDL.fit(CONF, num_epochs=EP, n_dsc=DC, n_gan=GC, save_step=EP, random_sampling=RS, verbose=VERBOSE)
+            MDL.fit(CONF, num_epochs=EP, save_step=EP, random_sampling=RS, verbose=VERBOSE)
             MDL.save_losses(NAME, N, I, NS, SC, SEED)
             MDL.save_weights(NAME, N, I, NS, SC, SEED)
     L = MDL.get_losses()
