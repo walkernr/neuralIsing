@@ -1084,53 +1084,53 @@ class InfoGAN():
         ''' train generator and auxiliary '''
         # inputs are true samples, so the discrimination targets are of unit value
         target = np.ones(self.batch_size, dtype=np.float32)
-        gan_loss = np.zeros((len(z_sample), 3))
+        gan_loss = np.zeros(3)
          # GAN and entropy losses
         if self.wasserstein:
             target *= -1
-            for i in range(len(z_sample)):
-                gan_dsc_loss = self.gan_dsc.train_on_batch(z_sample[i], target)
-                gan_aux_loss = self.gan_aux.train_on_batch(z_sample[i], z_sample[i][1:])
-                gan_loss[i, 0] = gan_dsc_loss
-                if self.c_dim > 0 and self.u_dim > 0:
-                    gan_loss[i, 1:] = gan_aux_loss[1:]
-                elif self.c_dim > 0:
-                    gan_loss[i, 1] = gan_aux_loss
-                    gan_loss[i, 2] = 0
-                elif self.u_dim > 0:
-                    gan_loss[i, 1] = 0
-                    gan_loss[i, 2] = gan_aux_loss
+            gan_dsc_loss = self.gan_dsc.train_on_batch(z_sample, target)
+            gan_aux_loss = self.gan_aux.train_on_batch(z_sample, z_sample[1:])
+            gan_loss[0] = gan_dsc_loss
+            if self.c_dim > 0 and self.u_dim > 0:
+                gan_loss[1:] = gan_aux_loss[1:]
+            elif self.c_dim > 0:
+                gan_loss[1] = gan_aux_loss
+                gan_loss[2] = 0
+            elif self.u_dim > 0:
+                gan_loss[1] = 0
+                gan_loss[2] = gan_aux_loss
         else:
-            for i in range(len(z_sample)):
-                gan_dsc_aux_loss = self.gan.train_on_batch(z_sample[i], (target, *z_sample[i][1:]))
-                if self.c_dim > 0 and self.u_dim > 0:
-                    gan_loss[i] = gan_dsc_aux_loss[1:]
-                elif self.c_dim > 0:
-                    gan_loss[i, 0] = gan_dsc_aux_loss[1]
-                    gan_loss[i, 1] = gan_dsc_aux_loss[2]
-                    gan_loss[i, 2] = 0
-                elif self.u_dim > 0:
-                    gan_loss[i, 0] = gan_dsc_aux_loss[1]
-                    gan_loss[i, 1] = 0
-                    gan_loss[i, 2] = gan_dsc_aux_loss[2]
-        return gan_loss.mean(0)
+            gan_dsc_aux_loss = self.gan.train_on_batch(z_sample, (target, *z_sample[1:]))
+            if self.c_dim > 0 and self.u_dim > 0:
+                gan_loss[i] = gan_dsc_aux_loss[1:]
+            elif self.c_dim > 0:
+                gan_loss[0] = gan_dsc_aux_loss[1]
+                gan_loss[1] = gan_dsc_aux_loss[2]
+                gan_loss[2] = 0
+            elif self.u_dim > 0:
+                gan_loss[0] = gan_dsc_aux_loss[1]
+                gan_loss[1] = 0
+                gan_loss[2] = gan_dsc_aux_loss[2]
+        return gan_loss
 
 
     def train_infogan(self, x_batch, n_dsc, n_gan):
         ''' train infoGAN '''
-        z_sample = [self.sample_latent_distribution(num_samples=self.batch_size) for i in range(n_gan)]
-        x_generated = self.generator.predict(x=z_sample[0], batch_size=self.batch_size)
+        z_sample = self.sample_latent_distribution(num_samples=self.batch_size)
+        x_generated = self.generator.predict(x=z_sample, batch_size=self.batch_size)
         dsc_real_loss = np.zeros(n_dsc)
         dsc_fake_loss = np.zeros(n_dsc)
+        gan_loss = np.zeros((n_gan, 3))
         for i in range(n_dsc):
             dsc_real_loss[i] = self.train_discriminator(x_batch=x_batch, real=True)
             dsc_fake_loss[i] = self.train_discriminator(x_batch=x_generated, real=False)
-        gan_loss = self.train_generator(z_sample=z_sample)
+        for i in range(n_gan):
+            gan_loss[i] = self.train_generator(z_sample=z_sample)
         self.dsc_real_loss_history.append(dsc_real_loss.mean())
         self.dsc_fake_loss_history.append(dsc_fake_loss.mean())
-        self.gan_loss_history.append(gan_loss[0])
-        self.ent_cat_loss_history.append(gan_loss[1])
-        self.ent_con_loss_history.append(gan_loss[2])
+        self.gan_loss_history.append(gan_loss[:, 0].mean())
+        self.ent_cat_loss_history.append(gan_loss[:, 1].mean())
+        self.ent_con_loss_history.append(gan_loss[:, 2].mean())
 
 
     def rolling_loss_average(self, epoch, batch):
