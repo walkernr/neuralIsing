@@ -106,7 +106,7 @@ def file_prefix(i):
 def init_output(k):
     ''' initializes output filenames for a sample '''
     # extract field/temperature indices from index
-    i, j = np.unravel_index(k, dims=(NH, NT), order='C')
+    i, j = np.unravel_index(k, shape=(NH, NT), order='C')
     dat = file_prefix(i)+'.%02d.dat' % j
     dmp = file_prefix(i)+'.%02d.dmp' % j
     # clean old output files if they exist
@@ -128,7 +128,7 @@ def init_outputs():
 def init_header(k, output):
     ''' writes header for a sample '''
     # extract pressure/temperature indices from index
-    i, j = np.unravel_index(k, dims=(NH, NT), order='C')
+    i, j = np.unravel_index(k, shape=(NH, NT), order='C')
     with open(output[0], 'w') as dat_out:
         dat_out.write('# ---------------------\n')
         dat_out.write('# simulation parameters\n')
@@ -276,7 +276,8 @@ def extract(config, h):
 def init_sample(k):
     ''' initializes sample '''
     # fetch external field strength
-    i, _ = np.unravel_index(k, dims=(NH, NT), order='C')
+    i, _ = np.unravel_index(k, shape=(NH, NT), order='C')
+    # i = k//NT
     h = H[i]
     # generate random ising configuration
     config = np.random.choice([-1, 1], size=(N, N)).astype(np.int8)
@@ -319,7 +320,6 @@ def init_samples():
 def spin_flip_mc(config, h, t, nts, nas):
     ''' spin flip monte carlo '''
     nts += 1
-    ener, _ = extract(config, h)
     u, v = np.random.randint(0, N, size=2)
     s = config[u, v]
     nn = config[(u+1)%N, v]+config[u, (v+1)%N]+config[(u-1)%N, v]+config[u, (v-1)%N]
@@ -352,7 +352,9 @@ def total_spin_flip_mc(config, h, t):
 def gen_sample(k, state):
     ''' generates a monte carlo sample '''
     # initialize lammps object
-    i, j = np.unravel_index(k, dims=(NH, NT), order='C')
+    i, j = np.unravel_index(k, shape=(NH, NT), order='C')
+    # i = k//NT
+    # j = k-i*NT
     h, t = H[i], T[j]
     config = state[0]
     nts, nas = 0, 0
@@ -415,6 +417,8 @@ def replica_exchange():
                 # extract index from each field/temperature index pair
                 i = np.ravel_multi_index((u, v), (NH, NT), order='C')
                 j = np.ravel_multi_index((u, w), (NH, NT), order='C')
+                # i = u*NT+v
+                # j = u*NT+w
                 # calculate energy difference
                 de = STATE[i][1]-STATE[j][1]
                 # enthalpy difference

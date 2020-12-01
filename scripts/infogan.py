@@ -415,7 +415,7 @@ class InfoGAN():
         if self.c_dim > 0 and self.u_dim > 0:
             self.gen_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='gen_c_input')
             self.gen_u_input = Input(batch_shape=(self.batch_size, self.u_dim), name='gen_u_input')
-            x = Concatenate(name='gen_latent_concat')([self.gen_c_input, self.gen_u_input])
+            x = Concatenate(name='gen_latent_concat')([self.gen_z_input, self.gen_c_input, self.gen_u_input])
             self.gen_inputs = [self.gen_z_input, self.gen_c_input, self.gen_u_input]
         elif self.c_dim > 0:
             self.gen_c_input = Input(batch_shape=(self.batch_size, self.c_dim), name='gen_c_input')
